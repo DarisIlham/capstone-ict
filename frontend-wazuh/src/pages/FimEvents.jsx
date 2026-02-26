@@ -77,7 +77,7 @@ const FimEvents = ({ agentId = '001' }) => {
                   <th className="px-3 py-2 font-semibold">username</th>
                   <th className="px-3 py-2 font-semibold">syscheck.path</th>
                   <th className="px-3 py-2 font-semibold">syscheck.event</th>
-                  <th className="px-3 py-2 font-semibold">pilot</th> {/* Ini tadinya rule.description */}
+                  <th className="px-3 py-2 font-semibold">payload</th> {/* Ini tadinya rule.description */}
                   <th className="px-3 py-2 font-semibold">severity alert</th> {/* Ini sekarang mengecek level */}
                 </tr>
               </thead>
@@ -90,7 +90,7 @@ const FimEvents = ({ agentId = '001' }) => {
                       <td className="px-3 py-2 text-purple-600 font-medium">{evt.username}</td>
                       <td className="px-3 py-2 text-gray-600 font-mono text-xs">{evt.syscheckPath}</td>
                       <td className="px-3 py-2">{evt.syscheckEvent}</td>
-                      {/* --- KOLOM PILOT (Menampilkan Deskripsi & Diff ala GitHub) --- */}
+                      {/* --- KOLOM PAYLOAD (Menampilkan Deskripsi & Diff ala GitHub) --- */}
                       <td className="px-3 py-2 text-gray-600 align-top max-w-md">
                         <div className="font-semibold">{evt.ruleDescription}</div>
                         

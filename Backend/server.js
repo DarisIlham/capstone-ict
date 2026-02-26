@@ -2,6 +2,7 @@ const express = require('express');
 const axios = require('axios');
 const https = require('https');
 const cors = require('cors'); // <-- WAJIB ditambahkan untuk Vite
+const { sendAlert } = require('./telegram');
 
 const app = express();
 
@@ -106,6 +107,12 @@ app.get('/api/events/:agent_id', async (req, res) => {
             };
         });
 
+       const latestEvent = eventsData.find(e => Number(e.ruleLevel) >= 1);
+
+        if (latestEvent) {
+        await sendAlert(latestEvent);
+        }
+        
         res.json({ success: true, data: eventsData, total_hits: eventsData.length });
 
     } catch (error) {
