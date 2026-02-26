@@ -10,7 +10,7 @@ app.use(cors());
 app.use(express.json()); 
 
 // --- KONFIGURASI WAZUH (GANTI SESUAI SERVER ANDA) ---
-const WAZUH_API_URL = 'https://10.104.18.134:55000'; 
+const WAZUH_API_URL = 'https://10.104.86.253:55000'; 
 const WAZUH_USER = 'wazuh';
 const WAZUH_PASS = '08F6oACn.1CoCX3v.mMs5DJk+WeW1y?+';
 
@@ -48,7 +48,7 @@ app.get('/api/fim/:agent_id', async (req, res) => {
 
 // --- KONFIGURASI WAZUH INDEXER (PORT 9200) ---
 // Secara default jika Anda install Wazuh all-in-one, IP-nya sama dengan Manager
-const INDEXER_URL = 'https://10.104.18.134:9200'; 
+const INDEXER_URL = 'https://10.104.86.253:9200'; 
 const INDEXER_USER = 'admin'; // Username bawaan Wazuh Indexer
 const INDEXER_PASS = 'C?o4IFv1*OycPKaKr14sLtHlKn6Qers2'; // Password Wazuh Indexer Anda
 
@@ -101,7 +101,8 @@ app.get('/api/events/:agent_id', async (req, res) => {
                 syscheckEvent: source.syscheck.event,
                 ruleDescription: source.rule.description,
                 ruleLevel: source.rule.level,
-                ruleId: source.rule.id
+                ruleId: source.rule.id,
+                fileDiff: source.syscheck?.diff || null
             };
         });
 
