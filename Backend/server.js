@@ -66,7 +66,7 @@ async function saveToDatabase(event) {
 // =======================
 // KONFIGURASI WAZUH
 // =======================
-const WAZUH_API_URL = "https://10.104.86.253:55000";
+const WAZUH_API_URL = "https://10.104.131.140:55000";
 const WAZUH_USER = "wazuh";
 const WAZUH_PASS = "08F6oACn.1CoCX3v.mMs5DJk+WeW1y?+";
 
@@ -76,7 +76,7 @@ const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 // =======================
 // KONFIGURASI WAZUH INDEXER
 // =======================
-const INDEXER_URL = "https://10.104.86.253:9200";
+const INDEXER_URL = "https://10.104.131.140:9200";
 const INDEXER_USER = "admin";
 const INDEXER_PASS = "C?o4IFv1*OycPKaKr14sLtHlKn6Qers2";
 
