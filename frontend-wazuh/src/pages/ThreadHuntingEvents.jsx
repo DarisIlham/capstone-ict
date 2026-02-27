@@ -312,7 +312,7 @@ export default function ThreadHuntingEvents() {
                   <th className="px-4 py-3">timestamp</th>
                   <th className="px-4 py-3">agent.name</th>
                   <th className="px-4 py-3">rule.description</th>
-                  <th className="px-4 py-3 text-center">severity / rule.id</th>
+                  <th className="px-4 py-3 text-center">severity</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -326,7 +326,7 @@ export default function ThreadHuntingEvents() {
                     <td className="px-4 py-3 align-top">
                       <div className="flex flex-col gap-2 items-center justify-center">
                         {renderSeverityBadge(r.ruleLevel)}
-                        <div className="text-sm font-mono font-semibold text-blue-700">{r.ruleId ?? "-"}</div>
+                        
                       </div>
                     </td>
                   </tr>
