@@ -5,6 +5,7 @@ const https = require("https");
 const cors = require("cors");
 const { Pool } = require("pg");
 const { sendAlert } = require("./telegram");
+const os = require("os");
 
 const app = express();
 app.use(cors());
@@ -124,7 +125,7 @@ app.get("/api/events/:agent_id", async (req, res) => {
         },
       },
       sort: [{ "@timestamp": { order: "desc" } }],
-      size: 50,
+      size: 500,
     };
 
     const response = await axios.post(`${INDEXER_URL}/wazuh-alerts-*/_search`, queryPayload, {
@@ -225,7 +226,7 @@ app.get("/api/hunting", async (req, res) => {
       q,
       desc,
       page = 1,
-      size = 50,
+      size = 500,
       sort = "desc",
     } = req.query;
 
@@ -379,4 +380,23 @@ app.get("/api/hunting", async (req, res) => {
   }
 });
 
-app.listen(3000, () => console.log("Server Backend berjalan di http://localhost:3000"));
+function getLocalIP() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const net of interfaces[name]) {
+      if (net.family === "IPv4" && !net.internal) {
+        return net.address;
+      }
+    }
+  }
+  return "localhost";
+}
+
+const PORT = process.env.PORT || 3000;
+const localIP = getLocalIP();
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server berjalan di:`);
+  console.log(`➡ Local  : http://localhost:${PORT}`);
+  console.log(`➡ Network: http://${localIP}:${PORT}`);
+});
