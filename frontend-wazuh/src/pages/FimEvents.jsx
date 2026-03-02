@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import logo from "../assets/Undip.svg";
 
 // ----------------------------
 // Small, dependency-free charts (SVG)
@@ -8,7 +9,10 @@ const clamp = (n, a, b) => Math.min(Math.max(n, a), b);
 const formatBucketLabel = (ms, rangeKey) => {
   const d = new Date(ms);
   if (rangeKey === "1h")
-    return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   if (rangeKey === "24h")
     return d.toLocaleTimeString("en-US", { hour: "2-digit" });
   if (rangeKey === "7d")
@@ -29,8 +33,20 @@ const SimpleBarHistogram = ({ data, width = 980, height = 85, rangeKey }) => {
   return (
     <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="block">
       {/* axes */}
-      <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="#334155" />
-      <line x1={padding.l} y1={padding.t + innerH} x2={padding.l + innerW} y2={padding.t + innerH} stroke="#334155" />
+      <line
+        x1={padding.l}
+        y1={padding.t}
+        x2={padding.l}
+        y2={padding.t + innerH}
+        stroke="#334155"
+      />
+      <line
+        x1={padding.l}
+        y1={padding.t + innerH}
+        x2={padding.l + innerW}
+        y2={padding.t + innerH}
+        stroke="#334155"
+      />
 
       {/* bars */}
       {data.map((d, i) => {
@@ -40,9 +56,13 @@ const SimpleBarHistogram = ({ data, width = 980, height = 85, rangeKey }) => {
         return (
           <g key={d.t}>
             <rect
-              x={x + 1} y={y}
-              width={Math.max(1, barW - 2)} height={h}
-              rx={2} fill="#38bdf8" opacity={0.75}
+              x={x + 1}
+              y={y}
+              width={Math.max(1, barW - 2)}
+              height={h}
+              rx={2}
+              fill="#38bdf8"
+              opacity={0.75}
             >
               <title>{`${new Date(d.t).toLocaleString()} — ${d.v} events`}</title>
             </rect>
@@ -51,8 +71,24 @@ const SimpleBarHistogram = ({ data, width = 980, height = 85, rangeKey }) => {
       })}
 
       {/* y labels */}
-      <text x={padding.l - 5} y={padding.t + 8} textAnchor="end" fontSize="9" fill="#64748b">{maxV}</text>
-      <text x={padding.l - 5} y={padding.t + innerH} textAnchor="end" fontSize="9" fill="#64748b">0</text>
+      <text
+        x={padding.l - 5}
+        y={padding.t + 8}
+        textAnchor="end"
+        fontSize="9"
+        fill="#64748b"
+      >
+        {maxV}
+      </text>
+      <text
+        x={padding.l - 5}
+        y={padding.t + innerH}
+        textAnchor="end"
+        fontSize="9"
+        fill="#64748b"
+      >
+        0
+      </text>
 
       {/* x ticks */}
       {data.map((d, i) => {
@@ -60,8 +96,20 @@ const SimpleBarHistogram = ({ data, width = 980, height = 85, rangeKey }) => {
         const x = padding.l + i * barW + barW / 2;
         return (
           <g key={`tick-${d.t}`}>
-            <line x1={x} y1={padding.t + innerH} x2={x} y2={padding.t + innerH + 3} stroke="#334155" />
-            <text x={x} y={padding.t + innerH + 15} textAnchor="middle" fontSize="9" fill="#64748b">
+            <line
+              x1={x}
+              y1={padding.t + innerH}
+              x2={x}
+              y2={padding.t + innerH + 3}
+              stroke="#334155"
+            />
+            <text
+              x={x}
+              y={padding.t + innerH + 15}
+              textAnchor="middle"
+              fontSize="9"
+              fill="#64748b"
+            >
               {formatBucketLabel(d.t, rangeKey)}
             </text>
           </g>
@@ -72,7 +120,13 @@ const SimpleBarHistogram = ({ data, width = 980, height = 85, rangeKey }) => {
 };
 
 // ── Donut (dipendekkan: size default 100) ─────────────────────────────────────
-const Donut = ({ items, size = 100, stroke = 12, centerLabelTop, centerLabelBottom }) => {
+const Donut = ({
+  items,
+  size = 100,
+  stroke = 12,
+  centerLabelTop,
+  centerLabelBottom,
+}) => {
   const total = items.reduce((a, b) => a + b.value, 0) || 1;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
@@ -82,17 +136,26 @@ const Donut = ({ items, size = 100, stroke = 12, centerLabelTop, centerLabelBott
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       <g transform={`translate(${size / 2} ${size / 2})`}>
         {/* background ring */}
-        <circle r={r} fill="transparent" stroke="#1e293b" strokeWidth={stroke} />
+        <circle
+          r={r}
+          fill="transparent"
+          stroke="#1e293b"
+          strokeWidth={stroke}
+        />
 
         {items.map((it) => {
           const dash = (it.value / total) * c;
           const el = (
             <circle
-              key={it.label} r={r} fill="transparent"
-              stroke={it.color} strokeWidth={stroke}
+              key={it.label}
+              r={r}
+              fill="transparent"
+              stroke={it.color}
+              strokeWidth={stroke}
               strokeDasharray={`${dash} ${c - dash}`}
               strokeDashoffset={-offset}
-              strokeLinecap="butt" transform="rotate(-90)"
+              strokeLinecap="butt"
+              transform="rotate(-90)"
             >
               <title>{`${it.label}: ${it.value}`}</title>
             </circle>
@@ -102,7 +165,13 @@ const Donut = ({ items, size = 100, stroke = 12, centerLabelTop, centerLabelBott
         })}
 
         {/* center labels */}
-        <text y={-3} textAnchor="middle" fontSize="12" fill="#f1f5f9" fontWeight="700">
+        <text
+          y={-3}
+          textAnchor="middle"
+          fontSize="12"
+          fill="#f1f5f9"
+          fontWeight="700"
+        >
           {centerLabelTop}
         </text>
         <text y={11} textAnchor="middle" fontSize="8" fill="#64748b">
@@ -117,14 +186,153 @@ const Donut = ({ items, size = 100, stroke = 12, centerLabelTop, centerLabelBott
 const Legend = ({ items }) => (
   <div className="flex flex-col gap-1.5">
     {items.map((it) => (
-      <div key={it.label} className="flex items-center gap-2 text-xs text-slate-400">
-        <span className="inline-block w-2 h-2 rounded-sm shrink-0" style={{ background: it.color }} />
+      <div
+        key={it.label}
+        className="flex items-center gap-2 text-xs text-slate-400"
+      >
+        <span
+          className="inline-block w-2 h-2 rounded-sm shrink-0"
+          style={{ background: it.color }}
+        />
         <span className="truncate max-w-[200px]">{it.label}</span>
         <span className="ml-auto text-slate-500 tabular-nums">{it.value}</span>
       </div>
     ))}
   </div>
 );
+
+const WORD_COLORS = [
+  "#f472b6", // pink
+  "#38bdf8", // sky blue
+  "#4ade80", // neon green
+  "#a78bfa", // violet
+  "#fb923c", // orange
+  "#34d399", // emerald
+  "#f87171", // red
+  "#facc15", // yellow
+  "#60a5fa", // blue
+  "#e879f9", // fuchsia
+];
+
+const PayloadWordCloud = ({ words }) => {
+  // words: [{ text, count }] sorted desc, top 30
+  if (!words || words.length === 0)
+    return (
+      <div className="flex items-center justify-center h-full text-slate-600 text-xs">
+        No payload data
+      </div>
+    );
+
+  const W = 620,
+    H = 200;
+  const maxCount = words[0].count;
+  const minCount = words[words.length - 1].count;
+  const range = Math.max(1, maxCount - minCount);
+
+  // font size: 11px – 42px
+  const fontSize = (count) =>
+    Math.round(11 + ((count - minCount) / range) * 31);
+
+  // Rough char-width estimate for SVG text (monospace-ish)
+  const estWidth = (text, fs) => text.length * fs * 0.6;
+
+  // Deterministic Archimedean spiral placement
+  const placed = [];
+  const rects = [];
+
+  const overlaps = (nx, ny, nw, nh) => {
+    const pad = 4;
+    return rects.some(
+      (r) =>
+        nx - nw / 2 - pad < r.x + r.w / 2 &&
+        nx + nw / 2 + pad > r.x - r.w / 2 &&
+        ny - nh / 2 - pad < r.y + r.h / 2 &&
+        ny + nh / 2 + pad > r.y - r.h / 2,
+    );
+  };
+
+  for (let i = 0; i < words.length; i++) {
+    const { text, count } = words[i];
+    const fs = fontSize(count);
+    const tw = estWidth(text, fs);
+    const th = fs * 1.2;
+    const color = WORD_COLORS[i % WORD_COLORS.length];
+    const opacity = 0.65 + ((count - minCount) / range) * 0.35;
+
+    let placed_x = W / 2,
+      placed_y = H / 2;
+    let found = false;
+
+    // spiral out from center
+    for (let step = 0; step < 800; step++) {
+      const angle = step * 0.35;
+      const radius = step * 0.8;
+      const cx = W / 2 + radius * Math.cos(angle);
+      const cy = H / 2 + radius * Math.sin(angle) * 0.6; // flatten vertically
+      if (
+        cx - tw / 2 > 2 &&
+        cx + tw / 2 < W - 2 &&
+        cy - th / 2 > 2 &&
+        cy + th / 2 < H - 2 &&
+        !overlaps(cx, cy, tw, th)
+      ) {
+        placed_x = cx;
+        placed_y = cy;
+        found = true;
+        break;
+      }
+    }
+
+    if (found || i === 0) {
+      rects.push({ x: placed_x, y: placed_y, w: tw, h: th });
+      placed.push({
+        text,
+        fs,
+        color,
+        opacity,
+        x: placed_x,
+        y: placed_y,
+        count,
+      });
+    }
+  }
+
+  return (
+    <svg
+      width="100%"
+      viewBox={`0 0 ${W} ${H}`}
+      className="block w-full"
+      style={{ minHeight: 140 }}
+    >
+      {/* subtle radial glow in center */}
+      <defs>
+        <radialGradient id="wcGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#0f172a" stopOpacity="0" />
+          <stop offset="100%" stopColor="#020617" stopOpacity="0.6" />
+        </radialGradient>
+      </defs>
+      <rect width={W} height={H} fill="url(#wcGlow)" rx={8} />
+
+      {placed.map((w) => (
+        <text
+          key={w.text}
+          x={w.x}
+          y={w.y}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fontSize={w.fs}
+          fontWeight={w.fs > 26 ? "800" : w.fs > 18 ? "700" : "500"}
+          fill={w.color}
+          opacity={w.opacity}
+          style={{ cursor: "default", fontFamily: "monospace" }}
+        >
+          <title>{`${w.text}: ${w.count} occurrences`}</title>
+          {w.text}
+        </text>
+      ))}
+    </svg>
+  );
+};
 
 // ── Main Component ────────────────────────────────────────────────────────────
 const FimEvents = ({ agentId = "001" }) => {
@@ -137,7 +345,9 @@ const FimEvents = ({ agentId = "001" }) => {
   const fetchEvents = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:3000/api/events/${agentId}`);
+      const response = await fetch(
+        `http://localhost:3000/api/events/${agentId}`,
+      );
       const result = await response.json();
       if (result.success) setEvents(result.data);
       else setError(result.message);
@@ -149,11 +359,15 @@ const FimEvents = ({ agentId = "001" }) => {
     }
   };
 
-  useEffect(() => { fetchEvents(); }, [agentId]);
+  useEffect(() => {
+    fetchEvents();
+  }, [agentId]);
 
   // Auto-refresh setiap 15 detik
   useEffect(() => {
-    const t = setInterval(() => { fetchEvents(); }, 15000);
+    const t = setInterval(() => {
+      fetchEvents();
+    }, 15000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentId]);
@@ -164,11 +378,17 @@ const FimEvents = ({ agentId = "001" }) => {
     const date = new Date(isoString);
     return date
       .toLocaleString("en-US", {
-        month: "short", day: "2-digit", year: "numeric",
-        hour: "2-digit", minute: "2-digit", second: "2-digit",
+        month: "short",
+        day: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
         fractionalSecondDigits: 3,
       })
-      .replace(",", "").replace("AM", "").replace("PM", "");
+      .replace(",", "")
+      .replace("AM", "")
+      .replace("PM", "");
   };
 
   // ── severity badge (dark variant) ────────────────────────────────────────
@@ -202,23 +422,26 @@ const FimEvents = ({ agentId = "001" }) => {
   const derived = useMemo(() => {
     const now = Date.now();
     const rangeMsMap = {
-      "1h":  60 * 60 * 1000,
+      "1h": 60 * 60 * 1000,
       "24h": 24 * 60 * 60 * 1000,
-      "7d":  7 * 24 * 60 * 60 * 1000,
+      "7d": 7 * 24 * 60 * 60 * 1000,
       "30d": 30 * 24 * 60 * 60 * 1000,
     };
     const rangeMs = rangeMsMap[rangeKey] ?? rangeMsMap["24h"];
     const startMs = now - rangeMs;
 
     const filtered = events
-      .map((e) => ({ ...e, _ms: e.timestamp ? new Date(e.timestamp).getTime() : NaN }))
+      .map((e) => ({
+        ...e,
+        _ms: e.timestamp ? new Date(e.timestamp).getTime() : NaN,
+      }))
       .filter((e) => Number.isFinite(e._ms) && e._ms >= startMs && e._ms <= now)
       .sort((a, b) => b._ms - a._ms);
 
     let stepMs = 60 * 60 * 1000;
-    if (rangeKey === "1h")  stepMs = 5 * 60 * 1000;
+    if (rangeKey === "1h") stepMs = 5 * 60 * 1000;
     else if (rangeKey === "24h") stepMs = 60 * 60 * 1000;
-    else if (rangeKey === "7d")  stepMs = 6 * 60 * 60 * 1000;
+    else if (rangeKey === "7d") stepMs = 6 * 60 * 60 * 1000;
     else stepMs = 24 * 60 * 60 * 1000;
 
     const bucketStart = (ms) => Math.floor(ms / stepMs) * stepMs;
@@ -238,8 +461,8 @@ const FimEvents = ({ agentId = "001" }) => {
     const bySev = new Map();
     const sevLabel = (lvl) => {
       if (lvl >= 12) return "Critical";
-      if (lvl >= 8)  return "High";
-      if (lvl >= 5)  return "Medium";
+      if (lvl >= 8) return "High";
+      if (lvl >= 5) return "Medium";
       return "Low";
     };
     for (const e of filtered) {
@@ -256,30 +479,95 @@ const FimEvents = ({ agentId = "001" }) => {
     const eventOther = eventItemsAll.slice(6).reduce((a, b) => a + b.value, 0);
     if (eventOther > 0) eventTop.push({ label: "other", value: eventOther });
 
-    const palette = ["#38bdf8", "#34D399", "#FBBF24", "#F87171", "#A78BFA", "#F472B6", "#9CA3AF"];
-    const eventItems = eventTop.map((it, i) => ({ ...it, color: palette[i % palette.length] }));
+    const palette = [
+      "#38bdf8",
+      "#34D399",
+      "#FBBF24",
+      "#F87171",
+      "#A78BFA",
+      "#F472B6",
+      "#9CA3AF",
+    ];
+    const eventItems = eventTop.map((it, i) => ({
+      ...it,
+      color: palette[i % palette.length],
+    }));
 
-    const sevOrder = ["Critical", "High", "Medium", "Low"];
-    const sevColors = { Critical: "#EF4444", High: "#F97316", Medium: "#F59E0B", Low: "#22C55E" };
-    const severityItems = sevOrder
-      .filter((k) => bySev.get(k))
-      .map((k) => ({ label: k, value: bySev.get(k), color: sevColors[k] }));
-
+    const byPayload = new Map();
+    // Tokens to ignore (common diff noise & shell boilerplate)
+    const STOP = new Set([
+      "",
+      "---",
+      "@@",
+      "+",
+      "-",
+      "//",
+      "#",
+      "/*",
+      "*/",
+      "0",
+      "1",
+      "the",
+      "a",
+      "an",
+      "is",
+      "in",
+      "to",
+      "of",
+      "and",
+      "or",
+      "for",
+      "with",
+      "from",
+      "this",
+      "that",
+      "it",
+      "at",
+      "be",
+      "as",
+      "by",
+    ]);
+    for (const e of filtered) {
+      if (!e.fileDiff) continue;
+      for (const line of e.fileDiff.split("\n")) {
+        // Only parse added (>) and removed (<) lines — skip metadata
+        if (!line.startsWith(">") && !line.startsWith("<")) continue;
+        const content = line.substring(1).trim();
+        // Tokenize: split on whitespace and common delimiters, keep tokens ≥ 2 chars
+        const tokens = content
+          .split(/[\s\/=:;,'"(){}\[\]<>|&!?@#%^*`~]+/)
+          .map((t) =>
+            t.replace(/^[^a-zA-Z0-9_.-]+|[^a-zA-Z0-9_.-]+$/g, "").toLowerCase(),
+          )
+          .filter((t) => t.length >= 2 && !STOP.has(t) && !/^\d+$/.test(t));
+        for (const token of tokens) {
+          byPayload.set(token, (byPayload.get(token) || 0) + 1);
+        }
+      }
+    }
+    const payloadWords = Array.from(byPayload.entries())
+      .map(([text, count]) => ({ text, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 40);
     const total = filtered.length;
     const eps = total ? total / (rangeMs / 1000) : 0;
-    return { filtered, series, eventItems, severityItems, total, eps, startMs, now };
+    return {
+      filtered,
+      series,
+      eventItems,
+      payloadWords,
+      total,
+      eps,
+      startMs,
+      now,
+    };
   }, [events, rangeKey]);
 
   // ── loading / error states ────────────────────────────────────────────────
-  if (loading)
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-sky-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-slate-400 text-sm">Loading Events Data...</span>
-        </div>
-      </div>
-    );
+  // if (loading)
+  //   return (
+  //     <div className="min-h-screen"> </div>
+  //   );
 
   if (error)
     return (
@@ -293,23 +581,39 @@ const FimEvents = ({ agentId = "001" }) => {
   // ── render ────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans">
-
       {/* ── Header ── */}
-      <div className="sticky top-0 z-10 border-b border-slate-800 bg-slate-900/90 backdrop-blur px-5 py-3 flex items-center gap-3">
-        <span className="font-black text-xl text-sky-400 tracking-tight mr-2">W.</span>
-        <span className="bg-slate-800 text-slate-300 px-3 py-1 rounded-full text-xs border border-slate-700">
-          File Integrity M...
-        </span>
-        <span className="bg-sky-900/50 text-sky-400 px-3 py-1 rounded-full text-xs border border-sky-800/60">
-          agent{agentId}
-        </span>
+      <div className="sticky top-0 z-10 border-b border-slate-800 bg-slate-900/90 backdrop-blur px-5 py-3 flex items-center gap-4">
+        {/* LOGO */}
+        <div className="h-15 w-15 shrink-0">
+          <img
+            src={logo}
+            alt="Wazuh"
+            className="h-full w-full object-contain"
+          />
+        </div>
+
+        {/* CONTAINER TEKS */}
+        <div className="flex flex-col justify-center">
+          {/* BARIS ATAS: Judul yang sejajar tengah dengan logo */}
+          <span className="text-slate-300 font-bold text-xl leading-none">
+            Cyber Monitoring Dashboard
+          </span>
+
+          {/* BARIS BAWAH: Label-label yang berada di bawah judul */}
+          <div className="flex gap-2 mt-1.5">
+            <span className="bg-slate-800 text-slate-300 px-2.5 py-0.5 rounded-full text-[10px] border border-slate-700">
+              File Integrity Monitoring
+            </span>
+            <span className="bg-sky-900/50 text-sky-400 px-2.5 py-0.5 rounded-full text-[10px] border border-sky-800/60">
+              agent{agentId}
+            </span>
+          </div>
+        </div>
       </div>
 
       <div className="p-4 flex flex-col gap-4">
-
         {/* ── Controls + Charts wrapper ── */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg flex flex-col gap-4">
-
           {/* Controls row */}
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -323,9 +627,9 @@ const FimEvents = ({ agentId = "001" }) => {
               <span className="text-xs text-slate-500">Range</span>
               <div className="flex bg-slate-800 rounded-lg p-0.5 border border-slate-700 gap-0.5">
                 {[
-                  { k: "1h",  label: "Last 1h"  },
+                  { k: "1h", label: "Last 1h" },
                   { k: "24h", label: "Last 24h" },
-                  { k: "7d",  label: "Last 7d"  },
+                  { k: "7d", label: "Last 7d" },
                   { k: "30d", label: "Last 30d" },
                 ].map((r) => (
                   <button
@@ -349,16 +653,22 @@ const FimEvents = ({ agentId = "001" }) => {
           <div className="bg-slate-800/50 border border-slate-700/60 rounded-lg p-3">
             <div className="flex items-start justify-between mb-2">
               <div>
-                <div className="text-[11px] text-slate-500 uppercase tracking-wider mb-0.5">Events (filtered)</div>
+                <div className="text-[11px] text-slate-500 uppercase tracking-wider mb-0.5">
+                  Events (filtered)
+                </div>
                 <div className="text-3xl font-black text-slate-100 tabular-nums leading-none">
                   {derived.total}
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-[11px] text-slate-500 uppercase tracking-wider mb-0.5">Rate</div>
+                <div className="text-[11px] text-slate-500 uppercase tracking-wider mb-0.5">
+                  Rate
+                </div>
                 <div className="text-lg font-bold text-slate-200 tabular-nums">
                   {derived.eps.toFixed(2)}{" "}
-                  <span className="text-xs font-normal text-slate-500">/ sec</span>
+                  <span className="text-xs font-normal text-slate-500">
+                    / sec
+                  </span>
                 </div>
               </div>
             </div>
@@ -378,12 +688,15 @@ const FimEvents = ({ agentId = "001" }) => {
 
           {/* ── Donuts ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {/* Donut 1 – event types */}
+            {/* Donut – event types */}
             <div className="bg-slate-800/50 border border-slate-700/60 rounded-lg p-3 flex gap-3">
               <div className="shrink-0 self-center">
                 <Donut
                   items={derived.eventItems}
-                  centerLabelTop={derived.eventItems.reduce((a, b) => a + b.value, 0)}
+                  centerLabelTop={derived.eventItems.reduce(
+                    (a, b) => a + b.value,
+                    0,
+                  )}
                   centerLabelBottom="syscheck.event"
                 />
               </div>
@@ -395,20 +708,29 @@ const FimEvents = ({ agentId = "001" }) => {
               </div>
             </div>
 
-            {/* Donut 2 – severity */}
-            <div className="bg-slate-800/50 border border-slate-700/60 rounded-lg p-3 flex gap-3">
-              <div className="shrink-0 self-center">
-                <Donut
-                  items={derived.severityItems}
-                  centerLabelTop={derived.severityItems.reduce((a, b) => a + b.value, 0)}
-                  centerLabelBottom="by severity"
-                />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                  Severity distribution
+            {/* Word Cloud – Most Payload Used */}
+            <div className="bg-slate-950 border border-slate-700/60 rounded-lg p-3 flex flex-col gap-2 overflow-hidden">
+              <div className="flex items-center justify-between shrink-0">
+                <div>
+                  <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    Most Payload Used
+                  </div>
+                  <div className="text-[10px] text-slate-600 mt-0.5">
+                    by rule.description frequency
+                  </div>
                 </div>
-                <Legend items={derived.severityItems} />
+                <span className="text-[10px] text-slate-600 tabular-nums">
+                  top {derived.payloadWords.length}
+                </span>
+              </div>
+              <div
+                className="flex-1 rounded-md overflow-hidden"
+                style={{
+                  background:
+                    "radial-gradient(ellipse at 50% 50%, #0f172a 60%, #020617 100%)",
+                }}
+              >
+                <PayloadWordCloud words={derived.payloadWords} />
               </div>
             </div>
           </div>
@@ -418,8 +740,10 @@ const FimEvents = ({ agentId = "001" }) => {
         <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-lg overflow-hidden">
           <div className="px-4 py-2.5 border-b border-slate-800 flex items-center justify-between">
             <span className="text-xs text-slate-500">
-              <span className="font-bold text-slate-200 text-sm">{events.length}</span> hits{" "}
-              <span className="text-slate-600">(raw)</span>
+              <span className="font-bold text-slate-200 text-sm">
+                {events.length}
+              </span>{" "}
+              hits <span className="text-slate-600">(raw)</span>
             </span>
           </div>
 
@@ -476,44 +800,60 @@ const FimEvents = ({ agentId = "001" }) => {
 
                       {/* syscheck.event */}
                       <td className="px-4 py-3">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded border ${
-                          evt.syscheckEvent === "deleted"
-                            ? "text-red-400 bg-red-900/30 border-red-800/50"
-                            : evt.syscheckEvent === "added"
-                            ? "text-green-400 bg-green-900/30 border-green-800/50"
-                            : "text-yellow-400 bg-yellow-900/30 border-yellow-800/50"
-                        }`}>
+                        <span
+                          className={`text-xs font-medium px-2 py-0.5 rounded border ${
+                            evt.syscheckEvent === "deleted"
+                              ? "text-red-400 bg-red-900/30 border-red-800/50"
+                              : evt.syscheckEvent === "added"
+                                ? "text-green-400 bg-green-900/30 border-green-800/50"
+                                : "text-yellow-400 bg-yellow-900/30 border-yellow-800/50"
+                          }`}
+                        >
                           {evt.syscheckEvent}
                         </span>
                       </td>
 
                       {/* payload */}
                       <td className="px-4 py-3 text-slate-300 align-top max-w-md">
-                        <div className="font-semibold">{evt.ruleDescription}</div>
+                        <div className="font-semibold">
+                          {evt.ruleDescription}
+                        </div>
 
                         {evt.fileDiff && (
                           <div className="mt-2 p-2 bg-slate-950 text-slate-300 rounded-md overflow-x-auto text-xs font-mono border border-slate-700 shadow-inner">
                             {evt.fileDiff.split("\n").map((line, index) => {
                               if (line.startsWith(">"))
                                 return (
-                                  <div key={index} className="text-green-400 bg-green-950/50 px-1">
+                                  <div
+                                    key={index}
+                                    className="text-green-400 bg-green-950/50 px-1"
+                                  >
                                     + {line.substring(1)}
                                   </div>
                                 );
                               if (line.startsWith("<"))
                                 return (
-                                  <div key={index} className="text-red-400 bg-red-950/50 px-1">
+                                  <div
+                                    key={index}
+                                    className="text-red-400 bg-red-950/50 px-1"
+                                  >
                                     - {line.substring(1)}
                                   </div>
                                 );
                               if (line.match(/^\d+c\d+/))
                                 return (
-                                  <div key={index} className="text-sky-400 mt-1 mb-1">
+                                  <div
+                                    key={index}
+                                    className="text-sky-400 mt-1 mb-1"
+                                  >
                                     @@ {line} @@
                                   </div>
                                 );
                               return (
-                                <div key={index} className="px-1 text-slate-500">
+                                <div
+                                  key={index}
+                                  className="px-1 text-slate-500"
+                                >
                                   {line}
                                 </div>
                               );
@@ -530,7 +870,10 @@ const FimEvents = ({ agentId = "001" }) => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="7" className="px-4 py-8 text-center text-slate-600">
+                    <td
+                      colSpan="7"
+                      className="px-4 py-8 text-center text-slate-600"
+                    >
                       Tidak ada event FIM ditemukan.
                     </td>
                   </tr>
