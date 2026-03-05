@@ -6,12 +6,90 @@ const cors = require("cors");
 const { Pool } = require("pg");
 const { sendAlert } = require("./telegram");
 const os = require("os");
+const { Kafka } = require('kafkajs');
+const { Server } = require("socket.io");
+const http = require("http");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 const ENABLE_DB = process.env.ENABLE_DB !== "0";
+
+// Buat HTTP Server untuk Socket.io
+const httpServer = http.createServer(app);
+const io = new Server(httpServer, {
+  cors: { origin: "*" } // Izinkan akses dari frontend
+});
+
+// Konfigurasi Kafka
+const kafka = new Kafka({
+  clientId: 'wazuh-monitor',
+  brokers: ['localhost:9092'] // Alamat Kafka lokal kamu
+});
+const consumer = kafka.consumer({ groupId: 'wazuh-group' });
+
+// Fungsi untuk menjalankan Kafka Consumer
+const runKafka = async () => {
+  await consumer.connect();
+  await consumer.subscribe({ topic: 'test-topic', fromBeginning: false });
+
+  await consumer.run({
+    eachMessage: async ({ message }) => {
+      try {
+        // 1. Ambil data mentah dari Kafka
+        const source = JSON.parse(message.value.toString());
+        
+        // 🛑 TAMBAHKAN FILTER INI:
+        // Jika log bukan berasal dari modul FIM (syscheck), abaikan dan jangan diproses
+        if (!source.syscheck) {
+          return; 
+        }
+
+        // 2. Ekstraksi Username
+        const auditUser = source.syscheck?.audit?.login_user?.name;
+        const fileOwner = source.syscheck?.uname_after || source.syscheck?.uname;
+        const username = auditUser || fileOwner || "-";
+
+        // 3. MAPPING FORMATED
+        const formattedLog = {
+          // Pastikan menggunakan ID asli untuk menghindari duplikasi
+          id: source.id || source._id || Math.random().toString(), 
+          timestamp: source["@timestamp"] || new Date().toISOString(),
+          agentName: source.agent?.name || "-",
+          username: username,
+          syscheckPath: source.syscheck?.path || "-",
+          syscheckEvent: source.syscheck?.event || "-",
+          ruleDescription: source.rule?.description || "-",
+          ruleLevel: source.rule?.level ?? 0,
+          ruleId: source.rule?.id ?? "-",
+          fileDiff: source.syscheck?.diff || null,
+        };
+
+        // 4. Kirim ke Frontend lewat Socket
+        io.emit("new-log", formattedLog); 
+
+        if (Number(formattedLog.ruleLevel) >= 1) {
+            sendAlert(formattedLog).catch(err => console.error("Gagal kirim Telegram:", err.message));
+        }
+        
+        // Terminal sekarang hanya mencetak aktivitas file yang valid
+        console.log(`✅ Streaming Formatted: ${formattedLog.syscheckEvent} pada ${formattedLog.syscheckPath}`);
+        
+        // 5. Simpan ke Database secara otomatis
+        if (DB_READY) {
+          saveToDatabase(formattedLog).catch(err => 
+            console.error("Gagal simpan Kafka log ke DB:", err.message)
+          );
+        }
+      } catch (err) {
+        console.error("Kesalahan parsing pesan Kafka:", err.message);
+      }
+    },
+  });
+};
+
+runKafka().catch(console.error);
 
 // =======================
 // KONFIGURASI DATABASE (DIGABUNG DI SINI)
@@ -133,12 +211,11 @@ app.get("/api/events/:agent_id", async (req, res) => {
         bool: {
           must: [
             { match: { "rule.groups": "syscheck" } },
-            { match: { "agent.id": agent_id } },
           ],
         },
       },
       sort: [{ "@timestamp": { order: "desc" } }],
-      size: 500,
+      size: 100,
     };
 
     const response = await axios.post(`${INDEXER_URL}/wazuh-alerts-*/_search`, queryPayload, {
@@ -167,13 +244,13 @@ app.get("/api/events/:agent_id", async (req, res) => {
     });
 
     // Simpan ke DB paralel (tidak menghambat response)
-    Promise.all(eventsData.map((event) => saveToDatabase(event))).catch((err) =>
-      console.error("Gagal simpan massal ke DB:", err.message)
-    );
+    // Promise.all(eventsData.map((event) => saveToDatabase(event))).catch((err) =>
+    //   console.error("Gagal simpan massal ke DB:", err.message)
+    // );
 
     // Alert Telegram (ambil event terbaru)
-    const latestEvent = eventsData.find((e) => Number(e.ruleLevel) >= 1);
-    if (latestEvent) await sendAlert(latestEvent);
+    // const latestEvent = eventsData.find((e) => Number(e.ruleLevel) >= 1);
+    // if (latestEvent) await sendAlert(latestEvent);
 
     res.json({ success: true, data: eventsData, total_hits: eventsData.length });
   } catch (error) {
@@ -243,7 +320,7 @@ app.get("/api/hunting", async (req, res) => {
       q,
       desc,
       page = 1,
-      size = 500,
+      size = 100,
       sort = "desc",
     } = req.query;
 
@@ -420,7 +497,6 @@ async function autoPullEvents() {
 autoPullEvents();
 setInterval(autoPullEvents, AUTO_PULL_INTERVAL_MS);
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server berjalan di:`);
-  console.log(`➡ Local  : http://localhost:${PORT}`);
+httpServer.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server & Socket berjalan di port: ${PORT}`);
 });
