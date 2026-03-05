@@ -1,26 +1,23 @@
 import React, { useEffect, useMemo, useState } from "react";
-import logo from "../assets/Undip.svg";
+import logo from "../assets/Undip.jpeg";
+import { io } from "socket.io-client";
+
+// Inisialisasi Socket.io di luar komponen agar tidak re-render
+const socket = io("http://localhost:3000");
 
 // ----------------------------
-// Small, dependency-free charts (SVG)
+// Small, dependency-free charts (SVG Components)
 // ----------------------------
 const clamp = (n, a, b) => Math.min(Math.max(n, a), b);
 
 const formatBucketLabel = (ms, rangeKey) => {
   const d = new Date(ms);
-  if (rangeKey === "1h")
-    return d.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  if (rangeKey === "24h")
-    return d.toLocaleTimeString("en-US", { hour: "2-digit" });
-  if (rangeKey === "7d")
-    return d.toLocaleString("en-US", { weekday: "short", hour: "2-digit" });
+  if (rangeKey === "1h") return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  if (rangeKey === "24h") return d.toLocaleTimeString("en-US", { hour: "2-digit" });
+  if (rangeKey === "7d") return d.toLocaleString("en-US", { weekday: "short", hour: "2-digit" });
   return d.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
 };
 
-// ── Histogram (dipendekkan: height default 85) ────────────────────────────────
 const SimpleBarHistogram = ({ data, width = 980, height = 85, rangeKey }) => {
   const maxV = Math.max(1, ...data.map((d) => d.v));
   const padding = { l: 28, r: 10, t: 8, b: 24 };
@@ -32,86 +29,29 @@ const SimpleBarHistogram = ({ data, width = 980, height = 85, rangeKey }) => {
 
   return (
     <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="block">
-      {/* axes */}
-      <line
-        x1={padding.l}
-        y1={padding.t}
-        x2={padding.l}
-        y2={padding.t + innerH}
-        stroke="#334155"
-      />
-      <line
-        x1={padding.l}
-        y1={padding.t + innerH}
-        x2={padding.l + innerW}
-        y2={padding.t + innerH}
-        stroke="#334155"
-      />
-
-      {/* bars */}
+      <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="#334155" />
+      <line x1={padding.l} y1={padding.t + innerH} x2={padding.l + innerW} y2={padding.t + innerH} stroke="#334155" />
       {data.map((d, i) => {
         const h = (d.v / maxV) * innerH;
         const x = padding.l + i * barW;
         const y = padding.t + (innerH - h);
         return (
           <g key={d.t}>
-            <rect
-              x={x + 1}
-              y={y}
-              width={Math.max(1, barW - 2)}
-              height={h}
-              rx={2}
-              fill="#38bdf8"
-              opacity={0.75}
-            >
+            <rect x={x + 1} y={y} width={Math.max(1, barW - 2)} height={h} rx={2} fill="#38bdf8" opacity={0.75}>
               <title>{`${new Date(d.t).toLocaleString()} — ${d.v} events`}</title>
             </rect>
           </g>
         );
       })}
-
-      {/* y labels */}
-      <text
-        x={padding.l - 5}
-        y={padding.t + 8}
-        textAnchor="end"
-        fontSize="9"
-        fill="#64748b"
-      >
-        {maxV}
-      </text>
-      <text
-        x={padding.l - 5}
-        y={padding.t + innerH}
-        textAnchor="end"
-        fontSize="9"
-        fill="#64748b"
-      >
-        0
-      </text>
-
-      {/* x ticks */}
+      <text x={padding.l - 5} y={padding.t + 8} textAnchor="end" fontSize="9" fill="#64748b">{maxV}</text>
+      <text x={padding.l - 5} y={padding.t + innerH} textAnchor="end" fontSize="9" fill="#64748b">0</text>
       {data.map((d, i) => {
         if (i % tickEvery !== 0) return null;
         const x = padding.l + i * barW + barW / 2;
         return (
           <g key={`tick-${d.t}`}>
-            <line
-              x1={x}
-              y1={padding.t + innerH}
-              x2={x}
-              y2={padding.t + innerH + 3}
-              stroke="#334155"
-            />
-            <text
-              x={x}
-              y={padding.t + innerH + 15}
-              textAnchor="middle"
-              fontSize="9"
-              fill="#64748b"
-            >
-              {formatBucketLabel(d.t, rangeKey)}
-            </text>
+            <line x1={x} y1={padding.t + innerH} x2={x} y2={padding.t + innerH + 3} stroke="#334155" />
+            <text x={x} y={padding.t + innerH + 15} textAnchor="middle" fontSize="9" fill="#64748b">{formatBucketLabel(d.t, rangeKey)}</text>
           </g>
         );
       })}
@@ -119,33 +59,21 @@ const SimpleBarHistogram = ({ data, width = 980, height = 85, rangeKey }) => {
   );
 };
 
-// ── Donut (dipendekkan: size default 100) ─────────────────────────────────────
-const Donut = ({
-  items,
-  size = 100,
-  stroke = 12,
-  centerLabelTop,
-  centerLabelBottom,
-}) => {
+const Donut = ({ items, size = 100, stroke = 12, centerLabelTop, centerLabelBottom }) => {
   const total = items.reduce((a, b) => a + b.value, 0) || 1;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
-  let offset = 0;
 
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       <g transform={`translate(${size / 2} ${size / 2})`}>
-        {/* background ring */}
-        <circle
-          r={r}
-          fill="transparent"
-          stroke="#1e293b"
-          strokeWidth={stroke}
-        />
-
-        {items.map((it) => {
+        <circle r={r} fill="transparent" stroke="#1e293b" strokeWidth={stroke} />
+        {items.map((it, idx) => {
+          const currentOffset = items.slice(0, idx).reduce((acc, prev) => acc + (prev.value / total) * c, 0);
           const dash = (it.value / total) * c;
-          const el = (
+          const strokeDashoffset = -currentOffset; 
+
+          return (
             <circle
               key={it.label}
               r={r}
@@ -153,47 +81,26 @@ const Donut = ({
               stroke={it.color}
               strokeWidth={stroke}
               strokeDasharray={`${dash} ${c - dash}`}
-              strokeDashoffset={-offset}
-              strokeLinecap="butt"
+              strokeDashoffset={strokeDashoffset}
               transform="rotate(-90)"
+              strokeLinecap="butt"
             >
               <title>{`${it.label}: ${it.value}`}</title>
             </circle>
           );
-          offset += dash;
-          return el;
         })}
-
-        {/* center labels */}
-        <text
-          y={-3}
-          textAnchor="middle"
-          fontSize="12"
-          fill="#f1f5f9"
-          fontWeight="700"
-        >
-          {centerLabelTop}
-        </text>
-        <text y={11} textAnchor="middle" fontSize="8" fill="#64748b">
-          {centerLabelBottom}
-        </text>
+        <text y={-3} textAnchor="middle" fontSize="12" fill="#f1f5f9" fontWeight="700">{centerLabelTop}</text>
+        <text y={11} textAnchor="middle" fontSize="8" fill="#64748b">{centerLabelBottom}</text>
       </g>
     </svg>
   );
 };
 
-// ── Legend ────────────────────────────────────────────────────────────────────
 const Legend = ({ items }) => (
   <div className="flex flex-col gap-1.5">
     {items.map((it) => (
-      <div
-        key={it.label}
-        className="flex items-center gap-2 text-xs text-slate-400"
-      >
-        <span
-          className="inline-block w-2 h-2 rounded-sm shrink-0"
-          style={{ background: it.color }}
-        />
+      <div key={it.label} className="flex items-center gap-2 text-xs text-slate-400">
+        <span className="inline-block w-2 h-2 rounded-sm shrink-0" style={{ background: it.color }} />
         <span className="truncate max-w-[200px]">{it.label}</span>
         <span className="ml-auto text-slate-500 tabular-nums">{it.value}</span>
       </div>
@@ -201,133 +108,47 @@ const Legend = ({ items }) => (
   </div>
 );
 
-const WORD_COLORS = [
-  "#f472b6", // pink
-  "#38bdf8", // sky blue
-  "#4ade80", // neon green
-  "#a78bfa", // violet
-  "#fb923c", // orange
-  "#34d399", // emerald
-  "#f87171", // red
-  "#facc15", // yellow
-  "#60a5fa", // blue
-  "#e879f9", // fuchsia
-];
+const WORD_COLORS = ["#f472b6", "#38bdf8", "#4ade80", "#a78bfa", "#fb923c", "#34d399", "#f87171", "#facc15", "#60a5fa", "#e879f9"];
 
 const PayloadWordCloud = ({ words }) => {
-  // words: [{ text, count }] sorted desc, top 30
-  if (!words || words.length === 0)
-    return (
-      <div className="flex items-center justify-center h-full text-slate-600 text-xs">
-        No payload data
-      </div>
-    );
-
-  const W = 620,
-    H = 200;
+  if (!words || words.length === 0) return <div className="flex items-center justify-center h-full text-slate-600 text-xs">No payload data</div>;
+  const W = 620, H = 200;
   const maxCount = words[0].count;
   const minCount = words[words.length - 1].count;
   const range = Math.max(1, maxCount - minCount);
-
-  // font size: 11px – 42px
-  const fontSize = (count) =>
-    Math.round(11 + ((count - minCount) / range) * 31);
-
-  // Rough char-width estimate for SVG text (monospace-ish)
+  const fontSize = (count) => Math.round(11 + ((count - minCount) / range) * 31);
   const estWidth = (text, fs) => text.length * fs * 0.6;
-
-  // Deterministic Archimedean spiral placement
   const placed = [];
   const rects = [];
-
   const overlaps = (nx, ny, nw, nh) => {
     const pad = 4;
-    return rects.some(
-      (r) =>
-        nx - nw / 2 - pad < r.x + r.w / 2 &&
-        nx + nw / 2 + pad > r.x - r.w / 2 &&
-        ny - nh / 2 - pad < r.y + r.h / 2 &&
-        ny + nh / 2 + pad > r.y - r.h / 2,
-    );
+    return rects.some(r => nx - nw / 2 - pad < r.x + r.w / 2 && nx + nw / 2 + pad > r.x - r.w / 2 && ny - nh / 2 - pad < r.y + r.h / 2 && ny + nh / 2 + pad > r.y - r.h / 2);
   };
-
   for (let i = 0; i < words.length; i++) {
     const { text, count } = words[i];
     const fs = fontSize(count);
     const tw = estWidth(text, fs);
     const th = fs * 1.2;
-    const color = WORD_COLORS[i % WORD_COLORS.length];
-    const opacity = 0.65 + ((count - minCount) / range) * 0.35;
-
-    let placed_x = W / 2,
-      placed_y = H / 2;
-    let found = false;
-
-    // spiral out from center
+    let placed_x = W / 2, placed_y = H / 2, found = false;
     for (let step = 0; step < 800; step++) {
-      const angle = step * 0.35;
-      const radius = step * 0.8;
-      const cx = W / 2 + radius * Math.cos(angle);
-      const cy = H / 2 + radius * Math.sin(angle) * 0.6; // flatten vertically
-      if (
-        cx - tw / 2 > 2 &&
-        cx + tw / 2 < W - 2 &&
-        cy - th / 2 > 2 &&
-        cy + th / 2 < H - 2 &&
-        !overlaps(cx, cy, tw, th)
-      ) {
-        placed_x = cx;
-        placed_y = cy;
-        found = true;
-        break;
+      const angle = step * 0.35, radius = step * 0.8;
+      const cx = W / 2 + radius * Math.cos(angle), cy = H / 2 + radius * Math.sin(angle) * 0.6;
+      if (cx - tw / 2 > 2 && cx + tw / 2 < W - 2 && cy - th / 2 > 2 && cy + th / 2 < H - 2 && !overlaps(cx, cy, tw, th)) {
+        placed_x = cx; placed_y = cy; found = true; break;
       }
     }
-
     if (found || i === 0) {
       rects.push({ x: placed_x, y: placed_y, w: tw, h: th });
-      placed.push({
-        text,
-        fs,
-        color,
-        opacity,
-        x: placed_x,
-        y: placed_y,
-        count,
-      });
+      placed.push({ text, fs, color: WORD_COLORS[i % WORD_COLORS.length], opacity: 0.65 + ((count - minCount) / range) * 0.35, x: placed_x, y: placed_y, count });
     }
   }
-
   return (
-    <svg
-      width="100%"
-      viewBox={`0 0 ${W} ${H}`}
-      className="block w-full"
-      style={{ minHeight: 140 }}
-    >
-      {/* subtle radial glow in center */}
-      <defs>
-        <radialGradient id="wcGlow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#0f172a" stopOpacity="0" />
-          <stop offset="100%" stopColor="#020617" stopOpacity="0.6" />
-        </radialGradient>
-      </defs>
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="block w-full" style={{ minHeight: 140 }}>
+      <defs><radialGradient id="wcGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#0f172a" stopOpacity="0" /><stop offset="100%" stopColor="#020617" stopOpacity="0.6" /></radialGradient></defs>
       <rect width={W} height={H} fill="url(#wcGlow)" rx={8} />
-
       {placed.map((w) => (
-        <text
-          key={w.text}
-          x={w.x}
-          y={w.y}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fontSize={w.fs}
-          fontWeight={w.fs > 26 ? "800" : w.fs > 18 ? "700" : "500"}
-          fill={w.color}
-          opacity={w.opacity}
-          style={{ cursor: "default", fontFamily: "monospace" }}
-        >
-          <title>{`${w.text}: ${w.count} occurrences`}</title>
-          {w.text}
+        <text key={w.text} x={w.x} y={w.y} textAnchor="middle" dominantBaseline="middle" fontSize={w.fs} fontWeight={w.fs > 26 ? "800" : w.fs > 18 ? "700" : "500"} fill={w.color} opacity={w.opacity} style={{ cursor: "default", fontFamily: "monospace" }}>
+          <title>{`${w.text}: ${w.count} occurrences`}</title>{w.text}
         </text>
       ))}
     </svg>
@@ -335,27 +156,25 @@ const PayloadWordCloud = ({ words }) => {
 };
 
 // ── Main Component ────────────────────────────────────────────────────────────
-const FimEvents = ({ agentId = "001" }) => {
+const FimEvents = ({ agentId = "003" }) => {
   const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [rangeKey, setRangeKey] = useState("24h"); // '1h' | '24h' | '7d' | '30d'
+  const [loading, setLoading] = useState(true);
+  const [rangeKey, setRangeKey] = useState("30d");
 
-  // ── fetch (tidak diubah) ──────────────────────────────────────────────────
+  // ── 1) Fetch Awal (Historical Data) ───────────────────────────────────────
   const fetchEvents = async () => {
     try {
       setLoading(true);
-      const response = await fetch(
-        `http://localhost:3000/api/events/${agentId}`,
-      );
+      const response = await fetch(`http://localhost:3000/api/events/${agentId}`);
       const result = await response.json();
       if (result.success) setEvents(result.data);
       else setError(result.message);
     } catch (err) {
-      console.error("Detail error:", err);
+      console.error("Fetch Error:", err);
       setError("Gagal menghubungi backend API");
     } finally {
-      setLoading(false);
+      setLoading(false); // Matikan loading setelah selesai
     }
   };
 
@@ -363,87 +182,60 @@ const FimEvents = ({ agentId = "001" }) => {
     fetchEvents();
   }, [agentId]);
 
-  // Auto-refresh setiap 15 detik
-  useEffect(() => {
-    const t = setInterval(() => {
-      fetchEvents();
-    }, 15000);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => {
+    // Gunakan fungsi handler yang jelas agar cleanup socket berfungsi sempurna
+    const handleNewLog = (newLog) => {
+      setEvents((prevEvents) => {
+        // FILTER SUPER KETAT (COMPOSITE KEY)
+        // Mengecek ID, ATAU mengecek kesamaan waktu, path, dan event secara bersamaan
+        const isDuplicate = prevEvents.some((evt) => 
+          evt.id === newLog.id || 
+          (evt.timestamp === newLog.timestamp && 
+           evt.syscheckPath === newLog.syscheckPath && 
+           evt.syscheckEvent === newLog.syscheckEvent)
+        );
+        
+        // Jika terdeteksi duplikat, buang data barunya
+        if (isDuplicate) return prevEvents;
+
+        // Jika benar-benar unik, tambahkan ke tabel
+        return [newLog, ...prevEvents].slice(0, 500);
+      });
+    };
+
+    socket.on("new-log", handleNewLog);
+
+    // Cleanup listener secara spesifik
+    return () => socket.off("new-log", handleNewLog);
   }, [agentId]);
 
-  // ── format helpers (tidak diubah) ─────────────────────────────────────────
+  // ── Helpers & Formatting ─────────────────────────────────────────────────
+  const now = Date.now();
+  
   const formatTime = (isoString) => {
     if (!isoString) return "-";
     const date = new Date(isoString);
-    return date
-      .toLocaleString("en-US", {
-        month: "short",
-        day: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        fractionalSecondDigits: 3,
-      })
-      .replace(",", "")
-      .replace("AM", "")
-      .replace("PM", "");
+    return date.toLocaleString("en-US", { month: "short", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", fractionalSecondDigits: 3 }).replace(",", "").replace("AM", "").replace("PM", "");
   };
 
-  // ── severity badge (dark variant) ────────────────────────────────────────
   const renderSeverityBadge = (level) => {
-    if (level >= 12)
-      return (
-        <span className="bg-red-900/50 text-red-300 border border-red-700/50 px-2 py-0.5 rounded text-xs font-bold tracking-wide">
-          Critical <span className="opacity-60">Lvl {level}</span>
-        </span>
-      );
-    if (level >= 8)
-      return (
-        <span className="bg-orange-900/50 text-orange-300 border border-orange-700/50 px-2 py-0.5 rounded text-xs font-bold tracking-wide">
-          High <span className="opacity-60">Lvl {level}</span>
-        </span>
-      );
-    if (level >= 5)
-      return (
-        <span className="bg-yellow-900/50 text-yellow-300 border border-yellow-700/50 px-2 py-0.5 rounded text-xs font-bold tracking-wide">
-          Medium <span className="opacity-60">Lvl {level}</span>
-        </span>
-      );
-    return (
-      <span className="bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded text-xs font-bold tracking-wide">
-        Low <span className="opacity-60">Lvl {level}</span>
-      </span>
-    );
+    if (level >= 12) return <span className="bg-red-900/50 text-red-300 border border-red-700/50 px-2 py-0.5 rounded text-xs font-bold">Critical Lvl {level}</span>;
+    if (level >= 8) return <span className="bg-orange-900/50 text-orange-300 border border-orange-700/50 px-2 py-0.5 rounded text-xs font-bold">High Lvl {level}</span>;
+    if (level >= 5) return <span className="bg-yellow-900/50 text-yellow-300 border border-yellow-700/50 px-2 py-0.5 rounded text-xs font-bold">Medium Lvl {level}</span>;
+    return <span className="bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded text-xs font-bold">Low Lvl {level}</span>;
   };
 
-  // ── derived (tidak diubah) ────────────────────────────────────────────────
   const derived = useMemo(() => {
-    const now = Date.now();
-    const rangeMsMap = {
-      "1h": 60 * 60 * 1000,
-      "24h": 24 * 60 * 60 * 1000,
-      "7d": 7 * 24 * 60 * 60 * 1000,
-      "30d": 30 * 24 * 60 * 60 * 1000,
-    };
-    const rangeMs = rangeMsMap[rangeKey] ?? rangeMsMap["24h"];
+    const rangeMsMap = { "1h": 3600000, "24h": 86400000, "7d": 604800000, "30d": 2592000000 };
+    const rangeMs = rangeMsMap[rangeKey] ?? 86400000;
     const startMs = now - rangeMs;
 
     const filtered = events
-      .map((e) => ({
-        ...e,
-        _ms: e.timestamp ? new Date(e.timestamp).getTime() : NaN,
-      }))
+      .map((e) => ({ ...e, _ms: e.timestamp ? new Date(e.timestamp).getTime() : NaN }))
       .filter((e) => Number.isFinite(e._ms) && e._ms >= startMs && e._ms <= now)
       .sort((a, b) => b._ms - a._ms);
 
-    let stepMs = 60 * 60 * 1000;
-    if (rangeKey === "1h") stepMs = 5 * 60 * 1000;
-    else if (rangeKey === "24h") stepMs = 60 * 60 * 1000;
-    else if (rangeKey === "7d") stepMs = 6 * 60 * 60 * 1000;
-    else stepMs = 24 * 60 * 60 * 1000;
-
+    let stepMs = rangeKey === "1h" ? 300000 : rangeKey === "24h" ? 3600000 : rangeKey === "7d" ? 21600000 : 86400000;
     const bucketStart = (ms) => Math.floor(ms / stepMs) * stepMs;
     const buckets = new Map();
     for (const e of filtered) {
@@ -451,433 +243,122 @@ const FimEvents = ({ agentId = "001" }) => {
       buckets.set(b, (buckets.get(b) || 0) + 1);
     }
     const series = [];
-    const first = bucketStart(startMs);
-    const last = bucketStart(now);
-    for (let t = first; t <= last; t += stepMs) {
+    for (let t = bucketStart(startMs); t <= bucketStart(now); t += stepMs) {
       series.push({ t, v: buckets.get(t) || 0 });
     }
 
     const byEvent = new Map();
-    const bySev = new Map();
-    const sevLabel = (lvl) => {
-      if (lvl >= 12) return "Critical";
-      if (lvl >= 8) return "High";
-      if (lvl >= 5) return "Medium";
-      return "Low";
-    };
+    
     for (const e of filtered) {
       const k = e.syscheckEvent || "unknown";
       byEvent.set(k, (byEvent.get(k) || 0) + 1);
-      const s = sevLabel(Number(e.ruleLevel ?? 0));
-      bySev.set(s, (bySev.get(s) || 0) + 1);
     }
 
-    const eventItemsAll = Array.from(byEvent.entries())
-      .map(([label, value]) => ({ label, value }))
-      .sort((a, b) => b.value - a.value);
+    const eventItemsAll = Array.from(byEvent.entries()).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
     const eventTop = eventItemsAll.slice(0, 6);
-    const eventOther = eventItemsAll.slice(6).reduce((a, b) => a + b.value, 0);
-    if (eventOther > 0) eventTop.push({ label: "other", value: eventOther });
-
-    const palette = [
-      "#38bdf8",
-      "#34D399",
-      "#FBBF24",
-      "#F87171",
-      "#A78BFA",
-      "#F472B6",
-      "#9CA3AF",
-    ];
-    const eventItems = eventTop.map((it, i) => ({
-      ...it,
-      color: palette[i % palette.length],
-    }));
+    const eventItems = eventTop.map((it, i) => ({ ...it, color: ["#38bdf8", "#34D399", "#FBBF24", "#F87171", "#A78BFA", "#F472B6", "#9CA3AF"][i % 7] }));
 
     const byPayload = new Map();
-    // Tokens to ignore (common diff noise & shell boilerplate)
-    const STOP = new Set([
-      "",
-      "---",
-      "@@",
-      "+",
-      "-",
-      "//",
-      "#",
-      "/*",
-      "*/",
-      "0",
-      "1",
-      "the",
-      "a",
-      "an",
-      "is",
-      "in",
-      "to",
-      "of",
-      "and",
-      "or",
-      "for",
-      "with",
-      "from",
-      "this",
-      "that",
-      "it",
-      "at",
-      "be",
-      "as",
-      "by",
-    ]);
+    const STOP = new Set(["", "---", "@@", "+", "-", "//", "#", "the", "is", "to", "and"]);
     for (const e of filtered) {
       if (!e.fileDiff) continue;
       for (const line of e.fileDiff.split("\n")) {
-        // Only parse added (>) and removed (<) lines — skip metadata
         if (!line.startsWith(">") && !line.startsWith("<")) continue;
-        const content = line.substring(1).trim();
-        // Tokenize: split on whitespace and common delimiters, keep tokens ≥ 2 chars
-        const tokens = content
-          .split(/[\s\/=:;,'"(){}\[\]<>|&!?@#%^*`~]+/)
-          .map((t) =>
-            t.replace(/^[^a-zA-Z0-9_.-]+|[^a-zA-Z0-9_.-]+$/g, "").toLowerCase(),
-          )
-          .filter((t) => t.length >= 2 && !STOP.has(t) && !/^\d+$/.test(t));
-        for (const token of tokens) {
-          byPayload.set(token, (byPayload.get(token) || 0) + 1);
-        }
+        // Penghapusan escape character berlebih pada '/'
+        const tokens = line.substring(1).trim().split(/[\s/=:;,'"(){}[\]<>|&!?@#%^*`~]+/).map(t => t.toLowerCase()).filter(t => t.length >= 2 && !STOP.has(t));
+        for (const token of tokens) byPayload.set(token, (byPayload.get(token) || 0) + 1);
       }
     }
-    const payloadWords = Array.from(byPayload.entries())
-      .map(([text, count]) => ({ text, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 40);
-    const total = filtered.length;
-    const eps = total ? total / (rangeMs / 1000) : 0;
-    return {
-      filtered,
-      series,
-      eventItems,
-      payloadWords,
-      total,
-      eps,
-      startMs,
-      now,
-    };
+    const payloadWords = Array.from(byPayload.entries()).map(([text, count]) => ({ text, count })).sort((a, b) => b.count - a.count).slice(0, 40);
+
+    return { filtered, series, eventItems, payloadWords, total: filtered.length, eps: filtered.length ? filtered.length / (rangeMs / 1000) : 0, startMs, now };
   }, [events, rangeKey]);
 
   // ── loading / error states ────────────────────────────────────────────────
-  // if (loading)
-  //   return (
-  //     <div className="min-h-screen"> </div>
-  //   );
-
-  if (error)
+  if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="bg-red-950/60 border border-red-800/60 rounded-xl px-6 py-4 text-red-300 text-sm">
-          ⚠ Error: {error}
-        </div>
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-sky-400 gap-3">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-sky-400"></div>
+        <div className="text-sm font-medium">Memuat data</div>
       </div>
     );
+  }
 
-  // ── render ────────────────────────────────────────────────────────────────
+  if (error) return <div className="min-h-screen bg-slate-950 flex items-center justify-center"><div className="bg-red-950/60 border border-red-800/60 rounded-xl px-6 py-4 text-red-300 text-sm">⚠ Error: {error}</div></div>;
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans">
-      {/* ── Header ── */}
       <div className="sticky top-0 z-10 border-b border-slate-800 bg-slate-900/90 backdrop-blur px-5 py-3 flex items-center gap-4">
-        {/* LOGO */}
-        <div className="h-15 w-15 shrink-0">
-          <img
-            src={logo}
-            alt="Wazuh"
-            className="h-full w-full object-contain"
-          />
-        </div>
-
-        {/* CONTAINER TEKS */}
+        <div className="h-15 w-15 shrink-0"><img src={logo} alt="Wazuh" className="h-full w-full object-contain" /></div>
         <div className="flex flex-col justify-center">
-          {/* BARIS ATAS: Judul yang sejajar tengah dengan logo */}
-          <span className="text-slate-300 font-bold text-xl leading-none">
-            Cyber Monitoring Dashboard
-          </span>
-
-          {/* BARIS BAWAH: Label-label yang berada di bawah judul */}
+          <span className="text-slate-300 font-bold text-xl">Cyber Monitoring Dashboard</span>
           <div className="flex gap-2 mt-1.5">
-            <span className="bg-slate-800 text-slate-300 px-2.5 py-0.5 rounded-full text-[10px] border border-slate-700">
-              File Integrity Monitoring
-            </span>
-            <span className="bg-sky-900/50 text-sky-400 px-2.5 py-0.5 rounded-full text-[10px] border border-sky-800/60">
-              agent{agentId}
-            </span>
+            <span className="bg-slate-800 text-slate-300 px-2.5 py-0.5 rounded-full text-[10px] border border-slate-700">File Integrity Monitoring</span>
+            <span className="bg-sky-900/50 text-sky-400 px-2.5 py-0.5 rounded-full text-[10px] border border-sky-800/60">agent{agentId}</span>
           </div>
         </div>
       </div>
 
       <div className="p-4 flex flex-col gap-4">
-        {/* ── Controls + Charts wrapper ── */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg flex flex-col gap-4">
-          {/* Controls row */}
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={fetchEvents}
-              className="text-sky-400 text-sm font-medium px-3 py-1.5 rounded-md border border-slate-700 hover:border-sky-700 hover:bg-sky-900/20 transition-colors"
-            >
-              ↻ Refresh Data
-            </button>
-
+            <button onClick={fetchEvents} className="text-sky-400 text-sm font-medium px-3 py-1.5 rounded-md border border-slate-700 hover:bg-sky-900/20">↻ Refresh Data</button>
             <div className="ml-auto flex items-center gap-2">
               <span className="text-xs text-slate-500">Range</span>
-              <div className="flex bg-slate-800 rounded-lg p-0.5 border border-slate-700 gap-0.5">
-                {[
-                  { k: "1h", label: "Last 1h" },
-                  { k: "24h", label: "Last 24h" },
-                  { k: "7d", label: "Last 7d" },
-                  { k: "30d", label: "Last 30d" },
-                ].map((r) => (
-                  <button
-                    key={r.k}
-                    onClick={() => setRangeKey(r.k)}
-                    className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
-                      rangeKey === r.k
-                        ? "bg-sky-600 text-white shadow-sm"
-                        : "text-slate-400 hover:text-slate-200"
-                    }`}
-                    title={`Filter events to ${r.label}`}
-                  >
-                    {r.label}
-                  </button>
+              <div className="flex bg-slate-800 rounded-lg p-0.5 border border-slate-700">
+                {["1h", "24h", "7d", "30d"].map((k) => (
+                  <button key={k} onClick={() => setRangeKey(k)} className={`px-2.5 py-1 text-xs rounded-md ${rangeKey === k ? "bg-sky-600 text-white" : "text-slate-400"}`}>Last {k}</button>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* ── Bar Chart ── */}
           <div className="bg-slate-800/50 border border-slate-700/60 rounded-lg p-3">
-            <div className="flex items-start justify-between mb-2">
-              <div>
-                <div className="text-[11px] text-slate-500 uppercase tracking-wider mb-0.5">
-                  Events (filtered)
-                </div>
-                <div className="text-3xl font-black text-slate-100 tabular-nums leading-none">
-                  {derived.total}
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-[11px] text-slate-500 uppercase tracking-wider mb-0.5">
-                  Rate
-                </div>
-                <div className="text-lg font-bold text-slate-200 tabular-nums">
-                  {derived.eps.toFixed(2)}{" "}
-                  <span className="text-xs font-normal text-slate-500">
-                    / sec
-                  </span>
-                </div>
-              </div>
+            <div className="flex justify-between mb-2">
+              <div><div className="text-[11px] text-slate-500 uppercase">Events (filtered)</div><div className="text-3xl font-black">{derived.total}</div></div>
+              <div className="text-right"><div className="text-[11px] text-slate-500 uppercase">Rate</div><div className="text-lg font-bold">{derived.eps.toFixed(2)} / sec</div></div>
             </div>
-
-            <div className="text-[10px] text-slate-600 mb-2">
-              Window: {new Date(derived.startMs).toLocaleString()} →{" "}
-              {new Date(derived.now).toLocaleString()}
-            </div>
-
-            <div className="border-t border-slate-700/60 pt-2">
-              <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                Events over time
-              </div>
-              <SimpleBarHistogram data={derived.series} rangeKey={rangeKey} />
-            </div>
+            <SimpleBarHistogram data={derived.series} rangeKey={rangeKey} />
           </div>
 
-          {/* ── Donuts ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {/* Donut – event types */}
             <div className="bg-slate-800/50 border border-slate-700/60 rounded-lg p-3 flex gap-3">
-              <div className="shrink-0 self-center">
-                <Donut
-                  items={derived.eventItems}
-                  centerLabelTop={derived.eventItems.reduce(
-                    (a, b) => a + b.value,
-                    0,
-                  )}
-                  centerLabelBottom="syscheck.event"
-                />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                  Top event types
-                </div>
-                <Legend items={derived.eventItems} />
-              </div>
+              <Donut items={derived.eventItems} centerLabelTop={derived.total} centerLabelBottom="events" />
+              <div className="flex-1"><Legend items={derived.eventItems} /></div>
             </div>
-
-            {/* Word Cloud – Most Payload Used */}
-            <div className="bg-slate-950 border border-slate-700/60 rounded-lg p-3 flex flex-col gap-2 overflow-hidden">
-              <div className="flex items-center justify-between shrink-0">
-                <div>
-                  <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                    Most Payload Used
-                  </div>
-                  <div className="text-[10px] text-slate-600 mt-0.5">
-                    by rule.description frequency
-                  </div>
-                </div>
-                <span className="text-[10px] text-slate-600 tabular-nums">
-                  top {derived.payloadWords.length}
-                </span>
-              </div>
-              <div
-                className="flex-1 rounded-md overflow-hidden"
-                style={{
-                  background:
-                    "radial-gradient(ellipse at 50% 50%, #0f172a 60%, #020617 100%)",
-                }}
-              >
-                <PayloadWordCloud words={derived.payloadWords} />
-              </div>
+            <div className="bg-slate-950 border border-slate-700/60 rounded-lg p-3 flex flex-col gap-2">
+              <PayloadWordCloud words={derived.payloadWords} />
             </div>
           </div>
         </div>
 
-        {/* ── Table ── */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-lg overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-slate-800 flex items-center justify-between">
-            <span className="text-xs text-slate-500">
-              <span className="font-bold text-slate-200 text-sm">
-                {events.length}
-              </span>{" "}
-              hits <span className="text-slate-600">(raw)</span>
-            </span>
-          </div>
-
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left whitespace-nowrap">
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-800/70">
-                  {[
-                    "↓ timestamp",
-                    "agent.name",
-                    "username",
-                    "syscheck.path",
-                    "syscheck.event",
-                    "payload",
-                    "severity alert",
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider"
-                    >
-                      {h}
-                    </th>
+                  {["↓ timestamp", "agent.name", "username", "syscheck.path", "syscheck.event", "payload", "severity"].map(h => (
+                    <th key={h} className="px-4 py-3 text-[11px] font-semibold text-slate-400 uppercase">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {derived.filtered.length > 0 ? (
-                  derived.filtered.map((evt, idx) => (
-                    <tr
-                      key={evt.id}
-                      className={`border-b border-slate-800/60 hover:bg-slate-800/40 transition-colors ${
-                        idx % 2 !== 0 ? "bg-slate-900/60" : ""
-                      }`}
-                    >
-                      {/* timestamp */}
-                      <td className="px-4 py-3 text-slate-500 text-xs">
-                        {formatTime(evt.timestamp)}
-                      </td>
-
-                      {/* agent.name */}
-                      <td className="px-4 py-3 text-sky-400 font-medium">
-                        {evt.agentName}
-                      </td>
-
-                      {/* username */}
-                      <td className="px-4 py-3 text-violet-400 font-medium">
-                        {evt.username}
-                      </td>
-
-                      {/* syscheck.path */}
-                      <td className="px-4 py-3 text-emerald-400 font-mono text-xs">
-                        {evt.syscheckPath}
-                      </td>
-
-                      {/* syscheck.event */}
-                      <td className="px-4 py-3">
-                        <span
-                          className={`text-xs font-medium px-2 py-0.5 rounded border ${
-                            evt.syscheckEvent === "deleted"
-                              ? "text-red-400 bg-red-900/30 border-red-800/50"
-                              : evt.syscheckEvent === "added"
-                                ? "text-green-400 bg-green-900/30 border-green-800/50"
-                                : "text-yellow-400 bg-yellow-900/30 border-yellow-800/50"
-                          }`}
-                        >
-                          {evt.syscheckEvent}
-                        </span>
-                      </td>
-
-                      {/* payload */}
-                      <td className="px-4 py-3 text-slate-300 align-top max-w-md">
-                        <div className="font-semibold">
-                          {evt.ruleDescription}
-                        </div>
-
-                        {evt.fileDiff && (
-                          <div className="mt-2 p-2 bg-slate-950 text-slate-300 rounded-md overflow-x-auto text-xs font-mono border border-slate-700 shadow-inner">
-                            {evt.fileDiff.split("\n").map((line, index) => {
-                              if (line.startsWith(">"))
-                                return (
-                                  <div
-                                    key={index}
-                                    className="text-green-400 bg-green-950/50 px-1"
-                                  >
-                                    + {line.substring(1)}
-                                  </div>
-                                );
-                              if (line.startsWith("<"))
-                                return (
-                                  <div
-                                    key={index}
-                                    className="text-red-400 bg-red-950/50 px-1"
-                                  >
-                                    - {line.substring(1)}
-                                  </div>
-                                );
-                              if (line.match(/^\d+c\d+/))
-                                return (
-                                  <div
-                                    key={index}
-                                    className="text-sky-400 mt-1 mb-1"
-                                  >
-                                    @@ {line} @@
-                                  </div>
-                                );
-                              return (
-                                <div
-                                  key={index}
-                                  className="px-1 text-slate-500"
-                                >
-                                  {line}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* severity */}
-                      <td className="px-4 py-3">
-                        {renderSeverityBadge(evt.ruleLevel)}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td
-                      colSpan="7"
-                      className="px-4 py-8 text-center text-slate-600"
-                    >
-                      Tidak ada event FIM ditemukan.
+                {derived.filtered.map((evt, idx) => (
+                  <tr key={evt.id} className={`border-b border-slate-800/60 hover:bg-slate-800/40 ${idx % 2 !== 0 ? "bg-slate-900/60" : ""}`}>
+                    <td className="px-4 py-3 text-slate-500 text-xs">{formatTime(evt.timestamp)}</td>
+                    <td className="px-4 py-3 text-sky-400 font-medium">{evt.agentName}</td>
+                    <td className="px-4 py-3 text-violet-400 font-medium">{evt.username}</td>
+                    <td className="px-4 py-3 text-emerald-400 font-mono text-xs">{evt.syscheckPath}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-0.5 rounded border ${evt.syscheckEvent === "deleted" ? "text-red-400 bg-red-900/30" : "text-green-400 bg-green-900/30"}`}>{evt.syscheckEvent}</span>
                     </td>
+                    <td className="px-4 py-3 text-slate-300 max-w-md">
+                        <div className="font-semibold">{evt.ruleDescription}</div>
+                        {evt.fileDiff && <pre className="mt-2 p-2 bg-black text-[10px] rounded">{evt.fileDiff}</pre>}
+                    </td>
+                    <td className="px-4 py-3">{renderSeverityBadge(evt.ruleLevel)}</td>
                   </tr>
-                )}
+                ))}
               </tbody>
             </table>
           </div>
