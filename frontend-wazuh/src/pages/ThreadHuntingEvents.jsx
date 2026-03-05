@@ -32,11 +32,35 @@ function fmt(ts) {
 
 function renderSeverityBadge(level) {
   const lv = Number(level);
-  if (!Number.isFinite(lv)) return <div className="w-full bg-gray-100 text-gray-700 px-3 py-2 rounded text-xs font-bold text-center">-</div>;
-  if (lv >= 12) return <div className="w-full bg-red-100 text-red-700 px-3 py-2 rounded text-xs font-bold text-center">Critical (Lvl {lv})</div>;
-  if (lv >= 8) return <div className="w-full bg-orange-100 text-orange-700 px-3 py-2 rounded text-xs font-bold text-center">High (Lvl {lv})</div>;
-  if (lv >= 5) return <div className="w-full bg-yellow-100 text-yellow-700 px-3 py-2 rounded text-xs font-bold text-center">Medium (Lvl {lv})</div>;
-  return <div className="inline-block bg-green-100 text-green-700 px-3 py-2 rounded text-xs font-bold">Low (Lvl {lv})</div>;
+  if (!Number.isFinite(lv))
+    return (
+      <div className="w-full bg-gray-100 text-gray-700 px-3 py-2 rounded text-xs font-bold text-center">
+        -
+      </div>
+    );
+  if (lv >= 12)
+    return (
+      <div className="w-full bg-red-100 text-red-700 px-3 py-2 rounded text-xs font-bold text-center">
+        Critical (Lvl {lv})
+      </div>
+    );
+  if (lv >= 8)
+    return (
+      <div className="w-full bg-orange-100 text-orange-700 px-3 py-2 rounded text-xs font-bold text-center">
+        High (Lvl {lv})
+      </div>
+    );
+  if (lv >= 5)
+    return (
+      <div className="w-full bg-yellow-100 text-yellow-700 px-3 py-2 rounded text-xs font-bold text-center">
+        Medium (Lvl {lv})
+      </div>
+    );
+  return (
+    <div className="inline-block bg-green-100 text-green-700 px-3 py-2 rounded text-xs font-bold">
+      Low (Lvl {lv})
+    </div>
+  );
 }
 
 export default function ThreadHuntingEvents() {
@@ -48,6 +72,7 @@ export default function ThreadHuntingEvents() {
   const [ruleId, setRuleId] = useState("");
   const [levelGte, setLevelGte] = useState("");
   const [levelLte, setLevelLte] = useState("");
+  const [sshdOnly, setSshdOnly] = useState(false);
   const [preset, setPreset] = useState("24h");
 
   // date range
@@ -71,6 +96,15 @@ export default function ThreadHuntingEvents() {
     return Math.max(Math.ceil(t / size), 1);
   }, [total, size]);
 
+  const displayRows = useMemo(() => {
+    if (!sshdOnly) return rows;
+    return (rows || []).filter((r) =>
+      String(r.ruleDescription || "")
+        .toLowerCase()
+        .includes("sshd"),
+    );
+  }, [rows, sshdOnly]);
+
   useEffect(() => {
     // update date range when preset changes (kecuali custom)
     if (preset === "custom") return;
@@ -86,7 +120,19 @@ export default function ThreadHuntingEvents() {
     }, 350);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, desc, agentId, group, ruleId, levelGte, levelLte, start, end, size, preset]);
+  }, [
+    q,
+    desc,
+    agentId,
+    group,
+    ruleId,
+    levelGte,
+    levelLte,
+    start,
+    end,
+    size,
+    preset,
+  ]);
 
   async function fetchData(nextPage = page) {
     setLoading(true);
@@ -109,7 +155,8 @@ export default function ThreadHuntingEvents() {
 
       const res = await axios.get("/api/hunting", { params });
       const payload = res.data;
-      if (!payload?.success) throw new Error(payload?.message || "Request failed");
+      if (!payload?.success)
+        throw new Error(payload?.message || "Request failed");
 
       setRows(payload.data || []);
       setTotal(payload.total || 0);
@@ -132,9 +179,9 @@ export default function ThreadHuntingEvents() {
   }
 
   const hitsLabel = useMemo(() => {
-    const t = Number(total) || 0;
+    const t = sshdOnly ? displayRows.length : Number(total) || 0;
     return `${t.toLocaleString()} hits`;
-  }, [total]);
+  }, [total, sshdOnly, displayRows.length]);
 
   return (
     <div className="p-4 md:p-6">
@@ -245,7 +292,7 @@ export default function ThreadHuntingEvents() {
 
         {/* Filters row (agent/group/rule/level) */}
         <div className="rounded-lg border bg-white p-3">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-7">
             <input
               value={agentId}
               onChange={(e) => setAgentId(e.target.value)}
@@ -276,6 +323,14 @@ export default function ThreadHuntingEvents() {
               placeholder="level_lte"
               className="rounded-md border px-3 py-2 text-sm"
             />
+            <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                checked={sshdOnly}
+                onChange={(e) => setSshdOnly(e.target.checked)}
+              />
+              SSHD only
+            </label>
             <button
               onClick={() => {
                 setQ("");
@@ -311,36 +366,56 @@ export default function ThreadHuntingEvents() {
                 <tr>
                   <th className="px-4 py-3">timestamp</th>
                   <th className="px-4 py-3">agent.name</th>
+                  <th className="px-4 py-3">agent.ip</th> {/* ✅ baru */}
+                  <th className="px-4 py-3">source.ip</th>
                   <th className="px-4 py-3">rule.description</th>
                   <th className="px-4 py-3 text-center">severity</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {rows.map((r) => (
+                {displayRows.map((r) => (
                   <tr key={r.id} className="hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-4 py-3 text-gray-700">{fmt(r.timestamp)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-gray-700">
+                      {fmt(r.timestamp)}
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3 font-medium text-blue-700">
                       {r.agentName || "-"}
                     </td>
-                    <td className="min-w-[420px] px-4 py-3 text-gray-800">{r.ruleDescription || "-"}</td>
+                    {/* ✅ agent ip */}
+                    <td className="whitespace-nowrap px-4 py-3 font-mono text-gray-800">
+                      {r.agentIp || "-"}
+                    </td>
+
+                    {/* ✅ source ip (data.srcip) */}
+                    <td className="whitespace-nowrap px-4 py-3 font-mono text-gray-800">
+                      {r.srcIp || "-"}
+                    </td>
+                    <td className="min-w-[420px] px-4 py-3 text-gray-800">
+                      {r.ruleDescription || "-"}
+                    </td>
                     <td className="px-4 py-3 align-top">
                       <div className="flex flex-col gap-2 items-center justify-center">
                         {renderSeverityBadge(r.ruleLevel)}
-                        
                       </div>
                     </td>
                   </tr>
                 ))}
-                {!loading && rows.length === 0 ? (
+                {!loading && displayRows.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-6 text-center text-gray-500" colSpan={4}>
+                    <td
+                      className="px-4 py-6 text-center text-gray-500"
+                      colSpan={6}
+                    >
                       No data
                     </td>
                   </tr>
                 ) : null}
                 {loading ? (
                   <tr>
-                    <td className="px-4 py-6 text-center text-gray-500" colSpan={4}>
+                    <td
+                      className="px-4 py-6 text-center text-gray-500"
+                      colSpan={6}
+                    >
                       Loading...
                     </td>
                   </tr>
