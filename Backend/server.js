@@ -158,9 +158,9 @@ async function saveToDatabase(event) {
 // =======================
 // KONFIGURASI WAZUH
 // =======================
-const WAZUH_API_URL = "https://10.104.131.140:55000";
-const WAZUH_USER = "wazuh";
-const WAZUH_PASS = "08F6oACn.1CoCX3v.mMs5DJk+WeW1y?+";
+// const WAZUH_API_URL = "https://10.104.131.140:55000";
+// const WAZUH_USER = "wazuh";
+// const WAZUH_PASS = "08F6oACn.1CoCX3v.mMs5DJk+WeW1y?+";
 
 // Abaikan SSL self-signed
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
@@ -175,7 +175,7 @@ const INDEXER_PASS = "C?o4IFv1*OycPKaKr14sLtHlKn6Qers2";
 // =======================
 // 1) Endpoint FIM Real-time
 // =======================
-app.get("/api/fim/:agent_id", async (req, res) => {
+app.get(async (req, res) => {
   try {
     const { agent_id } = req.params;
 
