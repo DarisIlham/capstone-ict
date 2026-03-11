@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import logo from "../assets/Undip.jpeg";
+import logo from "../assets/Undip.svg";
 import { io } from "socket.io-client";
 
 // Inisialisasi Socket.io di luar komponen agar tidak re-render
