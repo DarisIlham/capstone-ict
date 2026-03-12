@@ -19,7 +19,7 @@ const ENABLE_DB = process.env.ENABLE_DB !== "0";
 // Buat HTTP Server untuk Socket.io
 const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
-  cors: { origin: "*" } // Izinkan akses dari frontend
+  cors: { origin: "/{*splat}" } // Izinkan akses dari frontend
 });
 
 // Konfigurasi Kafka
