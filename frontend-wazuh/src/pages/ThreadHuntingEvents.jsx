@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import Navbar from "../components/Navbar";
 
 function toLocalInputValue(date) {
   // yyyy-MM-ddTHH:mm (for datetime-local)
@@ -184,18 +185,20 @@ export default function ThreadHuntingEvents() {
   }, [total, sshdOnly, displayRows.length]);
 
   return (
-    <div className="p-4 md:p-6">
-      <div className="flex flex-col gap-3">
+    <>
+      <Navbar />
+      <div className="min-h-screen bg-slate-950 text-slate-200 p-4 md:p-6">
+        <div className="flex flex-col gap-3">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-xl font-semibold">Thread Hunting</div>
-            <div className="text-sm text-gray-500">Events</div>
+            <div className="text-xl font-semibold text-white">Thread Hunting</div>
+            <div className="text-sm text-slate-400">Events</div>
           </div>
 
           <button
             onClick={onRefresh}
-            className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-white hover:bg-sky-700 disabled:opacity-60"
             disabled={loading}
             title="Refresh"
           >
@@ -204,27 +207,27 @@ export default function ThreadHuntingEvents() {
         </div>
 
         {/* Search Bar + Time */}
-        <div className="flex flex-col gap-3 rounded-lg border bg-white p-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-3 rounded-lg border border-slate-700/60 bg-slate-800/50 p-3 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-1 flex-col gap-2 md:flex-row md:items-center">
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search (q) — contoh: agent3 sudo root"
-              className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200 md:max-w-md"
+              className="w-full rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-slate-200 placeholder-slate-500 outline-none focus:ring-2 focus:ring-sky-500 md:max-w-md"
             />
 
             <input
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
               placeholder="Description (desc) — contoh: Login session"
-              className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200 md:max-w-md"
+              className="w-full rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-slate-200 placeholder-slate-500 outline-none focus:ring-2 focus:ring-sky-500 md:max-w-md"
             />
 
             <div className="flex gap-2">
               <select
                 value={preset}
                 onChange={(e) => setPreset(e.target.value)}
-                className="rounded-md border px-3 py-2 text-sm"
+                className="rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-slate-200"
                 title="Time range preset"
               >
                 <option value="1h">Last 1 hour</option>
@@ -236,7 +239,7 @@ export default function ThreadHuntingEvents() {
 
               <button
                 onClick={() => setShowDates((v) => !v)}
-                className="rounded-md border px-3 py-2 text-sm hover:bg-gray-50"
+                className="rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800/50"
               >
                 {showDates ? "Hide dates" : "Show dates"}
               </button>
@@ -244,11 +247,11 @@ export default function ThreadHuntingEvents() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <label className="text-sm text-gray-600">Size</label>
+            <label className="text-sm text-slate-400">Size</label>
             <select
               value={size}
               onChange={(e) => setSize(Number(e.target.value))}
-              className="rounded-md border px-2 py-2 text-sm"
+              className="rounded-md border border-slate-700 bg-slate-900/50 px-2 py-2 text-sm text-slate-200"
             >
               <option value={25}>25</option>
               <option value={50}>50</option>
@@ -260,10 +263,10 @@ export default function ThreadHuntingEvents() {
 
         {/* Optional date inputs */}
         {showDates && (
-          <div className="rounded-lg border bg-white p-3">
+          <div className="rounded-lg border border-slate-700/60 bg-slate-800/50 p-3">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-500">Start</label>
+                <label className="text-xs text-slate-400">Start</label>
                 <input
                   type="datetime-local"
                   value={start}
@@ -271,11 +274,11 @@ export default function ThreadHuntingEvents() {
                     setPreset("custom");
                     setStart(e.target.value);
                   }}
-                  className="rounded-md border px-3 py-2 text-sm"
+                  className="rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-slate-200"
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-500">End</label>
+                <label className="text-xs text-slate-400">End</label>
                 <input
                   type="datetime-local"
                   value={end}
@@ -283,7 +286,7 @@ export default function ThreadHuntingEvents() {
                     setPreset("custom");
                     setEnd(e.target.value);
                   }}
-                  className="rounded-md border px-3 py-2 text-sm"
+                  className="rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-slate-200"
                 />
               </div>
             </div>
@@ -291,39 +294,39 @@ export default function ThreadHuntingEvents() {
         )}
 
         {/* Filters row (agent/group/rule/level) */}
-        <div className="rounded-lg border bg-white p-3">
+        <div className="rounded-lg border border-slate-700/60 bg-slate-800/50 p-3">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-7">
             <input
               value={agentId}
               onChange={(e) => setAgentId(e.target.value)}
               placeholder="agent_id (exact)"
-              className="rounded-md border px-3 py-2 text-sm"
+              className="rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-slate-200 placeholder-slate-500"
             />
             <input
               value={group}
               onChange={(e) => setGroup(e.target.value)}
               placeholder="group (rule.groups)"
-              className="rounded-md border px-3 py-2 text-sm"
+              className="rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-slate-200 placeholder-slate-500"
             />
             <input
               value={ruleId}
               onChange={(e) => setRuleId(e.target.value)}
               placeholder="rule_id"
-              className="rounded-md border px-3 py-2 text-sm"
+              className="rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-slate-200 placeholder-slate-500"
             />
             <input
               value={levelGte}
               onChange={(e) => setLevelGte(e.target.value)}
               placeholder="level_gte"
-              className="rounded-md border px-3 py-2 text-sm"
+              className="rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-slate-200 placeholder-slate-500"
             />
             <input
               value={levelLte}
               onChange={(e) => setLevelLte(e.target.value)}
               placeholder="level_lte"
-              className="rounded-md border px-3 py-2 text-sm"
+              className="rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-slate-200 placeholder-slate-500"
             />
-            <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+            <label className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-slate-200">
               <input
                 type="checkbox"
                 checked={sshdOnly}
@@ -345,7 +348,7 @@ export default function ThreadHuntingEvents() {
                 setStart(toLocalInputValue(r.start));
                 setEnd(toLocalInputValue(r.end));
               }}
-              className="rounded-md border px-3 py-2 text-sm hover:bg-gray-50"
+              className="rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800/50"
             >
               Reset
             </button>
@@ -354,43 +357,41 @@ export default function ThreadHuntingEvents() {
 
         {/* Hits + Errors */}
         <div className="flex items-center justify-between">
-          <div className="text-sm font-medium">{hitsLabel}</div>
-          {err ? <div className="text-sm text-red-600">{err}</div> : null}
+          <div className="text-sm font-medium text-slate-300">{hitsLabel}</div>
+          {err ? <div className="text-sm text-red-400">{err}</div> : null}
         </div>
 
         {/* Table */}
-        <div className="overflow-hidden rounded-lg border bg-white">
+        <div className="overflow-hidden rounded-lg border border-slate-700/60 bg-slate-800/50">
           <div className="overflow-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="sticky top-0 bg-gray-50 text-xs uppercase text-gray-600">
+            <table className="min-w-full text-left text-sm text-slate-200">
+              <thead className="sticky top-0 border-b border-slate-700/60 bg-slate-900/80 text-xs uppercase text-slate-400">
                 <tr>
                   <th className="px-4 py-3">timestamp</th>
                   <th className="px-4 py-3">agent.name</th>
-                  <th className="px-4 py-3">agent.ip</th> {/* ✅ baru */}
+                  <th className="px-4 py-3">agent.ip</th>
                   <th className="px-4 py-3">source.ip</th>
                   <th className="px-4 py-3">rule.description</th>
                   <th className="px-4 py-3 text-center">severity</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody className="divide-y divide-slate-700/60">
                 {displayRows.map((r) => (
-                  <tr key={r.id} className="hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-4 py-3 text-gray-700">
+                  <tr key={r.id} className="border-b border-slate-700/60 hover:bg-slate-700/20">
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-400">
                       {fmt(r.timestamp)}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 font-medium text-blue-700">
+                    <td className="whitespace-nowrap px-4 py-3 font-medium text-sky-400">
                       {r.agentName || "-"}
                     </td>
-                    {/* ✅ agent ip */}
-                    <td className="whitespace-nowrap px-4 py-3 font-mono text-gray-800">
+                    <td className="whitespace-nowrap px-4 py-3 font-mono text-slate-300">
                       {r.agentIp || "-"}
                     </td>
 
-                    {/* ✅ source ip (data.srcip) */}
-                    <td className="whitespace-nowrap px-4 py-3 font-mono text-gray-800">
+                    <td className="whitespace-nowrap px-4 py-3 font-mono text-slate-300">
                       {r.srcIp || "-"}
                     </td>
-                    <td className="min-w-[420px] px-4 py-3 text-gray-800">
+                    <td className="min-w-[420px] px-4 py-3 text-slate-300">
                       {r.ruleDescription || "-"}
                     </td>
                     <td className="px-4 py-3 align-top">
@@ -463,6 +464,7 @@ export default function ThreadHuntingEvents() {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

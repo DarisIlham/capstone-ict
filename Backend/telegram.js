@@ -1,8 +1,8 @@
 // telegram.js
-const axios = require('axios');
+import axios from 'axios';
 
-const TELEGRAM_TOKEN = '8608449792:AAHBLroi5omcNC_iimKQoN77PACV9Nfj4O0'; // Gunakan process.env lebih baik
-const TELEGRAM_CHAT_ID = '8292605253';
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || '8608449792:AAHBLroi5omcNC_iimKQoN77PACV9Nfj4O0';
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '8292605253';
 
 const tg = axios.create({
   baseURL: `https://api.telegram.org/bot${TELEGRAM_TOKEN}`,
@@ -60,7 +60,7 @@ async function sendMessageWithRetry(payload, maxAttempts = 5) {
   }
 }
 
-const sendAlert = async (event) => {
+export const sendAlert = async (event) => {
   const diffSafe = event.fileDiff ? clamp(escapeHTML(event.fileDiff), 2500) : '-';
 
   const message = `
@@ -87,5 +87,3 @@ const sendAlert = async (event) => {
     console.error("Gagal kirim Telegram:", error.response?.data || error.message);
   }
 };
-
-module.exports = { sendAlert };

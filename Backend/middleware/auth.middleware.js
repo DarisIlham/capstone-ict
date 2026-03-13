@@ -14,13 +14,13 @@ export const verifyToken = async (req, res, next) => {
     const token = authHeader.replace("Bearer ", "");
 
     // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (!decoded || !decoded.user_id) {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
+    if (!decoded || !decoded.userId) {
       return res.status(401).json({ message: "Invalid token format" });
     }
 
     // Find user
-    const user = await User.findOne({ user_id: decoded.user_id });
+    const user = await User.findById(decoded.userId);
     if (!user) {
       return res.status(401).json({ message: "User not found" });
     }

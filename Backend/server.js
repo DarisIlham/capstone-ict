@@ -1,31 +1,43 @@
 // server.js
-const express = require("express");
-const axios = require("axios");
-const https = require("https");
-const cors = require("cors");
-const { Pool } = require("pg");
-const { sendAlert } = require("./telegram");
-const os = require("os");
-const { Kafka } = require('kafkajs');
-const { Server } = require("socket.io");
-const http = require("http");
+import dotenv from "dotenv";
+import express from "express";
+import axios from "axios";
+import https from "https";
+import cors from "cors";
+import { sendAlert } from "./telegram.js";
+import os from "os";
+import { Kafka } from "kafkajs";
+import { Server } from "socket.io";
+import http from "http";
+import { Pool } from "pg";
+import connectDB from "./config/dbLogin.js";
+import authRouter from "./routes/auth.routes.js";
+
+// Load environment variables dari .env
+dotenv.config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Connect MongoDB untuk Auth
+connectDB();
+
+// Auth routes (MongoDB)
+app.use("/api/auth", authRouter);
 
 const ENABLE_DB = process.env.ENABLE_DB !== "0";
 
 // Buat HTTP Server untuk Socket.io
 const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
-  cors: { origin: "/{*splat}" } // Izinkan akses dari frontend
+  cors: { origin: "*", methods: ["GET", "POST"] } // Izinkan akses dari frontend
 });
 
 // Konfigurasi Kafka
 const kafka = new Kafka({
   clientId: 'wazuh-monitor',
-  brokers: ['localhost:9092'] // Alamat Kafka lokal kamu
+  brokers: ['10.105.205.16:9092'] // Alamat Kafka lokal kamu
 });
 const consumer = kafka.consumer({ groupId: 'wazuh-group' });
 
@@ -173,31 +185,10 @@ const INDEXER_USER = "admin";
 const INDEXER_PASS = "C?o4IFv1*OycPKaKr14sLtHlKn6Qers2";
 
 // =======================
-// 1) Endpoint FIM Real-time
+// 1) Endpoint FIM Real-time (Disabled - Wazuh API URL not configured)
 // =======================
-app.get(async (req, res) => {
-  try {
-    const { agent_id } = req.params;
-
-    const authResponse = await axios.post(
-      `${WAZUH_API_URL}/security/user/authenticate`,
-      {},
-      { auth: { username: WAZUH_USER, password: WAZUH_PASS }, httpsAgent }
-    );
-
-    const token = authResponse.data.data.token;
-
-    const syscheckResponse = await axios.get(`${WAZUH_API_URL}/syscheck/${agent_id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      httpsAgent,
-    });
-
-    res.json({ success: true, data: syscheckResponse.data.data.affected_items });
-  } catch (error) {
-    console.error("Error dari Wazuh:", error.message);
-    res.status(500).json({ success: false, message: "Gagal mengambil data dari Wazuh" });
-  }
-});
+// Uncomment and configure WAZUH_API_URL if available
+// app.get("/api/fim/:agent_id", async (req, res) => { ... });
 
 // =======================
 // 2) Endpoint Events + Simpan DB
@@ -222,6 +213,8 @@ app.get("/api/events/:agent_id", async (req, res) => {
       auth: { username: INDEXER_USER, password: INDEXER_PASS },
       httpsAgent,
     });
+
+    console.log(`[/api/events/${agent_id}] Response received:`, response.data.hits.hits?.length || 0, "events found");
 
     const eventsData = (response.data.hits.hits || []).map((hit) => {
       const source = hit._source || {};
@@ -254,8 +247,16 @@ app.get("/api/events/:agent_id", async (req, res) => {
 
     res.json({ success: true, data: eventsData, total_hits: eventsData.length });
   } catch (error) {
-    console.error("Error dari Wazuh Indexer:", error.message);
-    res.status(500).json({ success: false, message: "Gagal mengambil events dari Indexer" });
+    const errorMsg = error.response?.status ? 
+      `Indexer error ${error.response.status}: ${error.response.statusText}` : 
+      error.message;
+    console.error("❌ Error dari Wazuh Indexer:", errorMsg);
+    console.error("   Details:", error.response?.data || error.message);
+    res.status(500).json({ 
+      success: false, 
+      message: "Gagal mengambil events dari Indexer",
+      details: process.env.NODE_ENV === "development" ? errorMsg : undefined
+    });
   }
 });
 
@@ -498,5 +499,6 @@ autoPullEvents();
 setInterval(autoPullEvents, AUTO_PULL_INTERVAL_MS);
 
 httpServer.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server & Socket berjalan di port: ${PORT}`);
+  console.log(`✅ Server & Socket berjalan di port: ${PORT}`);
+  console.log(`📡 Frontend can access at http://localhost:${PORT}`);
 });

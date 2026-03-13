@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import logo from "../assets/Undip.svg";
 import { io } from "socket.io-client";
+import Navbar from "../components/Navbar";
 
 // Inisialisasi Socket.io di luar komponen agar tidak re-render
-const socket = io("http://localhost:3000");
+const socket = io("http://localhost:5000");
 
 // ----------------------------
 // Small, dependency-free charts (SVG Components)
@@ -99,10 +99,10 @@ const Donut = ({ items, size = 100, stroke = 12, centerLabelTop, centerLabelBott
 const Legend = ({ items }) => (
   <div className="flex flex-col gap-1.5">
     {items.map((it) => (
-      <div key={it.label} className="flex items-center gap-2 text-xs text-slate-400">
+      <div key={it.label} className="flex items-center gap-1.5 text-xs text-slate-400">
         <span className="inline-block w-2 h-2 rounded-sm shrink-0" style={{ background: it.color }} />
-        <span className="truncate max-w-[200px]">{it.label}</span>
-        <span className="ml-auto text-slate-500 tabular-nums">{it.value}</span>
+        <span className="truncate max-w-[100px]">{it.label}</span>
+        <span className="text-slate-500 tabular-nums">{it.value}</span>
       </div>
     ))}
   </div>
@@ -166,15 +166,28 @@ const FimEvents = ({ agentId = "003" }) => {
   const fetchEvents = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:3000/api/events/${agentId}`);
+      setError(null);
+      const response = await fetch(`http://localhost:5000/api/events/${agentId}`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API Error ${response.status}: ${errorText}`);
+      }
+      
       const result = await response.json();
-      if (result.success) setEvents(result.data);
-      else setError(result.message);
+      if (result.success) {
+        setEvents(result.data);
+      } else {
+        setError(result.message || "Gagal mengambil data dari API");
+      }
     } catch (err) {
-      console.error("Fetch Error:", err);
-      setError("Gagal menghubungi backend API");
+      console.error("❌ Fetch Error:", err);
+      const errorMessage = err.message.includes("Failed to fetch") 
+        ? "Gagal terhubung ke backend. Pastikan server berjalan di http://localhost:5000"
+        : err.message;
+      setError(errorMessage);
     } finally {
-      setLoading(false); // Matikan loading setelah selesai
+      setLoading(false);
     }
   };
 
@@ -271,7 +284,23 @@ const FimEvents = ({ agentId = "003" }) => {
     }
     const payloadWords = Array.from(byPayload.entries()).map(([text, count]) => ({ text, count })).sort((a, b) => b.count - a.count).slice(0, 40);
 
-    return { filtered, series, eventItems, payloadWords, total: filtered.length, eps: filtered.length ? filtered.length / (rangeMs / 1000) : 0, startMs, now };
+    // Severity breakdown calculation
+    const bySeverity = new Map();
+    for (const e of filtered) {
+      const level = e.ruleLevel || 0;
+      let severityLabel = "Low";
+      if (level >= 12) severityLabel = "Critical";
+      else if (level >= 8) severityLabel = "High";
+      else if (level >= 5) severityLabel = "Medium";
+      bySeverity.set(severityLabel, (bySeverity.get(severityLabel) || 0) + 1);
+    }
+    const severityItemsAll = Array.from(bySeverity.entries()).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+    const severityItems = severityItemsAll.map((it) => {
+      const colorMap = { "Critical": "#ef4444", "High": "#f97316", "Medium": "#eab308", "Low": "#3b82f6" };
+      return { ...it, color: colorMap[it.label] || "#64748b" };
+    });
+
+    return { filtered, series, eventItems, severityItems, payloadWords, total: filtered.length, eps: filtered.length ? filtered.length / (rangeMs / 1000) : 0, startMs, now };
   }, [events, rangeKey]);
 
   // ── loading / error states ────────────────────────────────────────────────
@@ -288,16 +317,7 @@ const FimEvents = ({ agentId = "003" }) => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans">
-      <div className="sticky top-0 z-10 border-b border-slate-800 bg-slate-900/90 backdrop-blur px-5 py-3 flex items-center gap-4">
-        <div className="h-15 w-15 shrink-0"><img src={logo} alt="Wazuh" className="h-full w-full object-contain" /></div>
-        <div className="flex flex-col justify-center">
-          <span className="text-slate-300 font-bold text-xl">Cyber Monitoring Dashboard</span>
-          <div className="flex gap-2 mt-1.5">
-            <span className="bg-slate-800 text-slate-300 px-2.5 py-0.5 rounded-full text-[10px] border border-slate-700">File Integrity Monitoring</span>
-            <span className="bg-sky-900/50 text-sky-400 px-2.5 py-0.5 rounded-full text-[10px] border border-sky-800/60">agent{agentId}</span>
-          </div>
-        </div>
-      </div>
+      <Navbar />
 
       <div className="p-4 flex flex-col gap-4">
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg flex flex-col gap-4">
@@ -322,11 +342,21 @@ const FimEvents = ({ agentId = "003" }) => {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <div className="bg-slate-800/50 border border-slate-700/60 rounded-lg p-3 flex gap-3">
-              <Donut items={derived.eventItems} centerLabelTop={derived.total} centerLabelBottom="events" />
-              <div className="flex-1"><Legend items={derived.eventItems} /></div>
+            {/* Kotak 1: Event + Severity Chart (Berdampingan & Centered) */}
+            <div className="bg-slate-800/50 border border-slate-700/60 rounded-lg p-2 flex gap-4 items-center justify-center">
+              {/* Event Chart */}
+              <div className="flex items-center gap-3">
+                <Donut items={derived.eventItems} size={160} centerLabelTop={derived.total} centerLabelBottom="events" />
+                <div className="w-32"><Legend items={derived.eventItems} /></div>
+              </div>
+              {/* Severity Chart */}
+              <div className="flex items-center gap-3">
+                <Donut items={derived.severityItems} size={160} centerLabelTop={derived.total} centerLabelBottom="severity" />
+                <div className="w-32"><Legend items={derived.severityItems} /></div>
+              </div>
             </div>
-            <div className="bg-slate-950 border border-slate-700/60 rounded-lg p-3 flex flex-col gap-2">
+            {/* Kotak 2: Word Cloud */}
+            <div className="bg-slate-950 border border-slate-700/60 rounded-lg p-3 flex flex-col gap-2 items-center justify-center">
               <PayloadWordCloud words={derived.payloadWords} />
             </div>
           </div>
