@@ -1,5 +1,13 @@
 import { useState, useEffect, useRef } from "react";
-import { User, Lock, Eye, EyeOff, LogIn, AlertCircle, CheckCircle } from "lucide-react";
+import {
+  User,
+  Lock,
+  Eye,
+  EyeOff,
+  LogIn,
+  AlertCircle,
+  CheckCircle,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import ReCAPTCHA from "react-google-recaptcha";
 import { useAuth } from "../hooks/useAuth";
@@ -21,7 +29,8 @@ const LoginPage = () => {
     type: "error",
   });
 
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+  const API_BASE_URL =
+    import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
 
   // Redirect jika sudah login
   useEffect(() => {
@@ -31,9 +40,7 @@ const LoginPage = () => {
   }, [isAuthenticated, navigate]);
 
   const sanitizeInput = (value) => {
-    return value
-      .replace(/<[^>]*>?/gm, "")
-      .replace(/[<>{}[\]()*&^%$#!]/g, "");
+    return value.replace(/<[^>]*>?/gm, "").replace(/[<>{}[\]()*&^%$#!]/g, "");
   };
 
   const handleEmailChange = (e) => {
@@ -136,11 +143,15 @@ const LoginPage = () => {
       <div className="max-w-sm w-full relative z-10">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center h-16 w-16 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl shadow-lg mb-4">
-            <img src={logo} alt="Logo" className="h-10 w-10 object-contain" />
+          <div className="inline-flex items-center justify-center h-20 w-20 mb-4">
+            <img src={logo} alt="Logo" className="h-20 w-20 object-contain" />
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">Admin Dashboard</h1>
-          <p className="text-slate-400 text-sm">Sistem Monitoring Security & File Integrity</p>
+          <h1 className="text-3xl font-bold text-white mb-2">
+            Admin Dashboard
+          </h1>
+          <p className="text-slate-400 text-sm">
+            Sistem Monitoring Security & File Integrity
+          </p>
         </div>
 
         {/* Notification */}

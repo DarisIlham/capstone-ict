@@ -426,10 +426,10 @@ export default function ThreadHuntingEvents() {
           </div>
 
           {/* Pagination */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-white px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t  px-4 py-3">
             <div className="text-xs text-gray-500">
-              Page <span className="font-medium text-gray-800">{page}</span> /{" "}
-              <span className="font-medium text-gray-800">{totalPages}</span>
+              Page <span className="font-medium text-white">{page}</span> /{" "}
+              <span className="font-medium text-white">{totalPages}</span>
             </div>
             <div className="flex items-center gap-2">
               <button

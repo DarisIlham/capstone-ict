@@ -1,9 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { io } from "socket.io-client";
 import Navbar from "../components/Navbar";
-
-// Inisialisasi Socket.io di luar komponen agar tidak re-render
-const socket = io("http://localhost:5000");
 
 // ----------------------------
 // Small, dependency-free charts (SVG Components)
@@ -195,31 +191,12 @@ const FimEvents = ({ agentId = "003" }) => {
     fetchEvents();
   }, [agentId]);
 
-    useEffect(() => {
-    // Gunakan fungsi handler yang jelas agar cleanup socket berfungsi sempurna
-    const handleNewLog = (newLog) => {
-      setEvents((prevEvents) => {
-        // FILTER SUPER KETAT (COMPOSITE KEY)
-        // Mengecek ID, ATAU mengecek kesamaan waktu, path, dan event secara bersamaan
-        const isDuplicate = prevEvents.some((evt) => 
-          evt.id === newLog.id || 
-          (evt.timestamp === newLog.timestamp && 
-           evt.syscheckPath === newLog.syscheckPath && 
-           evt.syscheckEvent === newLog.syscheckEvent)
-        );
-        
-        // Jika terdeteksi duplikat, buang data barunya
-        if (isDuplicate) return prevEvents;
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchEvents();
+    }, 30000); // Poll every 5 seconds for updates
 
-        // Jika benar-benar unik, tambahkan ke tabel
-        return [newLog, ...prevEvents].slice(0, 500);
-      });
-    };
-
-    socket.on("new-log", handleNewLog);
-
-    // Cleanup listener secara spesifik
-    return () => socket.off("new-log", handleNewLog);
+    return () => clearInterval(interval);
   }, [agentId]);
 
   // ── Helpers & Formatting ─────────────────────────────────────────────────

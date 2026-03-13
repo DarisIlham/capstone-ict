@@ -7,8 +7,6 @@ import cors from "cors";
 import { sendAlert } from "./telegram.js";
 import os from "os";
 import { Kafka } from "kafkajs";
-import { Server } from "socket.io";
-import http from "http";
 import { Pool } from "pg";
 import connectDB from "./config/dbLogin.js";
 import authRouter from "./routes/auth.routes.js";
@@ -27,12 +25,6 @@ connectDB();
 app.use("/api/auth", authRouter);
 
 const ENABLE_DB = process.env.ENABLE_DB !== "0";
-
-// Buat HTTP Server untuk Socket.io
-const httpServer = http.createServer(app);
-const io = new Server(httpServer, {
-  cors: { origin: "*", methods: ["GET", "POST"] } // Izinkan akses dari frontend
-});
 
 // Konfigurasi Kafka
 const kafka = new Kafka({
@@ -78,8 +70,7 @@ const runKafka = async () => {
           fileDiff: source.syscheck?.diff || null,
         };
 
-        // 4. Kirim ke Frontend lewat Socket
-        io.emit("new-log", formattedLog); 
+        // 4. Kirim ke Frontend lewat Polling (Socket.IO dihapus)
 
         if (Number(formattedLog.ruleLevel) >= 1) {
             sendAlert(formattedLog).catch(err => console.error("Gagal kirim Telegram:", err.message));
@@ -111,7 +102,7 @@ let DB_READY = false;
 
 if (ENABLE_DB) {
   pool = new Pool({
-    host: process.env.DB_HOST || "localhost",
+    host: process.env.DB_HOST || "10.107.18.240", // Ganti dengan IP server database
     port: Number(process.env.DB_PORT || 5432),
     user: process.env.DB_USER || "postgres",
     password: process.env.DB_PASS || "wazuh123",
@@ -214,7 +205,7 @@ app.get("/api/events/:agent_id", async (req, res) => {
       httpsAgent,
     });
 
-    console.log(`[/api/events/${agent_id}] Response received:`, response.data.hits.hits?.length || 0, "events found");
+   
 
     const eventsData = (response.data.hits.hits || []).map((hit) => {
       const source = hit._source || {};
@@ -498,7 +489,7 @@ async function autoPullEvents() {
 autoPullEvents();
 setInterval(autoPullEvents, AUTO_PULL_INTERVAL_MS);
 
-httpServer.listen(PORT, "0.0.0.0", () => {
-  console.log(`✅ Server & Socket berjalan di port: ${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`✅ Server berjalan di port: ${PORT}`);
   console.log(`📡 Frontend can access at http://localhost:${PORT}`);
 });
