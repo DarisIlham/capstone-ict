@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import axios from "axios";
 
 // CAPTCHA Secret Key (dari Google reCAPTCHA)
-const RECAPTCHA_SECRET_KEY = process.env.RECAPTCHA_SECRET_KEY || "6LcHa5ErAAAAANDgJVMCF_3Hri63yO_5s0TlZV3P";
+const RECAPTCHA_SECRET_KEY = process.env.RECAPTCHA_SECRET_KEY || "6Le7BYksAAAAALvjFetSf9GJ7xEy_r3BDux3rbly";
 
 /**
  * Verifikasi CAPTCHA dengan Google reCAPTCHA
@@ -12,7 +12,7 @@ const RECAPTCHA_SECRET_KEY = process.env.RECAPTCHA_SECRET_KEY || "6LcHa5ErAAAAAN
 const verifyCaptcha = async (captchaToken) => {
   // Development MODE: bypass CAPTCHA if token is dummy/test
   if (process.env.NODE_ENV === "development" || captchaToken === "skip-captcha") {
-    console.log("⚠️  CAPTCHA skipped (development mode)");
+    console.log("   CAPTCHA skipped (development mode)");
     return true;
   }
 
