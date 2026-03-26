@@ -67,7 +67,7 @@ const Donut = ({ items, size = 100, stroke = 12, centerLabelTop, centerLabelBott
         {items.map((it, idx) => {
           const currentOffset = items.slice(0, idx).reduce((acc, prev) => acc + (prev.value / total) * c, 0);
           const dash = (it.value / total) * c;
-          const strokeDashoffset = -currentOffset; 
+          const strokeDashoffset = -currentOffset;
 
           return (
             <circle
@@ -163,13 +163,13 @@ const FimEvents = ({ agentId = "003" }) => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`http://localhost:5000/api/events/${agentId}`);
-      
+      const response = await fetch(`http://10.69.15.120:5000/api/events/${agentId}`);
+
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`API Error ${response.status}: ${errorText}`);
       }
-      
+
       const result = await response.json();
       if (result.success) {
         setEvents(result.data);
@@ -178,7 +178,7 @@ const FimEvents = ({ agentId = "003" }) => {
       }
     } catch (err) {
       console.error("❌ Fetch Error:", err);
-      const errorMessage = err.message.includes("Failed to fetch") 
+      const errorMessage = err.message.includes("Failed to fetch")
         ? "Gagal terhubung ke backend. Pastikan server berjalan di http://localhost:5000"
         : err.message;
       setError(errorMessage);
@@ -201,7 +201,7 @@ const FimEvents = ({ agentId = "003" }) => {
 
   // ── Helpers & Formatting ─────────────────────────────────────────────────
   const now = Date.now();
-  
+
   const formatTime = (isoString) => {
     if (!isoString) return "-";
     const date = new Date(isoString);
@@ -238,7 +238,7 @@ const FimEvents = ({ agentId = "003" }) => {
     }
 
     const byEvent = new Map();
-    
+
     for (const e of filtered) {
       const k = e.syscheckEvent || "unknown";
       byEvent.set(k, (byEvent.get(k) || 0) + 1);
