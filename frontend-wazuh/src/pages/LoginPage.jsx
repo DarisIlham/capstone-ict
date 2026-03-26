@@ -30,7 +30,7 @@ const LoginPage = () => {
   });
 
   const API_BASE_URL =
-    import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+    "http://10.69.15.120:5000";
 
   // Redirect jika sudah login
   useEffect(() => {
@@ -231,7 +231,7 @@ const LoginPage = () => {
           <div className="bg-slate-700/30 p-3 rounded-lg border border-slate-600/50">
             <ReCAPTCHA
               ref={recaptchaRef}
-              sitekey="6LcHa5ErAAAAAHyY4DLCyK3fVNgpl_-rIY19PvzL"
+              sitekey="6Le7BYksAAAAAASn99_SYX6OAX7r8siw5H8m_YWr"
               onChange={handleRecaptchaChange}
               theme="dark"
             />
