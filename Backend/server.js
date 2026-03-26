@@ -29,7 +29,7 @@ const ENABLE_DB = process.env.ENABLE_DB !== "0";
 // Konfigurasi Kafka
 const kafka = new Kafka({
   clientId: 'wazuh-monitor',
-  brokers: ['10.107.18.240:9092'] // Alamat Kafka lokal kamu
+  brokers: ['10.69.15.120:9092'] // Alamat Kafka lokal kamu
 });
 const consumer = kafka.consumer({ groupId: 'wazuh-group' });
 
@@ -43,11 +43,11 @@ const runKafka = async () => {
       try {
         // 1. Ambil data mentah dari Kafka
         const source = JSON.parse(message.value.toString());
-        
+
         // 🛑 TAMBAHKAN FILTER INI:
         // Jika log bukan berasal dari modul FIM (syscheck), abaikan dan jangan diproses
         if (!source.syscheck) {
-          return; 
+          return;
         }
 
         // 2. Ekstraksi Username
@@ -58,7 +58,7 @@ const runKafka = async () => {
         // 3. MAPPING FORMATED
         const formattedLog = {
           // Pastikan menggunakan ID asli untuk menghindari duplikasi
-          id: source.id || source._id || Math.random().toString(), 
+          id: source.id || source._id || Math.random().toString(),
           timestamp: source["@timestamp"] || new Date().toISOString(),
           agentName: source.agent?.name || "-",
           username: username,
@@ -75,13 +75,13 @@ const runKafka = async () => {
         if (Number(formattedLog.ruleLevel) >= 1) {
             sendAlert(formattedLog).catch(err => console.error("Gagal kirim Telegram:", err.message));
         }
-        
+
         // Terminal sekarang hanya mencetak aktivitas file yang valid
         console.log(`✅ Streaming Formatted: ${formattedLog.syscheckEvent} pada ${formattedLog.syscheckPath}`);
-        
+
         // 5. Simpan ke Database secara otomatis
         if (DB_READY) {
-          saveToDatabase(formattedLog).catch(err => 
+          saveToDatabase(formattedLog).catch(err =>
             console.error("Gagal simpan Kafka log ke DB:", err.message)
           );
         }
@@ -102,11 +102,11 @@ let DB_READY = false;
 
 if (ENABLE_DB) {
   pool = new Pool({
-    host: process.env.DB_HOST || "10.107.18.240", // Ganti dengan IP server database
-    port: Number(process.env.DB_PORT || 5432),
-    user: process.env.DB_USER || "postgres",
-    password: process.env.DB_PASS || "wazuh123",
-    database: process.env.DB_NAME || "wazuh_events",
+    host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT),
+    user: process.env.DB_USER,
+    password: process.env.DB_PASS,
+    database: process.env.DB_NAME,
   });
 
   pool.connect()
@@ -118,13 +118,13 @@ if (ENABLE_DB) {
       })
     )
     .catch((err) => {
-      console.log("⚠️ DB tidak tersedia -> DB mode dimatikan. Reason:", err.message);
+      console.log("  DB tidak tersedia -> DB mode dimatikan. Reason:", err.message);
       // penting: matikan supaya insert skip
       pool = null;
       DB_READY = false;
     });
 } else {
-  console.log("ℹ️ DB dimatikan (ENABLE_DB=0). Insert akan di-skip.");
+  console.log("  DB dimatikan (ENABLE_DB=0). Insert akan di-skip.");
 }
 
 // --- FUNGSI HELPER DATABASE ---
@@ -171,9 +171,9 @@ const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 // =======================
 // KONFIGURASI WAZUH INDEXER
 // =======================
-const INDEXER_URL = "https://10.104.131.140:9200";
+const INDEXER_URL = "https://10.69.15.120:9200";
 const INDEXER_USER = "admin";
-const INDEXER_PASS = "C?o4IFv1*OycPKaKr14sLtHlKn6Qers2";
+const INDEXER_PASS = "3Hul7FhbSClUQe0AI8J?6CcyoluD36wg";
 
 // =======================
 // 1) Endpoint FIM Real-time (Disabled - Wazuh API URL not configured)
@@ -205,7 +205,7 @@ app.get("/api/events/:agent_id", async (req, res) => {
       httpsAgent,
     });
 
-   
+
 
     const eventsData = (response.data.hits.hits || []).map((hit) => {
       const source = hit._source || {};
@@ -228,9 +228,9 @@ app.get("/api/events/:agent_id", async (req, res) => {
     });
 
     // Simpan ke DB paralel (tidak menghambat response)
-    // Promise.all(eventsData.map((event) => saveToDatabase(event))).catch((err) =>
-    //   console.error("Gagal simpan massal ke DB:", err.message)
-    // );
+    Promise.all(eventsData.map((event) => saveToDatabase(event))).catch((err) =>
+       console.error("Gagal simpan massal ke DB:", err.message)
+    );
 
     // Alert Telegram (ambil event terbaru)
     // const latestEvent = eventsData.find((e) => Number(e.ruleLevel) >= 1);
@@ -238,13 +238,13 @@ app.get("/api/events/:agent_id", async (req, res) => {
 
     res.json({ success: true, data: eventsData, total_hits: eventsData.length });
   } catch (error) {
-    const errorMsg = error.response?.status ? 
-      `Indexer error ${error.response.status}: ${error.response.statusText}` : 
+    const errorMsg = error.response?.status ?
+      `Indexer error ${error.response.status}: ${error.response.statusText}` :
       error.message;
     console.error("❌ Error dari Wazuh Indexer:", errorMsg);
     console.error("   Details:", error.response?.data || error.message);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: "Gagal mengambil events dari Indexer",
       details: process.env.NODE_ENV === "development" ? errorMsg : undefined
     });
@@ -466,7 +466,7 @@ app.get("/api/hunting", async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 
 const ENABLE_AUTO_PULL = process.env.ENABLE_AUTO_PULL !== "0";
 const AUTO_PULL_AGENT_ID = process.env.AUTO_PULL_AGENT_ID || null; // contoh: "001"
