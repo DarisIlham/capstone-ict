@@ -8,10 +8,9 @@ import ThreadHuntingEvents from "./pages/ThreadHuntingEvents.jsx";
 function App() {
   return (
     <AuthProvider>
-      <Router>
+      <Router basename="/Capstone">
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          
           {/* Protected Routes */}
           <Route
             path="/"

@@ -29,7 +29,7 @@ const ENABLE_DB = process.env.ENABLE_DB !== "0";
 // Konfigurasi Kafka
 const kafka = new Kafka({
   clientId: 'wazuh-monitor',
-  brokers: ['10.105.205.16:9092'] // Alamat Kafka lokal kamu
+  brokers: ['10.107.18.240:9092'] // Alamat Kafka lokal kamu
 });
 const consumer = kafka.consumer({ groupId: 'wazuh-group' });
 
