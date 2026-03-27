@@ -29,7 +29,7 @@ const ENABLE_DB = process.env.ENABLE_DB !== "0";
 // Konfigurasi Kafka
 const kafka = new Kafka({
   clientId: 'wazuh-monitor',
-  brokers: ['10.69.15.120:9092'] // Alamat Kafka lokal kamu
+  brokers: [process.env.KAFKA_BROKER] // Alamat Kafka lokal kamu
 });
 const consumer = kafka.consumer({ groupId: 'wazuh-group' });
 
@@ -171,7 +171,7 @@ const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 // =======================
 // KONFIGURASI WAZUH INDEXER
 // =======================
-const INDEXER_URL = "https://10.69.15.120:9200";
+const INDEXER_URL = process.env.INDEXER_URL ;
 const INDEXER_USER = "admin";
 const INDEXER_PASS = "3Hul7FhbSClUQe0AI8J?6CcyoluD36wg";
 

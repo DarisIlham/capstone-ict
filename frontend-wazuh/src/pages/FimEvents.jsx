@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Navbar from "../components/Navbar";
+import { API_BASE_URL } from "../config/Api";
 
 // ----------------------------
 // Small, dependency-free charts (SVG Components)
@@ -163,7 +164,7 @@ const FimEvents = ({ agentId = "003" }) => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`http://10.69.15.120:5000/api/events/${agentId}`);
+      const response = await fetch(`${API_BASE_URL}/api/events/${agentId}`);
 
       if (!response.ok) {
         const errorText = await response.text();

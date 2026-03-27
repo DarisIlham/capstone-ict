@@ -12,6 +12,7 @@ import { useNavigate } from "react-router-dom";
 import ReCAPTCHA from "react-google-recaptcha";
 import { useAuth } from "../hooks/useAuth";
 import logo from "../assets/Undip.svg";
+import { API_BASE_URL } from "../config/Api";
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -29,8 +30,7 @@ const LoginPage = () => {
     type: "error",
   });
 
-  const API_BASE_URL =
-    "http://10.69.15.120:5000";
+
 
   // Redirect jika sudah login
   useEffect(() => {
