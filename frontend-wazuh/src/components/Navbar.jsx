@@ -55,9 +55,7 @@ const Navbar = () => {
                     <span className="bg-slate-800/80 text-slate-300 px-2.5 py-0.5 rounded-full text-[9px] border border-slate-600">
                       File Integrity Monitoring
                     </span>
-                    <span className="bg-sky-900/50 text-sky-400 px-2.5 py-0.5 rounded-full text-[9px] border border-sky-800/60">
-                      agent003
-                    </span>
+                    
                   </div>
                 </div>
               </div>
