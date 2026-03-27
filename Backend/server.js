@@ -186,133 +186,103 @@ const INDEXER_PASS = "3Hul7FhbSClUQe0AI8J?6CcyoluD36wg";
 // =======================
 async function handleEventsRequest(req, res) {
   try {
-    let agent_id = req.params.agent_id;
+    const agent_id_param = req.params.agent_id;
+    const agent_id = agent_id_param === "all" || !agent_id_param ? undefined : agent_id_param;
 
-    // Support: /api/events, /api/events/all, or /api/events/:agent_id
-    if (agent_id === "all" || req.query.all === "true") {
-      agent_id = undefined;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const size = Math.max(1, parseInt(req.query.size, 10) || 100);
+    const from = (page - 1) * size;
+
+    const rangeKey = String(req.query.range || "30d").trim();
+    let { start, end } = req.query;
+
+    if (!start && !end) {
+      const preset = buildPresetRange(rangeKey);
+      start = preset.start;
+      end = preset.end;
     }
 
     const must = [{ match: { "rule.groups": "syscheck" } }];
-    if (agent_id) must.push({ term: { "agent.id": String(agent_id) } });
+    const filter = [];
 
-    const wantAll = req.query.all === "true" || req.query.all === "1";
-    const requestedSize = req.query.size ? Number(req.query.size) : null;
+    if (agent_id) filter.push({ term: { "agent.id": String(agent_id) } });
 
-    // If client asks for all, use search_after paging to retrieve up to MAX_ALL
-    if (wantAll) {
-      const MAX_ALL = Number(process.env.INDEXER_MAX_FETCH) || 10000; // safe default
-      const pageSize = Math.min(1000, Math.max(100, requestedSize || 1000));
-      const sortFields = [{ "@timestamp": { order: "desc" } }, { "_id": { order: "desc" } }];
+    const timeRange = buildTimeRange(start, end);
+    if (timeRange) filter.push(timeRange);
 
-      const basePayload = {
-        query: { bool: { must } },
-        sort: sortFields,
-        size: pageSize,
-      };
-
-      let allHits = [];
-      let searchAfter = null;
-
-      while (allHits.length < MAX_ALL) {
-        const payload = { ...basePayload };
-        if (searchAfter) payload.search_after = searchAfter;
-
-        const response = await axios.post(`${INDEXER_URL}/wazuh-alerts-*/_search`, payload, {
-          auth: { username: INDEXER_USER, password: INDEXER_PASS },
-          httpsAgent,
-        });
-
-        const hits = response?.data?.hits?.hits || [];
-        if (!hits.length) break;
-
-        allHits = allHits.concat(hits);
-        if (hits.length < pageSize) break;
-
-        const last = hits[hits.length - 1];
-        searchAfter = last.sort;
-      }
-
-      const hitsToUse = allHits.slice(0, MAX_ALL);
-      const eventsData = hitsToUse.map((hit) => {
-        const source = hit._source || {};
-        const auditUser = source.syscheck?.audit?.login_user?.name;
-        const fileOwner = source.syscheck?.uname_after || source.syscheck?.uname;
-        const username = auditUser || fileOwner || "-";
-
-        return {
-          id: hit._id,
-          timestamp: source["@timestamp"],
-          agentName: source.agent?.name || "-",
-          username,
-          syscheckPath: source.syscheck?.path || null,
-          syscheckEvent: source.syscheck?.event || null,
-          ruleDescription: source.rule?.description || "-",
-          ruleLevel: source.rule?.level ?? 0,
-          ruleId: source.rule?.id ?? "-",
-          fileDiff: source.syscheck?.diff || null,
-        };
-      });
-
-      // Save to DB in background
-      Promise.all(eventsData.map((event) => saveToDatabase(event))).catch((err) =>
-        console.error("Gagal simpan massal ke DB:", err.message)
-      );
-
-      return res.json({ success: true, data: eventsData, total_hits: eventsData.length });
-    }
-
-    // Normal single-request path (size param allowed)
-    const sizeNum = requestedSize && Number.isFinite(requestedSize) ? Math.min(Math.max(requestedSize, 1), 10000) : 100;
-    const queryPayload = {
-      query: { bool: { must } },
-      sort: [{ "@timestamp": { order: "desc" } }],
-      size: sizeNum,
-    };
-
-    const response = await axios.post(`${INDEXER_URL}/wazuh-alerts-*/_search`, queryPayload, {
-      auth: { username: INDEXER_USER, password: INDEXER_PASS },
-      httpsAgent,
-    });
-
-    const eventsData = (response.data.hits.hits || []).map((hit) => {
-      const source = hit._source || {};
-      const auditUser = source.syscheck?.audit?.login_user?.name;
-      const fileOwner = source.syscheck?.uname_after || source.syscheck?.uname;
-      const username = auditUser || fileOwner || "-";
-
-      return {
-        id: hit._id,
-        timestamp: source["@timestamp"],
-        agentName: source.agent?.name || "-",
-        username,
-        syscheckPath: source.syscheck?.path || null,
-        syscheckEvent: source.syscheck?.event || null,
-        ruleDescription: source.rule?.description || "-",
-        ruleLevel: source.rule?.level ?? 0,
-        ruleId: source.rule?.id ?? "-",
-        fileDiff: source.syscheck?.diff || null,
-      };
-    });
-
-    // Simpan ke DB paralel (tidak menghambat response)
-    Promise.all(eventsData.map((event) => saveToDatabase(event))).catch((err) =>
-      console.error("Gagal simpan massal ke DB:", err.message)
+    console.log(
+      `>>> FETCH: agent=${agent_id || "all"} page=${page} size=${size} range=${rangeKey} start=${start} end=${end}`
     );
 
-    res.json({ success: true, data: eventsData, total_hits: eventsData.length });
+    const requestBody = {
+      track_total_hits: true,
+      query: {
+        bool: {
+          must,
+          filter,
+        },
+      },
+      sort: [{ "@timestamp": { order: "desc" } }],
+      from,
+      size,
+    };
+
+    
+
+    const response = await axios.post(
+      `${INDEXER_URL}/wazuh-alerts-*/_search`,
+      requestBody,
+      {
+        auth: { username: INDEXER_USER, password: INDEXER_PASS },
+        httpsAgent,
+      }
+    );
+
+    const hitsObject = response?.data?.hits || {};
+    const totalHits =
+      typeof hitsObject.total === "object"
+        ? hitsObject.total.value
+        : Number(hitsObject.total || 0);
+
+    const eventsData = (hitsObject.hits || []).map((hit) => mapWazuhHit(hit));
+
+    return res.json({
+      success: true,
+      data: eventsData,
+      total_hits: totalHits,
+      current_page: page,
+      total_pages: Math.ceil(totalHits / size) || 1,
+      page_size: size,
+      applied_range: { rangeKey, start, end },
+    });
   } catch (error) {
-    const errorMsg = error.response?.status ?
-      `Indexer error ${error.response.status}: ${error.response.statusText}` :
-      error.message;
-    console.error("❌ Error dari Wazuh Indexer:", errorMsg);
-    console.error("   Details:", error.response?.data || error.message);
+    console.error("❌ API ERROR:", error.message);
     res.status(500).json({
       success: false,
-      message: "Gagal mengambil events dari Indexer",
-      details: process.env.NODE_ENV === "development" ? errorMsg : undefined
+      message: error.message,
     });
   }
+}
+
+// --- FUNGSI HELPER (Taruh di luar handleEventsRequest) ---
+function mapWazuhHit(hit) {
+  const source = hit._source || {};
+  const auditUser = source.syscheck?.audit?.login_user?.name;
+  const fileOwner = source.syscheck?.uname_after || source.syscheck?.uname;
+  const username = auditUser || fileOwner || "-";
+
+  return {
+    id: hit._id,
+    timestamp: source["@timestamp"],
+    agentName: source.agent?.name || "-",
+    username,
+    syscheckPath: source.syscheck?.path || null,
+    syscheckEvent: source.syscheck?.event || null,
+    ruleDescription: source.rule?.description || "-",
+    ruleLevel: source.rule?.level ?? 0,
+    ruleId: source.rule?.id ?? "-",
+    fileDiff: source.syscheck?.diff || null,
+  };
 }
 
 // Register two routes (one for all, one for specific agent) to avoid optional-param parsing issues
@@ -362,6 +332,32 @@ function buildTimeRange(start, end) {
   if (isValidDateValue(start)) range.gte = toISOStringSafe(start);
   if (isValidDateValue(end)) range.lte = toISOStringSafe(end);
   return Object.keys(range).length ? { range: { "@timestamp": range } } : null;
+}
+
+function buildPresetRange(rangeKey) {
+  const end = new Date();
+  const start = new Date(end);
+
+  switch (String(rangeKey || "").trim()) {
+    case "1h":
+      start.setHours(start.getHours() - 1);
+      break;
+    case "24h":
+      start.setHours(start.getHours() - 24);
+      break;
+    case "7d":
+      start.setDate(start.getDate() - 7);
+      break;
+    case "30d":
+    default:
+      start.setDate(start.getDate() - 30);
+      break;
+  }
+
+  return {
+    start: start.toISOString(),
+    end: end.toISOString(),
+  };
 }
 
 // GET /api/hunting?...

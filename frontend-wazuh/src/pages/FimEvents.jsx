@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Navbar from "../components/Navbar";
 import { API_BASE_URL } from "../config/Api";
 
@@ -153,54 +153,141 @@ const PayloadWordCloud = ({ words }) => {
 };
 
 // ── Main Component ────────────────────────────────────────────────────────────
-const FimEvents = ({ agentId = "003" }) => {
+const FimEvents = ({ agentId = "all" }) => {
   const [events, setEvents] = useState([]);
+  const [aggregatedEvents, setAggregatedEvents] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [rangeKey, setRangeKey] = useState("30d");
 
-  // ── 1) Fetch Awal (Historical Data) ───────────────────────────────────────
-  const fetchEvents = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const endpoint = agentId ? `${API_BASE_URL}/api/events/${agentId}` : `${API_BASE_URL}/api/events`;
-      // Request all matching events (server will page through the indexer up to a safe cap)
-      const response = await fetch(`${endpoint}?all=true`);
+  // --- TAMBAHKAN / GANTI BAGIAN INI ---
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalHits, setTotalHits] = useState(0);
+  const pageSize = 100; // Jumlah data per halaman
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API Error ${response.status}: ${errorText}`);
-      }
+  const getRangeWindow = (key) => {
+  const end = new Date();
+  const start = new Date(end);
 
-      const result = await response.json();
-      if (result.success) {
-        setEvents(result.data);
-      } else {
-        setError(result.message || "Gagal mengambil data dari API");
-      }
-    } catch (err) {
-      console.error("❌ Fetch Error:", err);
-      const errorMessage = err.message.includes("Failed to fetch")
-        ? "Gagal terhubung ke backend. Pastikan server berjalan di http://localhost:5000"
-        : err.message;
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-    }
+  switch (key) {
+    case "1h":
+      start.setHours(start.getHours() - 1);
+      break;
+    case "24h":
+      start.setHours(start.getHours() - 24);
+      break;
+    case "7d":
+      start.setDate(start.getDate() - 7);
+      break;
+    case "30d":
+    default:
+      start.setDate(start.getDate() - 30);
+      break;
+  }
+
+  return {
+    start: start.toISOString(),
+    end: end.toISOString(),
   };
+};
+
+  // ── 1) Fetch Awal (Historical Data) ───────────────────────────────────────
+  const fetchEvents = useCallback(async (page = 1, rk) => {
+  try {
+    setLoading(true);
+    setError(null);
+
+    // allow caller to override the rangeKey to avoid race conditions
+    const effectiveRange = rk || rangeKey;
+    const { start, end } = getRangeWindow(effectiveRange);
+
+    const baseEndpoint =
+      agentId === "all"
+        ? `${API_BASE_URL}/api/events`
+        : `${API_BASE_URL}/api/events/${agentId}`;
+
+    const endpoint =
+      `${baseEndpoint}?page=${page}&size=${pageSize}` +
+      `&start=${encodeURIComponent(start)}` +
+      `&end=${encodeURIComponent(end)}`;
+
+    console.log("Fetching Page:", page, endpoint);
+
+    const response = await fetch(endpoint);
+    if (!response.ok) throw new Error(`API Error ${response.status}`);
+
+    const result = await response.json();
+    if (!result.success) throw new Error(result.message || "Gagal mengambil data");
+
+    setEvents(Array.isArray(result.data) ? result.data : []);
+    setTotalHits(Number(result.total_hits) || 0);
+    setTotalPages(Number(result.total_pages) || 1);
+    setCurrentPage(Number(result.current_page) || page);
+    // return result so callers can chain (e.g., to fetch aggregated sample)
+    return result;
+  } catch (err) {
+    console.error("❌ Fetch Error:", err);
+    setError(err.message);
+    return null;
+  } finally {
+    setLoading(false);
+  }
+}, [agentId, pageSize]);
+
+  // Fetch aggregated sample (used for charts / payload wordcloud) up to a reasonable limit
+  const fetchAggregated = useCallback(async (size = 1000, rk) => {
+    try {
+      const effectiveRange = rk || rangeKey;
+      const { start, end } = getRangeWindow(effectiveRange);
+
+      const baseEndpoint =
+        agentId === "all"
+          ? `${API_BASE_URL}/api/events`
+          : `${API_BASE_URL}/api/events/${agentId}`;
+
+      const endpoint =
+        `${baseEndpoint}?page=1&size=${size}` +
+        `&start=${encodeURIComponent(start)}` +
+        `&end=${encodeURIComponent(end)}`;
+
+      const resp = await fetch(endpoint);
+      if (!resp.ok) throw new Error(`API Error ${resp.status}`);
+      const r = await resp.json();
+      if (!r.success) throw new Error(r.message || "Gagal mengambil data (aggregated)");
+      setAggregatedEvents(Array.isArray(r.data) ? r.data : []);
+      return r;
+    } catch (err) {
+      console.error("❌ Fetch Aggregated Error:", err.message);
+      // keep previous aggregatedEvents if fail
+      return null;
+    }
+  }, [agentId, rangeKey]);
 
   useEffect(() => {
-    fetchEvents();
-  }, [agentId]);
+    // When agent or range changes, reset to page 1 and fetch page + aggregated sample
+    setCurrentPage(1);
+    let cancelled = false;
+    (async () => {
+      const res = await fetchEvents(1, rangeKey);
+      if (cancelled) return;
+      const sampleSize = Math.min(1000, Number(res?.total_hits) || 1000);
+      await fetchAggregated(sampleSize, rangeKey);
+    })();
+    return () => { cancelled = true; };
+  }, [agentId, rangeKey, fetchEvents, fetchAggregated]);
+
+  useEffect(() => {
+    fetchEvents(currentPage, rangeKey);
+  }, [currentPage, fetchEvents, rangeKey]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      fetchEvents();
-    }, 30000); // Poll every 5 seconds for updates
+      fetchEvents(currentPage, rangeKey);
+    }, 30000);
 
     return () => clearInterval(interval);
-  }, [agentId]);
+  }, [currentPage, fetchEvents, rangeKey]);
 
   // ── Helpers & Formatting ─────────────────────────────────────────────────
   const now = Date.now();
@@ -209,6 +296,16 @@ const FimEvents = ({ agentId = "003" }) => {
     if (!isoString) return "-";
     const date = new Date(isoString);
     return date.toLocaleString("en-US", { month: "short", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", fractionalSecondDigits: 3 }).replace(",", "").replace("AM", "").replace("PM", "");
+  };
+
+  const formatRate = (eps) => {
+    if (!eps || Number.isNaN(eps) || eps <= 0) return "0.00 / sec";
+    if (eps >= 0.01) return `${eps.toFixed(2)} / sec`;
+    const perMin = eps * 60;
+    if (perMin >= 0.01) return `${perMin.toFixed(2)} / min`;
+    const perHour = eps * 3600;
+    if (perHour >= 0.01) return `${perHour.toFixed(2)} / hour`;
+    return `${eps.toExponential(2)} / sec`;
   };
 
   const renderSeverityBadge = (level) => {
@@ -223,7 +320,10 @@ const FimEvents = ({ agentId = "003" }) => {
     const rangeMs = rangeMsMap[rangeKey] ?? 86400000;
     const startMs = now - rangeMs;
 
-    const filtered = events
+    // Use aggregatedEvents (sample for charts) when available, otherwise use current page events
+    const sourceEvents = (aggregatedEvents && aggregatedEvents.length) ? aggregatedEvents : events;
+
+    const filtered = sourceEvents
       .map((e) => ({ ...e, _ms: e.timestamp ? new Date(e.timestamp).getTime() : NaN }))
       .filter((e) => Number.isFinite(e._ms) && e._ms >= startMs && e._ms <= now)
       .sort((a, b) => b._ms - a._ms);
@@ -279,9 +379,21 @@ const FimEvents = ({ agentId = "003" }) => {
       const colorMap = { "Critical": "#ef4444", "High": "#f97316", "Medium": "#eab308", "Low": "#3b82f6" };
       return { ...it, color: colorMap[it.label] || "#64748b" };
     });
+    const totalForUI = Number(totalHits) || filtered.length;
+    const eps = totalForUI ? totalForUI / (rangeMs / 1000) : 0;
 
-    return { filtered, series, eventItems, severityItems, payloadWords, total: filtered.length, eps: filtered.length ? filtered.length / (rangeMs / 1000) : 0, startMs, now };
-  }, [events, rangeKey]);
+    return {
+      filtered,
+      series,
+      eventItems,
+      severityItems,
+      payloadWords,
+      total: totalForUI,
+      eps,
+      startMs,
+      now,
+    };
+  }, [events, rangeKey, totalHits]);
 
   // ── loading / error states ────────────────────────────────────────────────
   if (loading) {
@@ -302,13 +414,33 @@ const FimEvents = ({ agentId = "003" }) => {
       <div className="p-4 flex flex-col gap-4">
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">
-            <button onClick={fetchEvents} className="text-sky-400 text-sm font-medium px-3 py-1.5 rounded-md border border-slate-700 hover:bg-sky-900/20">↻ Refresh Data</button>
+            <button
+              onClick={async () => {
+                const res = await fetchEvents(currentPage, rangeKey);
+                const sampleSize = Math.min(1000, Number(res?.total_hits) || 1000);
+                await fetchAggregated(sampleSize, rangeKey);
+              }}
+              className="text-sky-400 text-sm font-medium px-3 py-1.5 rounded-md border border-slate-700 hover:bg-sky-900/20"
+            >↻ Refresh Data</button>
             <div className="ml-auto flex items-center gap-2">
               <span className="text-xs text-slate-500">Range</span>
               <div className="flex bg-slate-800 rounded-lg p-0.5 border border-slate-700">
-                {["1h", "24h", "7d", "30d"].map((k) => (
-                  <button key={k} onClick={() => setRangeKey(k)} className={`px-2.5 py-1 text-xs rounded-md ${rangeKey === k ? "bg-sky-600 text-white" : "text-slate-400"}`}>Last {k}</button>
-                ))}
+               {["1h", "24h", "7d", "30d"].map((k) => (
+                <button
+                  key={k}
+                  onClick={() => {
+                    if (rangeKey !== k) {
+                      setRangeKey(k);
+                      setCurrentPage(1);
+                      // trigger immediate fetch with selected range to avoid race
+                      fetchEvents(1, k);
+                    }
+                  }}
+                  className={`px-2.5 py-1 text-xs rounded-md ${rangeKey === k ? "bg-sky-600 text-white" : "text-slate-400"}`}
+                >
+                  Last {k}
+                </button>
+              ))}
               </div>
             </div>
           </div>
@@ -316,7 +448,7 @@ const FimEvents = ({ agentId = "003" }) => {
           <div className="bg-slate-800/50 border border-slate-700/60 rounded-lg p-3">
             <div className="flex justify-between mb-2">
               <div><div className="text-[11px] text-slate-500 uppercase">Events (filtered)</div><div className="text-3xl font-black">{derived.total}</div></div>
-              <div className="text-right"><div className="text-[11px] text-slate-500 uppercase">Rate</div><div className="text-lg font-bold">{derived.eps.toFixed(2)} / sec</div></div>
+              <div className="text-right"><div className="text-[11px] text-slate-500 uppercase">Rate</div><div className="text-lg font-bold">{formatRate(derived.eps)}</div></div>
             </div>
             <SimpleBarHistogram data={derived.series} rangeKey={rangeKey} />
           </div>
@@ -353,24 +485,111 @@ const FimEvents = ({ agentId = "003" }) => {
                 </tr>
               </thead>
               <tbody>
-                {derived.filtered.map((evt, idx) => (
-                  <tr key={evt.id} className={`border-b border-slate-800/60 hover:bg-slate-800/40 ${idx % 2 !== 0 ? "bg-slate-900/60" : ""}`}>
+                {events.map((evt, idx) => (
+                  <tr
+                    key={evt.id}
+                    className={`border-b border-slate-800/60 hover:bg-slate-800/40 ${
+                      idx % 2 !== 0 ? "bg-slate-900/60" : ""
+                    }`}
+                  >
                     <td className="px-4 py-3 text-slate-500 text-xs">{formatTime(evt.timestamp)}</td>
                     <td className="px-4 py-3 text-sky-400 font-medium">{evt.agentName}</td>
                     <td className="px-4 py-3 text-violet-400 font-medium">{evt.username}</td>
                     <td className="px-4 py-3 text-emerald-400 font-mono text-xs">{evt.syscheckPath}</td>
                     <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded border ${evt.syscheckEvent === "deleted" ? "text-red-400 bg-red-900/30" : "text-green-400 bg-green-900/30"}`}>{evt.syscheckEvent}</span>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded border ${
+                          evt.syscheckEvent === "deleted"
+                            ? "text-red-400 bg-red-900/30"
+                            : "text-green-400 bg-green-900/30"
+                        }`}
+                      >
+                        {evt.syscheckEvent}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-slate-300 max-w-md">
-                        <div className="font-semibold">{evt.ruleDescription}</div>
-                        {evt.fileDiff && <pre className="mt-2 p-2 bg-black text-[10px] rounded">{evt.fileDiff}</pre>}
+                      {(() => {
+                        const diffData = evt.fileDiff || evt.file_diff;
+
+                        if (diffData) {
+                          return (
+                            <div className="mb-2">
+                              <div className="text-[9px] text-sky-500 uppercase font-bold mb-1 tracking-tight">
+                                Changes Detail:
+                              </div>
+                              <pre className="p-2 bg-black/60 text-[10px] rounded border border-slate-700/50 font-mono text-emerald-400 overflow-x-auto leading-normal whitespace-pre-wrap">
+                                {String(diffData)
+                                  .replace(/\\n/g, "\n")
+                                  .replace(/\\u003e/g, "→")
+                                  .replace(/["']/g, "")}
+                              </pre>
+                            </div>
+                          );
+                        }
+                      })()}
+
+                      <div className="text-xs font-semibold text-slate-100 opacity-80 border-t border-slate-800/50 pt-1">
+                        {evt.ruleDescription || evt.rule_description}
+                      </div>
                     </td>
                     <td className="px-4 py-3">{renderSeverityBadge(evt.ruleLevel)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            {/* --- TOMBOL NAVIGASI --- */}
+            <div className="p-4 border-t border-slate-800 flex items-center justify-between bg-slate-900/50 rounded-b-xl">
+              <div className="text-xs text-slate-500 font-mono">
+                SHOWING{" "}
+                <span className="text-sky-400 font-bold">
+                  {totalHits === 0 ? 0 : (currentPage - 1) * pageSize + 1}
+                </span>
+                {" - "}
+                <span className="text-sky-400 font-bold">
+                  {Math.min(currentPage * pageSize, totalHits)}
+                </span>
+                {" OF "}
+                <span className="text-sky-400 font-bold">{totalHits}</span> EVENTS
+              </div>
+
+              <div className="flex gap-2 items-center">
+                <button
+                  disabled={currentPage === 1 || loading}
+                  onClick={() => setCurrentPage(1)}
+                  className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs font-bold hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
+                >
+                  FIRST
+                </button>
+
+                <button
+                  disabled={currentPage === 1 || loading}
+                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                  className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs font-bold hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
+                >
+                  ← PREVIOUS
+                </button>
+
+                <span className="text-xs font-black text-slate-400 px-2">
+                  PAGE <span className="text-white">{currentPage}</span> / {totalPages}
+                </span>
+
+                <button
+                  disabled={currentPage === totalPages || loading}
+                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                  className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs font-bold hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
+                >
+                  NEXT →
+                </button>
+
+                <button
+                  disabled={currentPage === totalPages || loading}
+                  onClick={() => setCurrentPage(totalPages)}
+                  className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs font-bold hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
+                >
+                  LAST
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
