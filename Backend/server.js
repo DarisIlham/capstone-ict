@@ -184,28 +184,96 @@ const INDEXER_PASS = "3Hul7FhbSClUQe0AI8J?6CcyoluD36wg";
 // =======================
 // 2) Endpoint Events + Simpan DB
 // =======================
-app.get("/api/events/:agent_id", async (req, res) => {
+async function handleEventsRequest(req, res) {
   try {
-    const { agent_id } = req.params;
+    let agent_id = req.params.agent_id;
 
+    // Support: /api/events, /api/events/all, or /api/events/:agent_id
+    if (agent_id === "all" || req.query.all === "true") {
+      agent_id = undefined;
+    }
+
+    const must = [{ match: { "rule.groups": "syscheck" } }];
+    if (agent_id) must.push({ term: { "agent.id": String(agent_id) } });
+
+    const wantAll = req.query.all === "true" || req.query.all === "1";
+    const requestedSize = req.query.size ? Number(req.query.size) : null;
+
+    // If client asks for all, use search_after paging to retrieve up to MAX_ALL
+    if (wantAll) {
+      const MAX_ALL = Number(process.env.INDEXER_MAX_FETCH) || 10000; // safe default
+      const pageSize = Math.min(1000, Math.max(100, requestedSize || 1000));
+      const sortFields = [{ "@timestamp": { order: "desc" } }, { "_id": { order: "desc" } }];
+
+      const basePayload = {
+        query: { bool: { must } },
+        sort: sortFields,
+        size: pageSize,
+      };
+
+      let allHits = [];
+      let searchAfter = null;
+
+      while (allHits.length < MAX_ALL) {
+        const payload = { ...basePayload };
+        if (searchAfter) payload.search_after = searchAfter;
+
+        const response = await axios.post(`${INDEXER_URL}/wazuh-alerts-*/_search`, payload, {
+          auth: { username: INDEXER_USER, password: INDEXER_PASS },
+          httpsAgent,
+        });
+
+        const hits = response?.data?.hits?.hits || [];
+        if (!hits.length) break;
+
+        allHits = allHits.concat(hits);
+        if (hits.length < pageSize) break;
+
+        const last = hits[hits.length - 1];
+        searchAfter = last.sort;
+      }
+
+      const hitsToUse = allHits.slice(0, MAX_ALL);
+      const eventsData = hitsToUse.map((hit) => {
+        const source = hit._source || {};
+        const auditUser = source.syscheck?.audit?.login_user?.name;
+        const fileOwner = source.syscheck?.uname_after || source.syscheck?.uname;
+        const username = auditUser || fileOwner || "-";
+
+        return {
+          id: hit._id,
+          timestamp: source["@timestamp"],
+          agentName: source.agent?.name || "-",
+          username,
+          syscheckPath: source.syscheck?.path || null,
+          syscheckEvent: source.syscheck?.event || null,
+          ruleDescription: source.rule?.description || "-",
+          ruleLevel: source.rule?.level ?? 0,
+          ruleId: source.rule?.id ?? "-",
+          fileDiff: source.syscheck?.diff || null,
+        };
+      });
+
+      // Save to DB in background
+      Promise.all(eventsData.map((event) => saveToDatabase(event))).catch((err) =>
+        console.error("Gagal simpan massal ke DB:", err.message)
+      );
+
+      return res.json({ success: true, data: eventsData, total_hits: eventsData.length });
+    }
+
+    // Normal single-request path (size param allowed)
+    const sizeNum = requestedSize && Number.isFinite(requestedSize) ? Math.min(Math.max(requestedSize, 1), 10000) : 100;
     const queryPayload = {
-      query: {
-        bool: {
-          must: [
-            { match: { "rule.groups": "syscheck" } },
-          ],
-        },
-      },
+      query: { bool: { must } },
       sort: [{ "@timestamp": { order: "desc" } }],
-      size: 100,
+      size: sizeNum,
     };
 
     const response = await axios.post(`${INDEXER_URL}/wazuh-alerts-*/_search`, queryPayload, {
       auth: { username: INDEXER_USER, password: INDEXER_PASS },
       httpsAgent,
     });
-
-
 
     const eventsData = (response.data.hits.hits || []).map((hit) => {
       const source = hit._source || {};
@@ -229,12 +297,8 @@ app.get("/api/events/:agent_id", async (req, res) => {
 
     // Simpan ke DB paralel (tidak menghambat response)
     Promise.all(eventsData.map((event) => saveToDatabase(event))).catch((err) =>
-       console.error("Gagal simpan massal ke DB:", err.message)
+      console.error("Gagal simpan massal ke DB:", err.message)
     );
-
-    // Alert Telegram (ambil event terbaru)
-    // const latestEvent = eventsData.find((e) => Number(e.ruleLevel) >= 1);
-    // if (latestEvent) await sendAlert(latestEvent);
 
     res.json({ success: true, data: eventsData, total_hits: eventsData.length });
   } catch (error) {
@@ -249,7 +313,11 @@ app.get("/api/events/:agent_id", async (req, res) => {
       details: process.env.NODE_ENV === "development" ? errorMsg : undefined
     });
   }
-});
+}
+
+// Register two routes (one for all, one for specific agent) to avoid optional-param parsing issues
+app.get("/api/events", handleEventsRequest);
+app.get("/api/events/:agent_id", handleEventsRequest);
 
 // =======================
 // 3) Endpoint ambil riwayat dari DB

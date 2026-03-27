@@ -164,7 +164,9 @@ const FimEvents = ({ agentId = "003" }) => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`${API_BASE_URL}/api/events/${agentId}`);
+      const endpoint = agentId ? `${API_BASE_URL}/api/events/${agentId}` : `${API_BASE_URL}/api/events`;
+      // Request all matching events (server will page through the indexer up to a safe cap)
+      const response = await fetch(`${endpoint}?all=true`);
 
       if (!response.ok) {
         const errorText = await response.text();
