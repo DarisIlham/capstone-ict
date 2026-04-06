@@ -73,7 +73,7 @@ const runKafka = async () => {
         // 4. Kirim ke Frontend lewat Polling (Socket.IO dihapus)
 
         if (Number(formattedLog.ruleLevel) >= 1) {
-            sendAlert(formattedLog).catch(err => console.error("Gagal kirim Telegram:", err.message));
+          sendAlert(formattedLog).catch(err => console.error("Gagal kirim Telegram:", err.message));
         }
 
         // Terminal sekarang hanya mencetak aktivitas file yang valid
@@ -171,7 +171,7 @@ const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 // =======================
 // KONFIGURASI WAZUH INDEXER
 // =======================
-const INDEXER_URL = process.env.INDEXER_URL ;
+const INDEXER_URL = process.env.INDEXER_URL;
 const INDEXER_USER = "admin";
 const INDEXER_PASS = "3Hul7FhbSClUQe0AI8J?6CcyoluD36wg";
 
@@ -218,16 +218,21 @@ async function handleEventsRequest(req, res) {
       track_total_hits: true,
       query: {
         bool: {
-          must,
+          should: [
+            { term: { "rule.id": "100601" } },
+            { match_phrase: { "rule.description": "[Judol Injection]" } },
+            { term: { "location": "syscheck" } }
+          ],
+          minimum_should_match: 1,
           filter,
         },
       },
-      sort: [{ "@timestamp": { order: "desc" } }],
+      sort: [{ timestamp: { order: "desc" } }],
       from,
       size,
     };
 
-    
+
 
     const response = await axios.post(
       `${INDEXER_URL}/wazuh-alerts-*/_search`,
@@ -273,15 +278,25 @@ function mapWazuhHit(hit) {
 
   return {
     id: hit._id,
-    timestamp: source["@timestamp"],
+    timestamp: source.timestamp || source["@timestamp"] || "-",
     agentName: source.agent?.name || "-",
     username,
-    syscheckPath: source.syscheck?.path || null,
-    syscheckEvent: source.syscheck?.event || null,
+    syscheckPath:
+      source.syscheck?.path ||
+      source.data?.path ||
+      source.location ||
+      "-",
+    syscheckEvent:
+      source.syscheck?.event ||
+      source.decoder?.name ||
+      "-",
     ruleDescription: source.rule?.description || "-",
     ruleLevel: source.rule?.level ?? 0,
     ruleId: source.rule?.id ?? "-",
-    fileDiff: source.syscheck?.diff || null,
+    fileDiff:
+      source.syscheck?.diff ||
+      source.full_log ||
+      null,
   };
 }
 
