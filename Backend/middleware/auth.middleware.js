@@ -38,3 +38,27 @@ export const verifyToken = async (req, res, next) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
+/**
+ * Middleware untuk mengecek apakah user memiliki role tertentu
+ * @param {string|string[]} allowedRoles - Role yang diperbolehkan
+ * @returns {Function} Middleware function
+ */
+export const requireRole = (allowedRoles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ message: "User not authenticated" });
+    }
+
+    const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
+
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: `Hanya ${roles.join(", ")} yang dapat mengakses endpoint ini`,
+      });
+    }
+
+    next();
+  };
+};

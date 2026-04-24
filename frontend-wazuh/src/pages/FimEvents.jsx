@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Navbar from "../components/Navbar";
+import { Activity, FileText } from "lucide-react";
 import { API_BASE_URL } from "../config/Api";
 
 // ----------------------------
@@ -13,6 +14,141 @@ const formatBucketLabel = (ms, rangeKey) => {
   if (rangeKey === "24h") return d.toLocaleTimeString("en-US", { hour: "2-digit" });
   if (rangeKey === "7d") return d.toLocaleString("en-US", { weekday: "short", hour: "2-digit" });
   return d.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
+};
+
+const WaveChart = ({ data, color = "#10b981", height = 120, rangeKey }) => {
+  const [selectedPoint, setSelectedPoint] = useState(null);
+  const width = 1000;
+  const padding = { l: 28, r: 10, t: 8, b: 24 };
+  const innerW = width - padding.l - padding.r;
+  const innerH = height - padding.t - padding.b;
+
+  if (!data || data.length === 0) {
+    return (
+      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="block">
+        <text x={width / 2} y={height / 2} textAnchor="middle" fontSize="12" fill="#64748b">No data</text>
+      </svg>
+    );
+  }
+
+  const maxV = Math.max(1, ...data.map((d) => d.v));
+  const pointSpacing = data.length ? innerW / (data.length - 1) : innerW;
+
+  const gridSteps = 5;
+  const gridLines = [];
+  for (let i = 0; i < gridSteps; i++) {
+    const ratio = i / (gridSteps - 1);
+    const value = Math.round(ratio * maxV);
+    const y = padding.t + innerH - ratio * innerH;
+    gridLines.push({ value, y, ratio });
+  }
+
+  let pathD = "";
+  for (let i = 0; i < data.length; i++) {
+    const x = padding.l + i * pointSpacing;
+    const y = padding.t + innerH - (data[i].v / maxV) * innerH;
+    if (i === 0) {
+      pathD += `M ${x} ${y}`;
+    } else {
+      const prevX = padding.l + (i - 1) * pointSpacing;
+      const prevY = padding.t + innerH - (data[i - 1].v / maxV) * innerH;
+      const controlX = (prevX + x) / 2;
+      pathD += ` C ${controlX} ${prevY}, ${controlX} ${y}, ${x} ${y}`;
+    }
+  }
+
+  const tickCount = clamp(Math.floor(innerW / 160), 3, 7);
+  const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
+
+  const formatPointTime = (timestamp) =>
+    new Date(timestamp).toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+  return (
+    <div className="relative" onMouseLeave={() => setSelectedPoint(null)}>
+      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="block">
+        {gridLines.map((gl) => (
+          <g key={`grid-${gl.ratio}`}>
+            <line x1={padding.l} y1={gl.y} x2={padding.l + innerW} y2={gl.y} stroke="#334155" strokeDasharray="2,2" opacity="0.5" />
+            <text x={padding.l - 5} y={gl.y + 3} textAnchor="end" fontSize="8" fill="#64748b">{gl.value}</text>
+          </g>
+        ))}
+        <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="#334155" />
+        <line x1={padding.l} y1={padding.t + innerH} x2={padding.l + innerW} y2={padding.t + innerH} stroke="#334155" />
+        <path d={pathD} stroke={color} strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
+        <defs>
+          <linearGradient id="fimWaveGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor={color} stopOpacity="0.24" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={pathD + ` L ${padding.l + (data.length - 1) * pointSpacing} ${padding.t + innerH} L ${padding.l} ${padding.t + innerH} Z`} fill="url(#fimWaveGradient)" />
+        {data.map((d, i) => {
+          const x = padding.l + i * pointSpacing;
+          const y = padding.t + innerH - (d.v / maxV) * innerH;
+          const isSelected = selectedPoint?.index === i;
+
+          return (
+            <g key={`point-${d.t}`}>
+              <circle
+                cx={x}
+                cy={y}
+                r={isSelected ? "7" : "10"}
+                fill="transparent"
+                className="cursor-pointer"
+                onMouseEnter={() => setSelectedPoint({ index: i, x, y, value: d.v, time: d.t })}
+                onMouseLeave={() => setSelectedPoint(null)}
+              />
+              <circle
+                cx={x}
+                cy={y}
+                r={isSelected ? "5" : "3.5"}
+                fill={color}
+                stroke="#0f172a"
+                strokeWidth="1.5"
+                opacity="0.95"
+                className="pointer-events-none"
+              />
+            </g>
+          );
+        })}
+        {data.map((d, i) => {
+          if (i % tickEvery !== 0) return null;
+          const x = padding.l + i * pointSpacing;
+          return (
+            <g key={`tick-${d.t}`}>
+              <line x1={x} y1={padding.t + innerH} x2={x} y2={padding.t + innerH + 3} stroke="#334155" />
+              <text
+                x={x}
+                y={padding.t + innerH + 14}
+                textAnchor={i === 0 ? "start" : i >= data.length - tickEvery ? "end" : "middle"}
+                fontSize="8"
+                fill="#64748b"
+              >
+                {formatBucketLabel(d.t, rangeKey)}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+
+      {selectedPoint && (
+        <div
+          className="pointer-events-none absolute z-10 min-w-[120px] rounded-lg border border-slate-700 bg-slate-900/95 px-3 py-2 text-xs shadow-lg"
+          style={{
+            left: `${Math.min(Math.max((selectedPoint.x / width) * 100, 10), 82)}%`,
+            top: `${Math.max(((selectedPoint.y - 40) / height) * 100, 6)}%`,
+            transform: "translate(-50%, -100%)",
+          }}
+        >
+          <div className="font-semibold text-white">{selectedPoint.value} events</div>
+          <div className="mt-1 text-slate-400">{formatPointTime(selectedPoint.time)}</div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 const SimpleBarHistogram = ({ data, width = 980, height = 85, rangeKey }) => {
@@ -105,6 +241,75 @@ const Legend = ({ items }) => (
   </div>
 );
 
+// ── Domain Colors ────────────────────────────────────────────────────────────
+const DOMAIN_COLORS = ["#f472b6", "#38bdf8", "#4ade80", "#a78bfa", "#fb923c", "#34d399", "#f87171", "#facc15", "#60a5fa", "#e879f9"];
+
+// ── Domain Horizontal Bar Chart (Modern Design) ────
+const DomainBarChart = ({ domains }) => {
+  if (!domains || domains.length === 0) return <div className="flex items-center justify-center h-full text-slate-600 text-xs">No domain data</div>;
+
+  const maxCount = Math.max(...domains.map(d => d.count), 1);
+  const barGap = 12;
+  const barHeight = 10;
+  const rowHeight = barHeight + barGap;
+  const chartHeight = barHeight * domains.length + barGap * Math.max(0, domains.length - 1);
+  const CHART_COLORS = ["#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e", "#10b981", "#14b8a6", "#06b6d4", "#0ea5e9", "#3b82f6", "#8b5cf6", "#d946ef"];
+
+  const truncateDomain = (name, maxChars = 26) => (name.length > maxChars ? name.substring(0, maxChars - 3) + "..." : name);
+
+  const labelX = 18;
+  const barX = 180;
+  const rightPad = 20;
+  const maxBarArea = 950 - barX - rightPad;
+
+  return (
+    <svg width="100%" viewBox={`0 0 1000 ${chartHeight}`} className="block" style={{ minHeight: chartHeight }}>
+      {domains.map((domain, i) => {
+        const barWidth = Math.max(6, Math.round((domain.count / maxCount) * maxBarArea));
+        const y = i * (barHeight + barGap);
+        const color = CHART_COLORS[i % CHART_COLORS.length];
+        const name = truncateDomain(domain.name);
+
+        return (
+          <g key={domain.name}>
+            <text x={labelX} y={y + barHeight / 2 + 3} fontSize="8px" fill="#cbd5e1" textAnchor="start" fontWeight="600" fontFamily="monospace">
+              {name}
+            </text>
+            <rect x={barX} y={y} width={barWidth} height={barHeight} fill={color} opacity="0.92" rx="4" />
+            <text x={barX + barWidth + 8} y={y + barHeight / 2 + 3} fontSize="7px" fill="#94a3b8" fontWeight="700">
+              {domain.count}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+};
+
+// ── Top 5 Domains Card (Modern Design) ────────────────────────────────────
+const Top5DomainsCard = ({ domains }) => {
+  const top5 = domains.slice(0, 5);
+
+  return (
+    <div className="flex flex-col gap-2">
+      {top5.map((domain, idx) => {
+        const badgeColors = ["#34d399", "#fbbf24", "#f97316", "#06b6d4", "#a78bfa"];
+        const badgeColor = badgeColors[idx];
+
+        return (
+          <div key={domain.name} className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <span className="text-slate-400 font-bold text-right w-5">{idx + 1}</span>
+              <span className="text-sky-300 font-mono truncate text-xs">{domain.name}</span>
+            </div>
+            <span className="font-bold ml-2 text-xs" style={{ color: badgeColor }}>{domain.count}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 const WORD_COLORS = ["#f472b6", "#38bdf8", "#4ade80", "#a78bfa", "#fb923c", "#34d399", "#f87171", "#facc15", "#60a5fa", "#e879f9"];
 
 const PayloadWordCloud = ({ words }) => {
@@ -160,82 +365,119 @@ const FimEvents = ({ agentId = "all" }) => {
   const [loading, setLoading] = useState(true);
   const [rangeKey, setRangeKey] = useState("30d");
 
-  // --- TAMBAHKAN / GANTI BAGIAN INI ---
+  const USE_STATIC = false;
+
+  const MOCK_EVENTS = [
+    {
+      id: "evt-1",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
+      agentName: "agent-1",
+      username: "root",
+      syscheckPath: "/etc/passwd",
+      syscheckEvent: "modified",
+      fileDiff: ">-line removed\n>+line added",
+      ruleDescription: "Example rule description",
+      ruleLevel: 5,
+    },
+    {
+      id: "evt-2",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
+      agentName: "agent-2",
+      username: "admin",
+      syscheckPath: "/var/log/auth.log",
+      syscheckEvent: "deleted",
+      fileDiff: ">-sensitive line removed",
+      ruleDescription: "Deleted file detected",
+      ruleLevel: 8,
+    },
+  ];
+
+  const FREQUENTLY_VISITED_DOMAINS = [
+    { name: "github.com", count: 342 },
+    { name: "stackoverflow.com", count: 287 },
+    { name: "npmjs.com", count: 256 },
+    { name: "react.dev", count: 198 },
+    { name: "tailwindcss.com", count: 165 },
+    { name: "api.github.com", count: 142 },
+    { name: "cdn.jsdelivr.net", count: 128 },
+    { name: "fonts.googleapis.com", count: 95 },
+    { name: "www.google.com", count: 87 },
+    { name: "cloudflare.com", count: 76 },
+    { name: "www.youtube.com", count: 64 },
+    { name: "regex101.com", count: 58 },
+  ];
+
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalHits, setTotalHits] = useState(0);
-  const pageSize = 100; // Jumlah data per halaman
+  const pageSize = 100;
 
   const getRangeWindow = (key) => {
-  const end = new Date();
-  const start = new Date(end);
+    const end = new Date();
+    const start = new Date(end);
 
-  switch (key) {
-    case "1h":
-      start.setHours(start.getHours() - 1);
-      break;
-    case "24h":
-      start.setHours(start.getHours() - 24);
-      break;
-    case "7d":
-      start.setDate(start.getDate() - 7);
-      break;
-    case "30d":
-    default:
-      start.setDate(start.getDate() - 30);
-      break;
-  }
+    switch (key) {
+      case "1h":
+        start.setHours(start.getHours() - 1);
+        break;
+      case "24h":
+        start.setHours(start.getHours() - 24);
+        break;
+      case "7d":
+        start.setDate(start.getDate() - 7);
+        break;
+      case "30d":
+      default:
+        start.setDate(start.getDate() - 30);
+        break;
+    }
 
-  return {
-    start: start.toISOString(),
-    end: end.toISOString(),
+    return {
+      start: start.toISOString(),
+      end: end.toISOString(),
+    };
   };
-};
 
-  // ── 1) Fetch Awal (Historical Data) ───────────────────────────────────────
   const fetchEvents = useCallback(async (page = 1, rk) => {
-  try {
-    setLoading(true);
-    setError(null);
+    try {
+      setLoading(true);
+      setError(null);
 
-    // allow caller to override the rangeKey to avoid race conditions
-    const effectiveRange = rk || rangeKey;
-    const { start, end } = getRangeWindow(effectiveRange);
+      const effectiveRange = rk || rangeKey;
+      const { start, end } = getRangeWindow(effectiveRange);
 
-    const baseEndpoint =
-      agentId === "all"
-        ? `${API_BASE_URL}/api/events`
-        : `${API_BASE_URL}/api/events/${agentId}`;
+      const baseEndpoint =
+        agentId === "all"
+          ? `${API_BASE_URL}/api/events`
+          : `${API_BASE_URL}/api/events/${agentId}`;
 
-    const endpoint =
-      `${baseEndpoint}?page=${page}&size=${pageSize}` +
-      `&start=${encodeURIComponent(start)}` +
-      `&end=${encodeURIComponent(end)}`;
+      const endpoint =
+        `${baseEndpoint}?page=${page}&size=${pageSize}` +
+        `&start=${encodeURIComponent(start)}` +
+        `&end=${encodeURIComponent(end)}`;
 
-    console.log("Fetching Page:", page, endpoint);
+      console.log("Fetching Page:", page, endpoint);
 
-    const response = await fetch(endpoint);
-    if (!response.ok) throw new Error(`API Error ${response.status}`);
+      const response = await fetch(endpoint);
+      if (!response.ok) throw new Error(`API Error ${response.status}`);
 
-    const result = await response.json();
-    if (!result.success) throw new Error(result.message || "Gagal mengambil data");
+      const result = await response.json();
+      if (!result.success) throw new Error(result.message || "Gagal mengambil data");
 
-    setEvents(Array.isArray(result.data) ? result.data : []);
-    setTotalHits(Number(result.total_hits) || 0);
-    setTotalPages(Number(result.total_pages) || 1);
-    setCurrentPage(Number(result.current_page) || page);
-    // return result so callers can chain (e.g., to fetch aggregated sample)
-    return result;
-  } catch (err) {
-    console.error("❌ Fetch Error:", err);
-    setError(err.message);
-    return null;
-  } finally {
-    setLoading(false);
-  }
-}, [agentId, pageSize]);
+      setEvents(Array.isArray(result.data) ? result.data : []);
+      setTotalHits(Number(result.total_hits) || 0);
+      setTotalPages(Number(result.total_pages) || 1);
+      setCurrentPage(Number(result.current_page) || page);
+      return result;
+    } catch (err) {
+      console.error("❌ Fetch Error:", err);
+      setError(err.message);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [agentId, pageSize]);
 
-  // Fetch aggregated sample (used for charts / payload wordcloud) up to a reasonable limit
   const fetchAggregated = useCallback(async (size = 1000, rk) => {
     try {
       const effectiveRange = rk || rangeKey;
@@ -259,13 +501,22 @@ const FimEvents = ({ agentId = "all" }) => {
       return r;
     } catch (err) {
       console.error("❌ Fetch Aggregated Error:", err.message);
-      // keep previous aggregatedEvents if fail
       return null;
     }
   }, [agentId, rangeKey]);
 
   useEffect(() => {
-    // When agent or range changes, reset to page 1 and fetch page + aggregated sample
+    if (!USE_STATIC) return;
+    setEvents(MOCK_EVENTS);
+    setAggregatedEvents(MOCK_EVENTS);
+    setTotalHits(MOCK_EVENTS.length);
+    setTotalPages(1);
+    setCurrentPage(1);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (USE_STATIC) return;
     setCurrentPage(1);
     let cancelled = false;
     (async () => {
@@ -278,10 +529,12 @@ const FimEvents = ({ agentId = "all" }) => {
   }, [agentId, rangeKey, fetchEvents, fetchAggregated]);
 
   useEffect(() => {
+    if (USE_STATIC) return;
     fetchEvents(currentPage, rangeKey);
   }, [currentPage, fetchEvents, rangeKey]);
 
   useEffect(() => {
+    if (USE_STATIC) return;
     const interval = setInterval(() => {
       fetchEvents(currentPage, rangeKey);
     }, 30000);
@@ -289,7 +542,6 @@ const FimEvents = ({ agentId = "all" }) => {
     return () => clearInterval(interval);
   }, [currentPage, fetchEvents, rangeKey]);
 
-  // ── Helpers & Formatting ─────────────────────────────────────────────────
   const now = Date.now();
 
   const formatTime = (isoString) => {
@@ -320,7 +572,6 @@ const FimEvents = ({ agentId = "all" }) => {
     const rangeMs = rangeMsMap[rangeKey] ?? 86400000;
     const startMs = now - rangeMs;
 
-    // Use aggregatedEvents (sample for charts) when available, otherwise use current page events
     const sourceEvents = (aggregatedEvents && aggregatedEvents.length) ? aggregatedEvents : events;
 
     const filtered = sourceEvents
@@ -357,14 +608,12 @@ const FimEvents = ({ agentId = "all" }) => {
       if (!e.fileDiff) continue;
       for (const line of e.fileDiff.split("\n")) {
         if (!line.startsWith(">") && !line.startsWith("<")) continue;
-        // Penghapusan escape character berlebih pada '/'
         const tokens = line.substring(1).trim().split(/[\s/=:;,'"(){}[\]<>|&!?@#%^*`~]+/).map(t => t.toLowerCase()).filter(t => t.length >= 2 && !STOP.has(t));
         for (const token of tokens) byPayload.set(token, (byPayload.get(token) || 0) + 1);
       }
     }
     const payloadWords = Array.from(byPayload.entries()).map(([text, count]) => ({ text, count })).sort((a, b) => b.count - a.count).slice(0, 40);
 
-    // Severity breakdown calculation
     const bySeverity = new Map();
     for (const e of filtered) {
       const level = e.ruleLevel || 0;
@@ -393,9 +642,8 @@ const FimEvents = ({ agentId = "all" }) => {
       startMs,
       now,
     };
-  }, [events, rangeKey, totalHits]);
+  }, [events, rangeKey, totalHits, aggregatedEvents, now]);
 
-  // ── loading / error states ────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-sky-400 gap-3">
@@ -411,7 +659,21 @@ const FimEvents = ({ agentId = "all" }) => {
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans">
       <Navbar />
 
-      <div className="p-4 flex flex-col gap-4">
+      <div className="p-4 md:p-6 flex flex-col gap-4">
+        {/* FIM Header */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-6 shadow-lg">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                <FileText className="h-6 w-6 text-emerald-400" />
+                File Integrity Monitoring (FIM)
+              </h1>
+              <p className="text-sm text-slate-400 mt-1">Real-time monitoring for file changes, deletions, and access events</p>
+            </div>
+          </div>
+        </div>
+
+        {/* FIM Data Container */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -420,7 +682,7 @@ const FimEvents = ({ agentId = "all" }) => {
                 const sampleSize = Math.min(1000, Number(res?.total_hits) || 1000);
                 await fetchAggregated(sampleSize, rangeKey);
               }}
-              className="text-sky-400 text-sm font-medium px-3 py-1.5 rounded-md border border-slate-700 hover:bg-sky-900/20"
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm text-slate-300 transition-colors border border-slate-700 flex items-center gap-2"
             >↻ Refresh Data</button>
             <div className="ml-auto flex items-center gap-2">
               <span className="text-xs text-slate-500">Range</span>
@@ -432,7 +694,6 @@ const FimEvents = ({ agentId = "all" }) => {
                     if (rangeKey !== k) {
                       setRangeKey(k);
                       setCurrentPage(1);
-                      // trigger immediate fetch with selected range to avoid race
                       fetchEvents(1, k);
                     }
                   }}
@@ -445,31 +706,67 @@ const FimEvents = ({ agentId = "all" }) => {
             </div>
           </div>
 
-          <div className="bg-slate-800/50 border border-slate-700/60 rounded-lg p-3">
-            <div className="flex justify-between mb-2">
-              <div><div className="text-[11px] text-slate-500 uppercase">Events (filtered)</div><div className="text-3xl font-black">{derived.total}</div></div>
-              <div className="text-right"><div className="text-[11px] text-slate-500 uppercase">Rate</div><div className="text-lg font-bold">{formatRate(derived.eps)}</div></div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-slate-800/50 border border-slate-700/60 rounded-lg p-3">
+              <div className="text-[10px] text-slate-500 uppercase font-semibold">Filtered Events</div>
+              <div className="text-2xl font-black text-sky-400 mt-1">{derived.total}</div>
             </div>
-            <SimpleBarHistogram data={derived.series} rangeKey={rangeKey} />
+            <div className="bg-slate-800/50 border border-slate-700/60 rounded-lg p-3">
+              <div className="text-[10px] text-slate-500 uppercase font-semibold">Event Rate</div>
+              <div className="text-2xl font-black text-white mt-1">{formatRate(derived.eps)}</div>
+            </div>
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3">
+              <div className="text-[10px] text-emerald-400 uppercase font-semibold">Event Types</div>
+              <div className="text-2xl font-black text-emerald-300 mt-1">{derived.eventItems.length}</div>
+            </div>
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+              <div className="text-[10px] text-amber-400 uppercase font-semibold">Severity Groups</div>
+              <div className="text-2xl font-black text-amber-300 mt-1">{derived.severityItems.length}</div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <div className="bg-slate-800/30 border border-slate-800/50 rounded-lg p-4">
+            <div className="flex justify-between items-center mb-4">
+              <div className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                <Activity className="h-4 w-4 text-sky-400" />
+                Event Timeline
+              </div>
+              <div className="text-xs text-slate-500">Last {rangeKey}</div>
+            </div>
+            <WaveChart data={derived.series} color="#10b981" height={120} rangeKey={rangeKey} />
+          </div>
+
+          {/* Frequently Visited Domains - Full Width */}
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg">
+            <div className="flex justify-between items-center mb-3">
+              <div className="text-sm font-semibold text-slate-300">Frequently Visited Domains</div>
+              <div className="text-xs text-slate-500">Domain Activity</div>
+            </div>
+            <div className="bg-slate-800/30 rounded-lg px-0 py-8 border border-slate-800/50" style={{ minHeight: "700px" }}>
+              <DomainBarChart domains={FREQUENTLY_VISITED_DOMAINS} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Kotak 1: Event + Severity Chart (Berdampingan & Centered) */}
-            <div className="bg-slate-800/50 border border-slate-700/60 rounded-lg p-2 flex gap-4 items-center justify-center">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg flex gap-8 items-center justify-center">
               {/* Event Chart */}
               <div className="flex items-center gap-3">
-                <Donut items={derived.eventItems} size={160} centerLabelTop={derived.total} centerLabelBottom="events" />
+                <Donut items={derived.eventItems} size={280} stroke={20} centerLabelTop={derived.total} centerLabelBottom="events" />
                 <div className="w-32"><Legend items={derived.eventItems} /></div>
               </div>
               {/* Severity Chart */}
               <div className="flex items-center gap-3">
-                <Donut items={derived.severityItems} size={160} centerLabelTop={derived.total} centerLabelBottom="severity" />
+                <Donut items={derived.severityItems} size={280} stroke={20} centerLabelTop={derived.total} centerLabelBottom="severity" />
                 <div className="w-32"><Legend items={derived.severityItems} /></div>
               </div>
             </div>
             {/* Kotak 2: Word Cloud */}
-            <div className="bg-slate-950 border border-slate-700/60 rounded-lg p-3 flex flex-col gap-2 items-center justify-center">
-              <PayloadWordCloud words={derived.payloadWords} />
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg flex flex-col gap-3 items-center justify-center">
+              <div className="w-full text-sm font-semibold text-slate-300">Payload Pattern Cloud</div>
+              <div className="w-full bg-slate-950 border border-slate-800 rounded-lg p-4">
+                <PayloadWordCloud words={derived.payloadWords} />
+              </div>
             </div>
           </div>
         </div>

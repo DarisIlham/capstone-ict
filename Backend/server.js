@@ -10,19 +10,24 @@ import { Kafka } from "kafkajs";
 import { Pool } from "pg";
 import connectDB from "./config/dbLogin.js";
 import authRouter from "./routes/auth.routes.js";
+import userRouter from "./routes/userRoutes.js";
+import notificationRouter from "./routes/notificationRoutes.js";
+import app from "./app.js";
 
 // Load environment variables dari .env
 dotenv.config();
 
-const app = express();
-app.use(cors());
-app.use(express.json());
-
 // Connect MongoDB untuk Auth
 connectDB();
 
-// Auth routes (MongoDB)
+// Auth routes (MongoDB) attach to imported `app`
 app.use("/api/auth", authRouter);
+
+// User management routes (MongoDB, admin only)
+app.use("/api/users", userRouter);
+
+// Notification routes (MongoDB, admin only)
+app.use("/api/notifications", notificationRouter);
 
 const ENABLE_DB = process.env.ENABLE_DB !== "0";
 
@@ -218,6 +223,7 @@ async function handleEventsRequest(req, res) {
       track_total_hits: true,
       query: {
         bool: {
+          must: [{ match: { "rule.groups": "syscheck" } }],
           should: [
             { term: { "rule.id": "100601" } },
             { match_phrase: { "rule.description": "[Judol Injection]" } },
@@ -227,12 +233,10 @@ async function handleEventsRequest(req, res) {
           filter,
         },
       },
-      sort: [{ timestamp: { order: "desc" } }],
+      sort: [{ "@timestamp": { order: "desc", unmapped_type: "date" } }],
       from,
       size,
     };
-
-
 
     const response = await axios.post(
       `${INDEXER_URL}/wazuh-alerts-*/_search`,
@@ -567,6 +571,17 @@ async function autoPullEvents() {
 // jalan sekali + interval
 autoPullEvents();
 setInterval(autoPullEvents, AUTO_PULL_INTERVAL_MS);
+
+// 404 Handler (moved here so routes added in server.js are reachable)
+app.use((req, res) => {
+  res.status(404).json({ success: false, message: "Endpoint not found" });
+});
+
+// Global Error Handler (moved here)
+app.use((err, req, res, next) => {
+  console.error("🔥 Server Error:", err.stack || err.message || err);
+  res.status(err.statusCode || 500).json({ success: false, message: err.message || "Internal server error" });
+});
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ Server berjalan di port: ${PORT}`);
