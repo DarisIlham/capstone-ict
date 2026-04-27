@@ -11,12 +11,13 @@ import {
   X,
 } from "lucide-react";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import logo from "../assets/Undip.svg";
 
 const Navbar = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout, setTransitionLoading } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
@@ -163,16 +164,23 @@ const Navbar = () => {
           <div className="fixed left-0 top-24 h-[calc(100vh-6rem)] w-72 bg-slate-900/95 border-r border-slate-700/80 z-30 overflow-y-auto backdrop-blur-xl">
             {/* Menu Items */}
             <div className="p-4 space-y-2">
-              {menuItems.map((item) => (
-                <button
-                  key={item.href}
-                  onClick={() => handleNavigation(item.href)}
-                  className="block w-full text-left px-4 py-3 text-slate-300 hover:text-white hover:bg-slate-800/60 rounded-lg transition-colors font-medium flex items-center gap-2"
-                >
-                  {item.icon && <item.icon className="h-4 w-4" />}
-                  {item.label}
-                </button>
-              ))}
+              {menuItems.map((item) => {
+                const isActive = location.pathname === item.href;
+                return (
+                  <button
+                    key={item.href}
+                    onClick={() => handleNavigation(item.href)}
+                    className={`block w-full text-left px-4 py-3 rounded-lg transition-colors font-medium flex items-center gap-2 ${
+                      isActive
+                        ? "bg-sky-600/20 text-sky-400 border border-sky-600/50"
+                        : "text-slate-300 hover:text-white hover:bg-slate-800/60"
+                    }`}
+                  >
+                    {item.icon && <item.icon className="h-4 w-4" />}
+                    {item.label}
+                  </button>
+                );
+              })}
             </div>
 
             {/* User Info & Logout */}

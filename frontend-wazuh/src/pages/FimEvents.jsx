@@ -16,9 +16,9 @@ const formatBucketLabel = (ms, rangeKey) => {
   return d.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
 };
 
-const WaveChart = ({ data, color = "#10b981", height = 120, rangeKey }) => {
+const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey }) => {
   const [selectedPoint, setSelectedPoint] = useState(null);
-  const width = 1000;
+  const width = 800;
   const padding = { l: 28, r: 10, t: 8, b: 24 };
   const innerW = width - padding.l - padding.r;
   const innerH = height - padding.t - padding.b;
@@ -151,7 +151,7 @@ const WaveChart = ({ data, color = "#10b981", height = 120, rangeKey }) => {
   );
 };
 
-const SimpleBarHistogram = ({ data, width = 980, height = 85, rangeKey }) => {
+const SimpleBarHistogram = ({ data, width = 800, height = 65, rangeKey }) => {
   const maxV = Math.max(1, ...data.map((d) => d.v));
   const padding = { l: 28, r: 10, t: 8, b: 24 };
   const innerW = width - padding.l - padding.r;
@@ -192,7 +192,7 @@ const SimpleBarHistogram = ({ data, width = 980, height = 85, rangeKey }) => {
   );
 };
 
-const Donut = ({ items, size = 100, stroke = 12, centerLabelTop, centerLabelBottom }) => {
+const Donut = ({ items, size = 140, stroke = 14, centerLabelTop, centerLabelBottom }) => {
   const total = items.reduce((a, b) => a + b.value, 0) || 1;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
@@ -659,34 +659,34 @@ const FimEvents = ({ agentId = "all" }) => {
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans">
       <Navbar />
 
-      <div className="p-4 md:p-6 flex flex-col gap-4">
+      <div className="p-2 md:p-4 flex flex-col gap-3 md:gap-4">
         {/* FIM Header */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-6 shadow-lg">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="bg-slate-900 border border-slate-800 rounded-lg md:rounded-xl p-3 md:p-4 shadow-lg">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-4">
             <div>
-              <h1 className="text-xl font-bold text-white flex items-center gap-2">
-                <FileText className="h-6 w-6 text-emerald-400" />
-                File Integrity Monitoring (FIM)
+              <h1 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
+                <FileText className="h-5 md:h-6 w-5 md:w-6 text-emerald-400" />
+                File Integrity Monitoring
               </h1>
-              <p className="text-sm text-slate-400 mt-1">Real-time monitoring for file changes, deletions, and access events</p>
+              <p className="text-xs md:text-sm text-slate-400 mt-1">Real-time file changes monitoring</p>
             </div>
           </div>
         </div>
 
         {/* FIM Data Container */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg flex flex-col gap-4">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="bg-slate-900 border border-slate-800 rounded-lg md:rounded-xl p-2 md:p-4 shadow-lg flex flex-col gap-3 md:gap-4">
+          <div className="flex flex-col xs:flex-row xs:flex-wrap items-start xs:items-center gap-1 md:gap-2">
             <button
               onClick={async () => {
                 const res = await fetchEvents(currentPage, rangeKey);
                 const sampleSize = Math.min(1000, Number(res?.total_hits) || 1000);
                 await fetchAggregated(sampleSize, rangeKey);
               }}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm text-slate-300 transition-colors border border-slate-700 flex items-center gap-2"
-            >↻ Refresh Data</button>
-            <div className="ml-auto flex items-center gap-2">
-              <span className="text-xs text-slate-500">Range</span>
-              <div className="flex bg-slate-800 rounded-lg p-0.5 border border-slate-700">
+              className="px-2 md:px-4 py-1 md:py-2 bg-slate-800 hover:bg-slate-700 rounded text-xs md:text-sm text-slate-300 transition-colors border border-slate-700 flex items-center gap-1"
+            >↻ Refresh</button>
+            <div className="ml-auto flex items-center gap-1 md:gap-2">
+              <span className="text-xs text-slate-500 hidden sm:inline">Range</span>
+              <div className="flex bg-slate-800 rounded p-0.5 border border-slate-700 gap-0.5">
                {["1h", "24h", "7d", "30d"].map((k) => (
                 <button
                   key={k}
@@ -697,87 +697,87 @@ const FimEvents = ({ agentId = "all" }) => {
                       fetchEvents(1, k);
                     }
                   }}
-                  className={`px-2.5 py-1 text-xs rounded-md ${rangeKey === k ? "bg-sky-600 text-white" : "text-slate-400"}`}
+                  className={`px-1.5 md:px-2.5 py-0.5 md:py-1 text-xs rounded-sm ${rangeKey === k ? "bg-sky-600 text-white" : "text-slate-400"}`}
                 >
-                  Last {k}
+                  {k}
                 </button>
               ))}
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-slate-800/50 border border-slate-700/60 rounded-lg p-3">
-              <div className="text-[10px] text-slate-500 uppercase font-semibold">Filtered Events</div>
-              <div className="text-2xl font-black text-sky-400 mt-1">{derived.total}</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+            <div className="bg-slate-800/50 border border-slate-700/60 rounded p-2 md:p-3">
+              <div className="text-[8px] md:text-[10px] text-slate-500 uppercase font-semibold">Events</div>
+              <div className="text-lg md:text-2xl font-black text-sky-400 mt-0.5 md:mt-1">{derived.total}</div>
             </div>
-            <div className="bg-slate-800/50 border border-slate-700/60 rounded-lg p-3">
-              <div className="text-[10px] text-slate-500 uppercase font-semibold">Event Rate</div>
-              <div className="text-2xl font-black text-white mt-1">{formatRate(derived.eps)}</div>
+            <div className="bg-slate-800/50 border border-slate-700/60 rounded p-2 md:p-3">
+              <div className="text-[8px] md:text-[10px] text-slate-500 uppercase font-semibold">Rate</div>
+              <div className="text-lg md:text-2xl font-black text-white mt-0.5 md:mt-1 truncate text-xs md:text-base">{formatRate(derived.eps)}</div>
             </div>
-            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3">
-              <div className="text-[10px] text-emerald-400 uppercase font-semibold">Event Types</div>
-              <div className="text-2xl font-black text-emerald-300 mt-1">{derived.eventItems.length}</div>
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded p-2 md:p-3">
+              <div className="text-[8px] md:text-[10px] text-emerald-400 uppercase font-semibold">Types</div>
+              <div className="text-lg md:text-2xl font-black text-emerald-300 mt-0.5 md:mt-1">{derived.eventItems.length}</div>
             </div>
-            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
-              <div className="text-[10px] text-amber-400 uppercase font-semibold">Severity Groups</div>
-              <div className="text-2xl font-black text-amber-300 mt-1">{derived.severityItems.length}</div>
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded p-2 md:p-3">
+              <div className="text-[8px] md:text-[10px] text-amber-400 uppercase font-semibold">Severity</div>
+              <div className="text-lg md:text-2xl font-black text-amber-300 mt-0.5 md:mt-1">{derived.severityItems.length}</div>
             </div>
           </div>
 
-          <div className="bg-slate-800/30 border border-slate-800/50 rounded-lg p-4">
-            <div className="flex justify-between items-center mb-4">
-              <div className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                <Activity className="h-4 w-4 text-sky-400" />
-                Event Timeline
+          <div className="bg-slate-800/30 border border-slate-800/50 rounded-lg p-4 md:p-6">
+            <div className="flex justify-between items-center mb-4 md:mb-6 gap-2">
+              <div className="text-xs md:text-sm font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
+                <Activity className="h-3 md:h-4 w-3 md:w-4 text-sky-400" />
+                Timeline
               </div>
               <div className="text-xs text-slate-500">Last {rangeKey}</div>
             </div>
-            <WaveChart data={derived.series} color="#10b981" height={120} rangeKey={rangeKey} />
+            <WaveChart data={derived.series} color="#10b981" height={110} rangeKey={rangeKey} />
           </div>
 
           {/* Frequently Visited Domains - Full Width */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg">
-            <div className="flex justify-between items-center mb-3">
-              <div className="text-sm font-semibold text-slate-300">Frequently Visited Domains</div>
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4 shadow-lg">
+            <div className="flex justify-between items-center mb-2">
+              <div className="text-xs md:text-sm font-semibold text-slate-300">Frequently Visited Domains</div>
               <div className="text-xs text-slate-500">Domain Activity</div>
             </div>
-            <div className="bg-slate-800/30 rounded-lg px-0 py-8 border border-slate-800/50" style={{ minHeight: "700px" }}>
+            <div className="bg-slate-800/30 rounded-lg px-0 py-4 border border-slate-800/50" style={{ minHeight: "280px" }}>
               <DomainBarChart domains={FREQUENTLY_VISITED_DOMAINS} />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
             {/* Kotak 1: Event + Severity Chart (Berdampingan & Centered) */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg flex gap-8 items-center justify-center">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4 shadow-lg flex flex-col md:flex-row gap-4 md:gap-6 items-center justify-center">
               {/* Event Chart */}
-              <div className="flex items-center gap-3">
-                <Donut items={derived.eventItems} size={280} stroke={20} centerLabelTop={derived.total} centerLabelBottom="events" />
-                <div className="w-32"><Legend items={derived.eventItems} /></div>
+              <div className="flex items-center gap-2 md:gap-3">
+                <Donut items={derived.eventItems} size={160} stroke={16} centerLabelTop={derived.total} centerLabelBottom="events" />
+                <div className="w-24 md:w-32 text-xs"><Legend items={derived.eventItems} /></div>
               </div>
               {/* Severity Chart */}
-              <div className="flex items-center gap-3">
-                <Donut items={derived.severityItems} size={280} stroke={20} centerLabelTop={derived.total} centerLabelBottom="severity" />
-                <div className="w-32"><Legend items={derived.severityItems} /></div>
+              <div className="flex items-center gap-2 md:gap-3">
+                <Donut items={derived.severityItems} size={160} stroke={16} centerLabelTop={derived.total} centerLabelBottom="severity" />
+                <div className="w-24 md:w-32 text-xs"><Legend items={derived.severityItems} /></div>
               </div>
             </div>
             {/* Kotak 2: Word Cloud */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg flex flex-col gap-3 items-center justify-center">
-              <div className="w-full text-sm font-semibold text-slate-300">Payload Pattern Cloud</div>
-              <div className="w-full bg-slate-950 border border-slate-800 rounded-lg p-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4 shadow-lg flex flex-col gap-2 items-center justify-center">
+              <div className="w-full text-xs md:text-sm font-semibold text-slate-300">Payload Pattern Cloud</div>
+              <div className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 md:p-4">
                 <PayloadWordCloud words={derived.payloadWords} />
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-lg overflow-hidden">
+        <div className="bg-slate-900 border border-slate-800 rounded-lg md:rounded-xl shadow-lg overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left whitespace-nowrap">
+            <table className="w-full text-xs md:text-sm text-left whitespace-nowrap">
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-800/70">
-                  {["↓ timestamp", "agent.name", "username", "syscheck.path", "syscheck.event", "payload", "severity"].map(h => (
-                    <th key={h} className="px-4 py-3 text-[11px] font-semibold text-slate-400 uppercase">{h}</th>
+                  {["↓ time", "agent", "user", "path", "event", "payload", "severity"].map(h => (
+                    <th key={h} className="px-2 md:px-4 py-2 md:py-3 text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -789,13 +789,13 @@ const FimEvents = ({ agentId = "all" }) => {
                       idx % 2 !== 0 ? "bg-slate-900/60" : ""
                     }`}
                   >
-                    <td className="px-4 py-3 text-slate-500 text-xs">{formatTime(evt.timestamp)}</td>
-                    <td className="px-4 py-3 text-sky-400 font-medium">{evt.agentName}</td>
-                    <td className="px-4 py-3 text-violet-400 font-medium">{evt.username}</td>
-                    <td className="px-4 py-3 text-emerald-400 font-mono text-xs">{evt.syscheckPath}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-2 md:px-4 py-1.5 md:py-3 text-slate-500 text-xs">{formatTime(evt.timestamp)}</td>
+                    <td className="px-2 md:px-4 py-1.5 md:py-3 text-sky-400 font-medium text-xs">{evt.agentName}</td>
+                    <td className="px-2 md:px-4 py-1.5 md:py-3 text-violet-400 font-medium text-xs">{evt.username}</td>
+                    <td className="px-2 md:px-4 py-1.5 md:py-3 text-emerald-400 font-mono text-xs truncate">{evt.syscheckPath}</td>
+                    <td className="px-2 md:px-4 py-1.5 md:py-3">
                       <span
-                        className={`text-xs px-2 py-0.5 rounded border ${
+                        className={`text-xs px-1 md:px-2 py-0.5 rounded border ${
                           evt.syscheckEvent === "deleted"
                             ? "text-red-400 bg-red-900/30"
                             : "text-green-400 bg-green-900/30"
@@ -804,17 +804,17 @@ const FimEvents = ({ agentId = "all" }) => {
                         {evt.syscheckEvent}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-slate-300 max-w-md">
+                    <td className="px-2 md:px-4 py-1.5 md:py-3 text-slate-300 max-w-xs md:max-w-md text-xs">
                       {(() => {
                         const diffData = evt.fileDiff || evt.file_diff;
 
                         if (diffData) {
                           return (
                             <div className="mb-2">
-                              <div className="text-[9px] text-sky-500 uppercase font-bold mb-1 tracking-tight">
-                                Changes Detail:
+                              <div className="text-[8px] md:text-[9px] text-sky-500 uppercase font-bold mb-1 tracking-tight">
+                                Changes:
                               </div>
-                              <pre className="p-2 bg-black/60 text-[10px] rounded border border-slate-700/50 font-mono text-emerald-400 overflow-x-auto leading-normal whitespace-pre-wrap">
+                              <pre className="p-1 md:p-2 bg-black/60 text-[8px] md:text-[10px] rounded border border-slate-700/50 font-mono text-emerald-400 overflow-x-auto leading-normal whitespace-pre-wrap">
                                 {String(diffData)
                                   .replace(/\\n/g, "\n")
                                   .replace(/\\u003e/g, "→")
@@ -829,61 +829,68 @@ const FimEvents = ({ agentId = "all" }) => {
                         {evt.ruleDescription || evt.rule_description}
                       </div>
                     </td>
-                    <td className="px-4 py-3">{renderSeverityBadge(evt.ruleLevel)}</td>
+                    <td className="px-2 md:px-4 py-1.5 md:py-3">{renderSeverityBadge(evt.ruleLevel)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
             {/* --- TOMBOL NAVIGASI --- */}
-            <div className="p-4 border-t border-slate-800 flex items-center justify-between bg-slate-900/50 rounded-b-xl">
+            <div className="p-2 md:p-4 border-t border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-2 md:gap-0 bg-slate-900/50 rounded-b-lg md:rounded-b-xl">
               <div className="text-xs text-slate-500 font-mono">
-                SHOWING{" "}
+                <span className="hidden md:inline">SHOWING </span>
                 <span className="text-sky-400 font-bold">
                   {totalHits === 0 ? 0 : (currentPage - 1) * pageSize + 1}
                 </span>
-                {" - "}
+                <span className="hidden md:inline">{" - "}</span>
+                <span className="md:hidden">-</span>
                 <span className="text-sky-400 font-bold">
                   {Math.min(currentPage * pageSize, totalHits)}
                 </span>
-                {" OF "}
-                <span className="text-sky-400 font-bold">{totalHits}</span> EVENTS
+                <span className="hidden md:inline">{" OF "}</span>
+                <span className="md:hidden"> / </span>
+                <span className="text-sky-400 font-bold">{totalHits}</span>
+                <span className="hidden md:inline"> EVENTS</span>
               </div>
 
-              <div className="flex gap-2 items-center">
+              <div className="flex flex-wrap gap-1 md:gap-2 items-center">
                 <button
                   disabled={currentPage === 1 || loading}
                   onClick={() => setCurrentPage(1)}
-                  className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs font-bold hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
+                  className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
                 >
-                  FIRST
+                  <span className="hidden md:inline">FIRST</span>
+                  <span className="md:hidden">«</span>
                 </button>
 
                 <button
                   disabled={currentPage === 1 || loading}
                   onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                  className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs font-bold hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
+                  className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
                 >
-                  ← PREVIOUS
+                  <span className="hidden md:inline">← PREV</span>
+                  <span className="md:hidden">‹</span>
                 </button>
 
-                <span className="text-xs font-black text-slate-400 px-2">
-                  PAGE <span className="text-white">{currentPage}</span> / {totalPages}
+                <span className="text-xs font-black text-slate-400 px-1 md:px-2">
+                  <span className="hidden md:inline">PAGE </span><span className="text-white">{currentPage}</span> / {totalPages}
                 </span>
 
                 <button
                   disabled={currentPage === totalPages || loading}
                   onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                  className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs font-bold hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
+                  className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
                 >
-                  NEXT →
+                  <span className="hidden md:inline">NEXT →</span>
+                  <span className="md:hidden">›</span>
                 </button>
 
                 <button
                   disabled={currentPage === totalPages || loading}
                   onClick={() => setCurrentPage(totalPages)}
-                  className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs font-bold hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
+                  className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
                 >
-                  LAST
+                  <span className="hidden md:inline">LAST</span>
+                  <span className="md:hidden">»</span>
                 </button>
               </div>
             </div>

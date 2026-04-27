@@ -2,8 +2,12 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import { AuthProvider } from "./context/AuthContext";
 import PrivateRoute from "./components/PrivateRoute";
 import LoginPage from "./pages/LoginPage.jsx";
+import MainDashboard from "./pages/MainDashboard.jsx";
+import MlDashboard from "./pages/MlDashboard.jsx";
 import FimEvents from "./pages/FimEvents.jsx";
-import ThreadHuntingEvents from "./pages/ThreadHuntingEvents.jsx";
+import AttackDashboard from "./pages/AttackDashboard.jsx";
+import FileSecurityScanner from "./pages/FileSecurityScanner.jsx";
+import UserManagement from "./pages/UserManagement.jsx";
 
 function App() {
   return (
@@ -16,15 +20,47 @@ function App() {
             path="/"
             element={
               <PrivateRoute>
+                <MainDashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/ml-dashboard"
+            element={
+              <PrivateRoute>
+                <MlDashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/fim-events"
+            element={
+              <PrivateRoute>
                 <FimEvents />
               </PrivateRoute>
             }
           />
           <Route
-            path="/thread-hunting"
+            path="/attack-dashboard"
             element={
               <PrivateRoute>
-                <ThreadHuntingEvents />
+                <AttackDashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/file-security"
+            element={
+              <PrivateRoute>
+                <FileSecurityScanner />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/users"
+            element={
+              <PrivateRoute>
+                <UserManagement />
               </PrivateRoute>
             }
           />

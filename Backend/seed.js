@@ -46,6 +46,13 @@ const seedDatabase = async () => {
         role: "admin",
         status: "active",
       },
+      {
+        name: "Admin Wazuh",
+        email: "admin@wazuh.com",
+        password: adminPassword,
+        role: "admin",
+        status: "active",
+      },
     ];
 
     const createdAdmins = [];
