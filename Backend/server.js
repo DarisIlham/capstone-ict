@@ -6,7 +6,6 @@ import https from "https";
 import cors from "cors";
 import { sendAlert } from "./telegram.js";
 import os from "os";
-import { Kafka } from "kafkajs";
 import { Pool } from "pg";
 import connectDB from "./config/dbLogin.js";
 import authRouter from "./routes/auth.routes.js";
@@ -31,73 +30,8 @@ app.use("/api/notifications", notificationRouter);
 
 const ENABLE_DB = process.env.ENABLE_DB !== "0";
 
-// Konfigurasi Kafka
-const kafka = new Kafka({
-  clientId: 'wazuh-monitor',
-  brokers: [process.env.KAFKA_BROKER] // Alamat Kafka lokal kamu
-});
-const consumer = kafka.consumer({ groupId: 'wazuh-group' });
-
-// Fungsi untuk menjalankan Kafka Consumer
-const runKafka = async () => {
-  await consumer.connect();
-  await consumer.subscribe({ topic: 'test-topic', fromBeginning: false });
-
-  await consumer.run({
-    eachMessage: async ({ message }) => {
-      try {
-        // 1. Ambil data mentah dari Kafka
-        const source = JSON.parse(message.value.toString());
-
-        // 🛑 TAMBAHKAN FILTER INI:
-        // Jika log bukan berasal dari modul FIM (syscheck), abaikan dan jangan diproses
-        if (!source.syscheck) {
-          return;
-        }
-
-        // 2. Ekstraksi Username
-        const auditUser = source.syscheck?.audit?.login_user?.name;
-        const fileOwner = source.syscheck?.uname_after || source.syscheck?.uname;
-        const username = auditUser || fileOwner || "-";
-
-        // 3. MAPPING FORMATED
-        const formattedLog = {
-          // Pastikan menggunakan ID asli untuk menghindari duplikasi
-          id: source.id || source._id || Math.random().toString(),
-          timestamp: source["@timestamp"] || new Date().toISOString(),
-          agentName: source.agent?.name || "-",
-          username: username,
-          syscheckPath: source.syscheck?.path || "-",
-          syscheckEvent: source.syscheck?.event || "-",
-          ruleDescription: source.rule?.description || "-",
-          ruleLevel: source.rule?.level ?? 0,
-          ruleId: source.rule?.id ?? "-",
-          fileDiff: source.syscheck?.diff || null,
-        };
-
-        // 4. Kirim ke Frontend lewat Polling (Socket.IO dihapus)
-
-        if (Number(formattedLog.ruleLevel) >= 1) {
-          sendAlert(formattedLog).catch(err => console.error("Gagal kirim Telegram:", err.message));
-        }
-
-        // Terminal sekarang hanya mencetak aktivitas file yang valid
-        console.log(`✅ Streaming Formatted: ${formattedLog.syscheckEvent} pada ${formattedLog.syscheckPath}`);
-
-        // 5. Simpan ke Database secara otomatis
-        if (DB_READY) {
-          saveToDatabase(formattedLog).catch(err =>
-            console.error("Gagal simpan Kafka log ke DB:", err.message)
-          );
-        }
-      } catch (err) {
-        console.error("Kesalahan parsing pesan Kafka:", err.message);
-      }
-    },
-  });
-};
-
-runKafka().catch(console.error);
+// Kafka was removed: real-time consumer disabled.
+// Previously this section contained kafkajs consumer setup and run logic.
 
 // =======================
 // KONFIGURASI DATABASE (DIGABUNG DI SINI)
