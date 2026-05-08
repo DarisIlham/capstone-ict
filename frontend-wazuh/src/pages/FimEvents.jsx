@@ -16,6 +16,16 @@ const formatBucketLabel = (ms, rangeKey) => {
   return d.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
 };
 
+const formatDetailedTimestamp = (timestamp) =>
+  new Date(timestamp).toLocaleString("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
 const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey }) => {
   const [selectedPoint, setSelectedPoint] = useState(null);
   const width = 800;
@@ -59,12 +69,6 @@ const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey }) => {
 
   const tickCount = clamp(Math.floor(innerW / 160), 3, 7);
   const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
-
-  const formatPointTime = (timestamp) =>
-    new Date(timestamp).toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
 
   return (
     <div className="relative" onMouseLeave={() => setSelectedPoint(null)}>
@@ -144,7 +148,7 @@ const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey }) => {
           }}
         >
           <div className="font-semibold text-white">{selectedPoint.value} events</div>
-          <div className="mt-1 text-slate-400">{formatPointTime(selectedPoint.time)}</div>
+          <div className="mt-1 text-slate-400">{formatDetailedTimestamp(selectedPoint.time)}</div>
         </div>
       )}
     </div>
@@ -361,9 +365,11 @@ const PayloadWordCloud = ({ words }) => {
 const FimEvents = ({ agentId = "all" }) => {
   const [events, setEvents] = useState([]);
   const [aggregatedEvents, setAggregatedEvents] = useState([]);
+  const [domainData, setDomainData] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [rangeKey, setRangeKey] = useState("30d");
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   const USE_STATIC = false;
 
@@ -390,21 +396,6 @@ const FimEvents = ({ agentId = "all" }) => {
       ruleDescription: "Deleted file detected",
       ruleLevel: 8,
     },
-  ];
-
-  const FREQUENTLY_VISITED_DOMAINS = [
-    { name: "github.com", count: 342 },
-    { name: "stackoverflow.com", count: 287 },
-    { name: "npmjs.com", count: 256 },
-    { name: "react.dev", count: 198 },
-    { name: "tailwindcss.com", count: 165 },
-    { name: "api.github.com", count: 142 },
-    { name: "cdn.jsdelivr.net", count: 128 },
-    { name: "fonts.googleapis.com", count: 95 },
-    { name: "www.google.com", count: 87 },
-    { name: "cloudflare.com", count: 76 },
-    { name: "www.youtube.com", count: 64 },
-    { name: "regex101.com", count: 58 },
   ];
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -505,42 +496,85 @@ const FimEvents = ({ agentId = "all" }) => {
     }
   }, [agentId, rangeKey]);
 
+  const fetchDomains = useCallback(async (rk) => {
+    try {
+      const effectiveRange = rk || rangeKey;
+      const { start, end } = getRangeWindow(effectiveRange);
+
+      const baseEndpoint =
+        agentId === "all"
+          ? `${API_BASE_URL}/api/fim/domains`
+          : `${API_BASE_URL}/api/fim/${agentId}/domains`;
+
+      const endpoint =
+        `${baseEndpoint}?size=1000` +
+        `&range=${encodeURIComponent(effectiveRange)}` +
+        `&start=${encodeURIComponent(start)}` +
+        `&end=${encodeURIComponent(end)}`;
+
+      const response = await fetch(endpoint);
+      if (!response.ok) throw new Error(`API Error ${response.status}`);
+
+      const result = await response.json();
+      if (!result.success) throw new Error(result.message || "Gagal mengambil data domain");
+
+      setDomainData(Array.isArray(result.data) ? result.data : []);
+      return result;
+    } catch (err) {
+      console.error("Domain fetch error:", err.message);
+      setDomainData([]);
+      return null;
+    }
+  }, [agentId, rangeKey]);
+
+  const refreshAllData = useCallback(async (page = 1, rk) => {
+    const result = await fetchEvents(page, rk);
+    const sampleSize = Math.min(1000, Number(result?.total_hits) || 1000);
+
+    await Promise.all([
+      fetchAggregated(sampleSize, rk),
+      fetchDomains(rk),
+    ]);
+
+    if (result) {
+      setLastUpdated(new Date().toISOString());
+    }
+
+    return result;
+  }, [fetchAggregated, fetchDomains, fetchEvents]);
+
   useEffect(() => {
     if (!USE_STATIC) return;
     setEvents(MOCK_EVENTS);
     setAggregatedEvents(MOCK_EVENTS);
+    setDomainData([]);
     setTotalHits(MOCK_EVENTS.length);
     setTotalPages(1);
     setCurrentPage(1);
+    setLastUpdated(new Date().toISOString());
     setLoading(false);
   }, []);
 
   useEffect(() => {
     if (USE_STATIC) return;
-    setCurrentPage(1);
     let cancelled = false;
+
     (async () => {
-      const res = await fetchEvents(1, rangeKey);
+      const targetPage = currentPage > 1 ? currentPage : 1;
+      await refreshAllData(targetPage, rangeKey);
       if (cancelled) return;
-      const sampleSize = Math.min(1000, Number(res?.total_hits) || 1000);
-      await fetchAggregated(sampleSize, rangeKey);
     })();
     return () => { cancelled = true; };
-  }, [agentId, rangeKey, fetchEvents, fetchAggregated]);
-
-  useEffect(() => {
-    if (USE_STATIC) return;
-    fetchEvents(currentPage, rangeKey);
-  }, [currentPage, fetchEvents, rangeKey]);
+  }, [agentId, currentPage, rangeKey, refreshAllData]);
 
   useEffect(() => {
     if (USE_STATIC) return;
     const interval = setInterval(() => {
-      fetchEvents(currentPage, rangeKey);
+      refreshAllData(currentPage, rangeKey);
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [currentPage, fetchEvents, rangeKey]);
+  }, [currentPage, rangeKey, refreshAllData]);
 
   const now = Date.now();
 
@@ -558,6 +592,18 @@ const FimEvents = ({ agentId = "all" }) => {
     const perHour = eps * 3600;
     if (perHour >= 0.01) return `${perHour.toFixed(2)} / hour`;
     return `${eps.toExponential(2)} / sec`;
+  };
+
+  const formatLiveTimestamp = (isoString) => {
+    if (!isoString) return "-";
+    return new Date(isoString).toLocaleString("en-US", {
+      month: "short",
+      day: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
   };
 
   const renderSeverityBadge = (level) => {
@@ -678,9 +724,7 @@ const FimEvents = ({ agentId = "all" }) => {
           <div className="flex flex-col xs:flex-row xs:flex-wrap items-start xs:items-center gap-1 md:gap-2">
             <button
               onClick={async () => {
-                const res = await fetchEvents(currentPage, rangeKey);
-                const sampleSize = Math.min(1000, Number(res?.total_hits) || 1000);
-                await fetchAggregated(sampleSize, rangeKey);
+                await refreshAllData(currentPage, rangeKey);
               }}
               className="px-2 md:px-4 py-1 md:py-2 bg-slate-800 hover:bg-slate-700 rounded text-xs md:text-sm text-slate-300 transition-colors border border-slate-700 flex items-center gap-1"
             >↻ Refresh</button>
@@ -694,7 +738,6 @@ const FimEvents = ({ agentId = "all" }) => {
                     if (rangeKey !== k) {
                       setRangeKey(k);
                       setCurrentPage(1);
-                      fetchEvents(1, k);
                     }
                   }}
                   className={`px-1.5 md:px-2.5 py-0.5 md:py-1 text-xs rounded-sm ${rangeKey === k ? "bg-sky-600 text-white" : "text-slate-400"}`}
@@ -731,7 +774,10 @@ const FimEvents = ({ agentId = "all" }) => {
                 <Activity className="h-3 md:h-4 w-3 md:w-4 text-sky-400" />
                 Timeline
               </div>
-              <div className="text-xs text-slate-500">Last {rangeKey}</div>
+              <div className="text-right">
+                <div className="text-xs text-slate-500">Last {rangeKey}</div>
+                <div className="text-[11px] text-slate-600">Updated {formatLiveTimestamp(lastUpdated)}</div>
+              </div>
             </div>
             <WaveChart data={derived.series} color="#10b981" height={110} rangeKey={rangeKey} />
           </div>
@@ -740,10 +786,9 @@ const FimEvents = ({ agentId = "all" }) => {
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4 shadow-lg">
             <div className="flex justify-between items-center mb-2">
               <div className="text-xs md:text-sm font-semibold text-slate-300">Frequently Visited Domains</div>
-              <div className="text-xs text-slate-500">Domain Activity</div>
             </div>
             <div className="bg-slate-800/30 rounded-lg px-0 py-4 border border-slate-800/50" style={{ minHeight: "280px" }}>
-              <DomainBarChart domains={FREQUENTLY_VISITED_DOMAINS} />
+              <DomainBarChart domains={domainData} />
             </div>
           </div>
 
@@ -752,12 +797,12 @@ const FimEvents = ({ agentId = "all" }) => {
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4 shadow-lg flex flex-col md:flex-row gap-4 md:gap-6 items-center justify-center">
               {/* Event Chart */}
               <div className="flex items-center gap-2 md:gap-3">
-                <Donut items={derived.eventItems} size={160} stroke={16} centerLabelTop={derived.total} centerLabelBottom="events" />
+                <Donut items={derived.eventItems} size={280} stroke={24} centerLabelTop={derived.total} centerLabelBottom="events" />
                 <div className="w-24 md:w-32 text-xs"><Legend items={derived.eventItems} /></div>
               </div>
               {/* Severity Chart */}
               <div className="flex items-center gap-2 md:gap-3">
-                <Donut items={derived.severityItems} size={160} stroke={16} centerLabelTop={derived.total} centerLabelBottom="severity" />
+                <Donut items={derived.severityItems} size={280} stroke={24} centerLabelTop={derived.total} centerLabelBottom="severity" />
                 <div className="w-24 md:w-32 text-xs"><Legend items={derived.severityItems} /></div>
               </div>
             </div>

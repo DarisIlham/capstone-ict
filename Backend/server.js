@@ -238,9 +238,191 @@ function mapWazuhHit(hit) {
   };
 }
 
+function normalizeDomainCandidate(value) {
+  if (!value) return null;
+
+  let domain = String(value).trim().toLowerCase();
+  if (!domain) return null;
+
+  domain = domain
+    .replace(/^[a-z]+:\/\//i, "")
+    .replace(/^\/\//, "")
+    .split("/")[0]
+    .split("?")[0]
+    .split("#")[0]
+    .replace(/:\d+$/, "")
+    .replace(/\.$/, "");
+
+  if (!domain || domain === "localhost") return null;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(domain)) return null;
+  if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(domain)) return null;
+
+  return domain;
+}
+
+function extractDomainsFromText(input) {
+  const text = String(input || "");
+  if (!text) return [];
+
+  const domains = new Set();
+  const matches = text.match(
+    /\b(?:https?:\/\/|wss?:\/\/|ftp:\/\/|www\.)[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:\/[^\s"'<>]*)?/gi
+  ) || [];
+
+  matches.forEach((match) => {
+    const normalized = normalizeDomainCandidate(match);
+    if (normalized) domains.add(normalized);
+  });
+
+  return Array.from(domains);
+}
+
+function collectDomainCandidates(source) {
+  return [
+    source?.data?.url,
+    source?.data?.domain,
+    source?.data?.hostname,
+    source?.url?.full,
+    source?.url?.original,
+    source?.url?.domain,
+    source?.http?.host,
+    source?.destination?.domain,
+    source?.dns?.question?.name,
+    source?.extracted_urls,
+    source?.full_log,
+    source?.message,
+  ];
+}
+
+function extractDomainsFromHit(hit) {
+  const source = hit?._source || {};
+  const candidates = collectDomainCandidates(source);
+  const domains = new Set();
+
+  candidates.forEach((candidate) => {
+    if (Array.isArray(candidate)) {
+      candidate.forEach((item) => {
+        const normalized = normalizeDomainCandidate(item);
+        if (normalized) domains.add(normalized);
+
+        extractDomainsFromText(item).forEach((domain) => domains.add(domain));
+      });
+      return;
+    }
+
+    const normalized = normalizeDomainCandidate(candidate);
+    if (normalized) domains.add(normalized);
+
+    extractDomainsFromText(candidate).forEach((domain) => domains.add(domain));
+  });
+
+  return Array.from(domains);
+}
+
 // Register two routes (one for all, one for specific agent) to avoid optional-param parsing issues
 app.get("/api/events", handleEventsRequest);
 app.get("/api/events/:agent_id", handleEventsRequest);
+
+async function handleDomainSummaryRequest(req, res) {
+  try {
+    const agent_id_param = req.params.agent_id;
+    const agent_id = agent_id_param === "all" || !agent_id_param ? undefined : agent_id_param;
+    const rangeKey = String(req.query.range || "30d").trim();
+    const size = Math.min(Math.max(parseInt(req.query.size, 10) || 1000, 1), 5000);
+    let { start, end } = req.query;
+
+    if (!start && !end) {
+      const preset = buildPresetRange(rangeKey);
+      start = preset.start;
+      end = preset.end;
+    }
+
+    const filter = [];
+    if (agent_id) filter.push({ term: { "agent.id": String(agent_id) } });
+
+    const timeRange = buildTimeRange(start, end);
+    if (timeRange) filter.push(timeRange);
+
+    const requestBody = {
+      track_total_hits: false,
+      query: {
+        bool: {
+          must: [{ match: { "rule.groups": "syscheck" } }],
+          should: [
+            { exists: { field: "url.domain" } },
+            { exists: { field: "url.full" } },
+            { exists: { field: "data.url" } },
+            { exists: { field: "data.domain" } },
+            { exists: { field: "http.host" } },
+            { exists: { field: "destination.domain" } },
+            { exists: { field: "dns.question.name" } },
+            { exists: { field: "extracted_urls" } },
+            { wildcard: { "full_log": { value: "*http*", case_insensitive: true } } },
+            { wildcard: { "message": { value: "*http*", case_insensitive: true } } },
+          ],
+          minimum_should_match: 1,
+          filter,
+        },
+      },
+      sort: [{ "@timestamp": { order: "desc", unmapped_type: "date" } }],
+      size,
+      _source: [
+        "@timestamp",
+        "data.url",
+        "data.domain",
+        "data.hostname",
+        "url.full",
+        "url.original",
+        "url.domain",
+        "http.host",
+        "destination.domain",
+        "dns.question.name",
+        "extracted_urls",
+        "full_log",
+        "message",
+      ],
+    };
+
+    const response = await axios.post(
+      `${INDEXER_URL}/wazuh-alerts-*/_search`,
+      requestBody,
+      {
+        auth: { username: INDEXER_USER, password: INDEXER_PASS },
+        httpsAgent,
+      }
+    );
+
+    const hits = response?.data?.hits?.hits || [];
+    const counts = new Map();
+
+    hits.forEach((hit) => {
+      extractDomainsFromHit(hit).forEach((domain) => {
+        counts.set(domain, (counts.get(domain) || 0) + 1);
+      });
+    });
+
+    const domains = Array.from(counts.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 12);
+
+    return res.json({
+      success: true,
+      data: domains,
+      total: domains.length,
+      applied_range: { rangeKey, start, end },
+    });
+  } catch (error) {
+    console.error("Domain summary error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+}
+
+app.get("/api/fim/domains", handleDomainSummaryRequest);
+app.get("/api/fim/:agent_id/domains", handleDomainSummaryRequest);
 
 // =======================
 // 3) Endpoint ambil riwayat dari DB

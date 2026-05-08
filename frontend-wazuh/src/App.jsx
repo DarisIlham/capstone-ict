@@ -8,6 +8,7 @@ import FimEvents from "./pages/FimEvents.jsx";
 import AttackDashboard from "./pages/AttackDashboard.jsx";
 import FileSecurityScanner from "./pages/FileSecurityScanner.jsx";
 import UserManagement from "./pages/UserManagement.jsx";
+import WebDefacement from "./pages/WebDefacement.jsx";
 
 function App() {
   return (
@@ -53,6 +54,14 @@ function App() {
             element={
               <PrivateRoute>
                 <FileSecurityScanner />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/web-defacement"
+            element={
+              <PrivateRoute>
+                <WebDefacement />
               </PrivateRoute>
             }
           />

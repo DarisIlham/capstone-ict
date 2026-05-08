@@ -8,6 +8,7 @@ import es from "./config/elasticsearch.js";
 import mlRoutes from "./routes/mlRoutes.js";
 import fileScanRoutes from "./routes/fileScanRoutes.js";
 import linuxCommandRoutes from "./routes/linuxCommandRoutes.js";
+import webDefacementRoutes from "./routes/webDefacementRoutes.js";
 
 import asyncHandler from "./utils/asyncHandler.js";
 import { unwrapEsResponse } from "./utils/esHelpers.js";
@@ -50,6 +51,7 @@ app.get(
 app.use("/api/ml", mlRoutes);
 app.use("/api/file-scans", fileScanRoutes);
 app.use("/api/linux-commands", linuxCommandRoutes);
+app.use("/api/web-defacement", webDefacementRoutes);
 
 // 404 Handler
 // NOTE: 404 and global error handlers are intentionally left to be registered

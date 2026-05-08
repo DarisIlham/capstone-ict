@@ -1,6 +1,10 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import {
+  createEmptyDashboardData,
+  getMainDashboardData,
+} from "../services/dashboardApi";
 import {
   Activity,
   AlertTriangle,
@@ -40,7 +44,57 @@ const RangeFilter = ({ rangeKey, onRangeChange }) => (
 // SVG Chart Components (Shared)
 // ========================================
 
-const WaveChart = ({ data, color = "#38bdf8", height = 180 }) => {
+const clamp = (n, a, b) => Math.min(Math.max(n, a), b);
+
+const formatBucketLabel = (ms, rangeKey) => {
+  const d = new Date(ms);
+  if (rangeKey === "1h") {
+    return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  }
+  if (rangeKey === "24h") {
+    return d.toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit" });
+  }
+  if (rangeKey === "7d") {
+    return d.toLocaleString("en-US", { weekday: "short", month: "short", day: "2-digit", hour: "2-digit" });
+  }
+  return d.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
+};
+
+const formatPointTimestamp = (timestamp, rangeKey) => {
+  const date = new Date(timestamp);
+
+  if (rangeKey === "1h") {
+    return date.toLocaleString("en-US", {
+      month: "short",
+      day: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  }
+
+  if (rangeKey === "24h" || rangeKey === "7d") {
+    return date.toLocaleString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const WaveChart = ({ data, color = "#38bdf8", height = 180, rangeKey = "24h" }) => {
   const [selectedPoint, setSelectedPoint] = useState(null);
   const width = 1000;
   const padding = { l: 28, r: 10, t: 8, b: 24 };
@@ -82,11 +136,8 @@ const WaveChart = ({ data, color = "#38bdf8", height = 180 }) => {
     }
   }
 
-  const formatPointTime = (timestamp) =>
-    new Date(timestamp).toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  const tickCount = clamp(Math.floor(innerW / 150), 3, 7);
+  const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
 
   return (
     <div className="relative" onMouseLeave={() => setSelectedPoint(null)}>
@@ -142,6 +193,31 @@ const WaveChart = ({ data, color = "#38bdf8", height = 180 }) => {
             </g>
           );
         })}
+        {data.map((d, i) => {
+          if (i % tickEvery !== 0) return null;
+          const x = padding.l + i * pointSpacing;
+
+          return (
+            <g key={`tick-${d.t}`}>
+              <line
+                x1={x}
+                y1={padding.t + innerH}
+                x2={x}
+                y2={padding.t + innerH + 4}
+                stroke="#334155"
+              />
+              <text
+                x={x}
+                y={padding.t + innerH + 16}
+                textAnchor={i === 0 ? "start" : i >= data.length - tickEvery ? "end" : "middle"}
+                fontSize="9"
+                fill="#64748b"
+              >
+                {formatBucketLabel(d.t, rangeKey)}
+              </text>
+            </g>
+          );
+        })}
       </svg>
 
       {selectedPoint && (
@@ -154,7 +230,7 @@ const WaveChart = ({ data, color = "#38bdf8", height = 180 }) => {
           }}
         >
           <div className="font-semibold text-white">{selectedPoint.value} events</div>
-          <div className="mt-1 text-slate-400">{formatPointTime(selectedPoint.time)}</div>
+          <div className="mt-1 text-slate-400">{formatPointTimestamp(selectedPoint.time, rangeKey)}</div>
         </div>
       )}
     </div>
@@ -225,6 +301,14 @@ const Legend = ({ items }) => (
 );
 
 const CompactBarChart = ({ items }) => {
+  if (!items || items.length === 0) {
+    return (
+      <div className="flex min-h-32 items-center justify-center text-sm text-slate-500">
+        No active user data
+      </div>
+    );
+  }
+
   const maxValue = Math.max(...items.map((d) => d.value), 1);
 
   return (
@@ -303,87 +387,11 @@ const DomainBarChart = ({ domains }) => {
   );
 };
 
-// ========================================
-// MOCK DATA GENERATOR
-// ========================================
-const generateMockData = () => {
-  const now = Date.now();
-
-  // Command timeline (Attack data)
-  const commandEvents = Array.from({ length: 24 }, (_, i) => ({
-    t: now - (23 - i) * 3600000,
-    v: Math.floor(Math.random() * 30) + 5,
-  }));
-
-  // File detections timeline
-  const fileEvents = Array.from({ length: 24 }, (_, i) => ({
-    t: now - (23 - i) * 3600000,
-    v: Math.floor(Math.random() * 12) + 2,
-  }));
-
-  // FIM events timeline
-  const fimEvents = Array.from({ length: 24 }, (_, i) => ({
-    t: now - (23 - i) * 3600000,
-    v: Math.floor(Math.random() * 50) + 10,
-  }));
-
-  // ML detections timeline
-  const mlEvents = Array.from({ length: 24 }, (_, i) => ({
-    t: now - (23 - i) * 3600000,
-    v: Math.floor(Math.random() * 18) + 4,
-  }));
-
-  // Users data
-  const users = ["root", "agent4", "www-data", "postgres", "mysql", "ubuntu"];
-  const userData = users.map((user) => ({
-    label: user,
-    value: Math.floor(Math.random() * 100) + 10,
-    color: ["#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e", "#10b981"][users.indexOf(user)],
-  }));
-
-  // Domains/Hosts data
-  const domains = [
-    { name: "linux-prod-01", count: Math.floor(Math.random() * 100) + 50 },
-    { name: "linux-dev-02", count: Math.floor(Math.random() * 80) + 40 },
-    { name: "linux-web-03", count: Math.floor(Math.random() * 60) + 30 },
-    { name: "linux-db-04", count: Math.floor(Math.random() * 50) + 25 },
-    { name: "linux-app-05", count: Math.floor(Math.random() * 40) + 15 },
-  ];
-
-  // Risk distribution
-  const riskDistribution = [
-    { label: "Critical", value: Math.floor(Math.random() * 20) + 5, color: "#ef4444" },
-    { label: "High", value: Math.floor(Math.random() * 30) + 10, color: "#f97316" },
-    { label: "Medium", value: Math.floor(Math.random() * 40) + 20, color: "#eab308" },
-    { label: "Low", value: Math.floor(Math.random() * 50) + 25, color: "#84cc16" },
-  ];
-
-  // Threat types
-  const threatTypes = [
-    { label: "Suspicious Commands", value: 45, color: "#ef4444" },
-    { label: "Malicious Files", value: 32, color: "#f97316" },
-    { label: "File Modifications", value: 28, color: "#eab308" },
-    { label: "Unusual Access", value: 19, color: "#a78bfa" },
-  ];
-
-  return {
-    commandEvents,
-    fileEvents,
-    fimEvents,
-    mlEvents,
-    userRanking: userData,
-    hostData: domains,
-    riskDistribution,
-    threatTypes,
-    stats: {
-      totalAttacks: 245,
-      totalThreats: 98,
-      fileScanned: 287,
-      fimEvents: 1243,
-      suspiciousActivities: 67,
-      avgRiskScore: 7.2,
-    },
-  };
+const RANGE_LABELS = {
+  "1h": "1 Hour",
+  "24h": "24 Hours",
+  "7d": "7 Days",
+  "30d": "30 Days",
 };
 
 // ========================================
@@ -391,15 +399,71 @@ const generateMockData = () => {
 // ========================================
 export default function MainDashboard() {
   const navigate = useNavigate();
+  const [rangeKey, setRangeKey] = useState("30d");
+  const [dashboardData, setDashboardData] = useState(() => createEmptyDashboardData("30d"));
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [rangeKey, setRangeKey] = useState("24h");
-  const mockData = useMemo(() => generateMockData(), []);
+  const [loadError, setLoadError] = useState("");
+
+  const loadDashboardData = useCallback(async (asRefresh = false) => {
+    if (asRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
+    setLoadError("");
+
+    try {
+      const nextData = await getMainDashboardData(rangeKey);
+      setDashboardData(nextData);
+    } catch (error) {
+      console.error(error);
+      setLoadError(error.message || "Failed to load dashboard data");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [rangeKey]);
+
+  useEffect(() => {
+    loadDashboardData(false);
+
+    const interval = setInterval(() => {
+      loadDashboardData(true);
+    }, 60_000);
+
+    return () => clearInterval(interval);
+  }, [loadDashboardData]);
 
   const handleRefresh = async () => {
-    setRefreshing(true);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setRefreshing(false);
+    await loadDashboardData(true);
   };
+
+  const formatInteger = (value) =>
+    new Intl.NumberFormat("en-US").format(Number(value || 0));
+  const formatDecimal = (value, digits = 1) =>
+    Number(value || 0).toFixed(digits);
+  const selectedRangeLabel = RANGE_LABELS[rangeKey] || rangeKey;
+
+  if (loading && !dashboardData.lastUpdated) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-sky-400 gap-3">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-400"></div>
+        <div className="text-sm font-medium">Loading main dashboard...</div>
+      </div>
+    );
+  }
+
+  if (loadError && !dashboardData.lastUpdated) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
+        <div className="max-w-lg rounded-xl border border-red-500/40 bg-red-500/10 px-6 py-4 text-sm text-red-200">
+          Failed to load dashboard data: {loadError}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans">
@@ -415,25 +479,52 @@ export default function MainDashboard() {
                 Security Operations Dashboard
               </h1>
               <p className="text-xs text-slate-400 mt-1">Real-time monitoring & threat detection across all systems</p>
+              {dashboardData.lastUpdated && (
+                <p className="text-[11px] text-slate-500 mt-2">
+                  Last sync:{" "}
+                  {new Date(dashboardData.lastUpdated).toLocaleTimeString("en-US", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })}
+                </p>
+              )}
             </div>
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="disabled:opacity-50 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm text-slate-400 transition-colors border border-slate-700 flex items-center gap-2 w-fit"
-            >
-              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-              Refresh
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <RangeFilter rangeKey={rangeKey} onRangeChange={setRangeKey} />
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing || loading}
+                className="disabled:opacity-50 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm text-slate-400 transition-colors border border-slate-700 flex items-center gap-2 w-fit"
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshing || loading ? "animate-spin" : ""}`} />
+                Refresh
+              </button>
+            </div>
           </div>
         </div>
+
+        {loadError && (
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            {loadError}
+          </div>
+        )}
+
+        {dashboardData.warnings.length > 0 && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+            Partial data loaded. {dashboardData.warnings.join(" | ")}
+          </div>
+        )}
 
         {/* KPI Cards Row 1 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 hover:border-slate-700 transition-colors">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-xs text-slate-500 uppercase font-semibold">Total Attacks</div>
-                <div className="text-2xl md:text-3xl font-black text-red-400 mt-2">{mockData.stats.totalAttacks}</div>
+                <div className="text-xs text-slate-500 uppercase font-semibold">Total Commands</div>
+                <div className="text-2xl md:text-3xl font-black text-red-400 mt-2">
+                  {loading ? "..." : formatInteger(dashboardData.stats.totalAttacks)}
+                </div>
               </div>
               <Terminal className="h-8 w-8 text-red-500/30" />
             </div>
@@ -443,7 +534,9 @@ export default function MainDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xs text-slate-500 uppercase font-semibold">Threats Detected</div>
-                <div className="text-2xl md:text-3xl font-black text-orange-400 mt-2">{mockData.stats.totalThreats}</div>
+                <div className="text-2xl md:text-3xl font-black text-orange-400 mt-2">
+                  {loading ? "..." : formatInteger(dashboardData.stats.totalThreats)}
+                </div>
               </div>
               <AlertTriangle className="h-8 w-8 text-orange-500/30" />
             </div>
@@ -453,7 +546,9 @@ export default function MainDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xs text-slate-500 uppercase font-semibold">Files Scanned</div>
-                <div className="text-2xl md:text-3xl font-black text-sky-400 mt-2">{mockData.stats.fileScanned}</div>
+                <div className="text-2xl md:text-3xl font-black text-sky-400 mt-2">
+                  {loading ? "..." : formatInteger(dashboardData.stats.fileScanned)}
+                </div>
               </div>
               <Bug className="h-8 w-8 text-sky-500/30" />
             </div>
@@ -463,7 +558,9 @@ export default function MainDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xs text-slate-500 uppercase font-semibold">FIM Events</div>
-                <div className="text-2xl md:text-3xl font-black text-emerald-400 mt-2">{mockData.stats.fimEvents}</div>
+                <div className="text-2xl md:text-3xl font-black text-emerald-400 mt-2">
+                  {loading ? "..." : formatInteger(dashboardData.stats.fimEvents)}
+                </div>
               </div>
               <FileText className="h-8 w-8 text-emerald-500/30" />
             </div>
@@ -476,7 +573,9 @@ export default function MainDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xs text-slate-500 uppercase font-semibold">Suspicious Activities</div>
-                <div className="text-2xl md:text-3xl font-black text-yellow-400 mt-2">{mockData.stats.suspiciousActivities}</div>
+                <div className="text-2xl md:text-3xl font-black text-yellow-400 mt-2">
+                  {loading ? "..." : formatInteger(dashboardData.stats.suspiciousActivities)}
+                </div>
               </div>
               <Eye className="h-8 w-8 text-yellow-500/30" />
             </div>
@@ -486,7 +585,9 @@ export default function MainDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xs text-slate-500 uppercase font-semibold">Avg Risk Score</div>
-                <div className="text-2xl md:text-3xl font-black text-red-400 mt-2">{mockData.stats.avgRiskScore}/10</div>
+                <div className="text-2xl md:text-3xl font-black text-red-400 mt-2">
+                  {loading ? "..." : `${formatDecimal(dashboardData.stats.avgRiskScore)}/10`}
+                </div>
               </div>
               <TrendingUp className="h-8 w-8 text-red-500/30" />
             </div>
@@ -496,7 +597,9 @@ export default function MainDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xs text-slate-500 uppercase font-semibold">System Health</div>
-                <div className="text-2xl md:text-3xl font-black text-emerald-400 mt-2">94.2%</div>
+                <div className="text-2xl md:text-3xl font-black text-emerald-400 mt-2">
+                  {loading ? "..." : `${formatDecimal(dashboardData.stats.systemHealth)}%`}
+                </div>
               </div>
               <Shield className="h-8 w-8 text-emerald-500/30" />
             </div>
@@ -520,7 +623,7 @@ export default function MainDashboard() {
                 View Full
               </button>
             </div>
-            <CompactBarChart items={mockData.userRanking} />
+            <CompactBarChart items={dashboardData.userRanking} />
           </div>
 
           {/* Risk Distribution with View Full (centered, larger donut, horizontal legend below) */}
@@ -538,19 +641,19 @@ export default function MainDashboard() {
             <div className="flex flex-1 flex-col items-center justify-center gap-4 min-h-72">
               <div className="mb-4 flex w-full justify-center">
                 <Donut
-                  items={mockData.riskDistribution}
+                  items={dashboardData.riskDistribution}
                   size={230}
                   stroke={16}
                   centerFontTop={14}
                   centerFontBottom={10}
-                  centerLabelTop={mockData.riskDistribution.reduce((s, it) => s + it.value, 0)}
+                  centerLabelTop={dashboardData.riskDistribution.reduce((s, it) => s + it.value, 0)}
                   centerLabelBottom="incidents"
                 />
               </div>
 
               <div className="w-full flex justify-center">
                 <div className="flex flex-wrap items-center gap-4 max-w-full justify-center">
-                  {mockData.riskDistribution.map((it) => (
+                  {dashboardData.riskDistribution.map((it) => (
                     <div key={it.label} className="flex items-center gap-2 text-xs text-slate-300">
                       <span className="inline-block w-2 h-2 rounded-sm shrink-0" style={{ background: it.color }} />
                       <span className="whitespace-nowrap text-xs">{it.label}</span>
@@ -579,7 +682,7 @@ export default function MainDashboard() {
             </div>
             <div className="overflow-x-auto flex items-center justify-center min-h-40">
               <div className="w-full">
-                <DomainBarChart domains={mockData.hostData} />
+                <DomainBarChart domains={dashboardData.hostData} />
               </div>
             </div>
           </div>
@@ -599,19 +702,19 @@ export default function MainDashboard() {
             <div className="flex flex-col items-center justify-center gap-4 min-h-64">
               <div className="mb-4">
                 <Donut
-                  items={mockData.threatTypes}
+                  items={dashboardData.threatTypes}
                   size={190}
                   stroke={15}
                   centerFontTop={14}
                   centerFontBottom={10}
-                  centerLabelTop={mockData.threatTypes.reduce((s, it) => s + it.value, 0)}
+                  centerLabelTop={dashboardData.threatTypes.reduce((s, it) => s + it.value, 0)}
                   centerLabelBottom="threats"
                 />
               </div>
 
               <div className="w-full flex justify-center">
                 <div className="flex flex-wrap items-center gap-4 max-w-full justify-center">
-                  {mockData.threatTypes.map((it) => (
+                  {dashboardData.threatTypes.map((it) => (
                     <div key={it.label} className="flex items-center gap-2 text-xs text-slate-300">
                       <span className="inline-block w-3 h-3 rounded-sm shrink-0" style={{ background: it.color }} />
                       <span className="whitespace-nowrap">{it.label}</span>
@@ -646,10 +749,10 @@ export default function MainDashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 bg-slate-800/30 rounded-lg p-4 border border-slate-800/50">
               <div className="flex items-center justify-between mb-2">
-                <div className="text-xs text-slate-400">Command Timeline (Last 24 Hours)</div>
+                <div className="text-xs text-slate-400">Command Timeline ({selectedRangeLabel})</div>
                 <RangeFilter rangeKey={rangeKey} onRangeChange={setRangeKey} />
               </div>
-              <WaveChart data={mockData.commandEvents} color="#f97316" height={160} />
+              <WaveChart data={dashboardData.commandEvents} color="#f97316" height={160} rangeKey={rangeKey} />
             </div>
             <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-800/50 flex flex-col justify-between">
               <div>
@@ -657,20 +760,28 @@ export default function MainDashboard() {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-slate-400">Total Commands</span>
-                    <span className="text-lg font-bold text-orange-400">{mockData.stats.totalAttacks}</span>
+                    <span className="text-lg font-bold text-orange-400">
+                      {formatInteger(dashboardData.quickStats.attack.totalCommands)}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-400">Peak/Hour</span>
-                    <span className="text-lg font-bold text-orange-300">35</span>
+                    <span className="text-xs text-slate-400">Peak Bucket</span>
+                    <span className="text-lg font-bold text-orange-300">
+                      {formatInteger(dashboardData.quickStats.attack.peak)}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-400">Avg/Hour</span>
-                    <span className="text-lg font-bold text-yellow-400">18</span>
+                    <span className="text-xs text-slate-400">Avg/Bucket</span>
+                    <span className="text-lg font-bold text-yellow-400">
+                      {formatDecimal(dashboardData.quickStats.attack.avg)}
+                    </span>
                   </div>
                   <div className="h-px bg-slate-700 my-2"></div>
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-slate-400">Suspicious</span>
-                    <span className="text-lg font-bold text-orange-500">~45</span>
+                    <span className="text-lg font-bold text-orange-500">
+                      {formatInteger(dashboardData.quickStats.attack.suspicious)}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -700,10 +811,10 @@ export default function MainDashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 bg-slate-800/30 rounded-lg p-4 border border-slate-800/50">
               <div className="flex items-center justify-between mb-2">
-                <div className="text-xs text-slate-400">Detection Timeline (Last 24 Hours)</div>
+                <div className="text-xs text-slate-400">Detection Timeline ({selectedRangeLabel})</div>
                 <RangeFilter rangeKey={rangeKey} onRangeChange={setRangeKey} />
               </div>
-              <WaveChart data={mockData.fileEvents} color="#ef4444" height={160} />
+              <WaveChart data={dashboardData.fileEvents} color="#ef4444" height={160} rangeKey={rangeKey} />
             </div>
             <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-800/50 flex flex-col justify-between">
               <div>
@@ -711,20 +822,28 @@ export default function MainDashboard() {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-slate-400">Scanned</span>
-                    <span className="text-lg font-bold text-sky-400">{mockData.stats.fileScanned}</span>
+                    <span className="text-lg font-bold text-sky-400">
+                      {formatInteger(dashboardData.quickStats.file.scanned)}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-slate-400">Threats</span>
-                    <span className="text-lg font-bold text-red-400">{mockData.stats.totalThreats}</span>
+                    <span className="text-lg font-bold text-red-400">
+                      {formatInteger(dashboardData.quickStats.file.threats)}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-slate-400">Detection Rate</span>
-                    <span className="text-lg font-bold text-yellow-400">4.2%</span>
+                    <span className="text-lg font-bold text-yellow-400">
+                      {formatDecimal(dashboardData.quickStats.file.detectionRate)}%
+                    </span>
                   </div>
                   <div className="h-px bg-slate-700 my-2"></div>
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-slate-400">Health</span>
-                    <span className="text-lg font-bold text-emerald-400">94.2%</span>
+                    <span className="text-lg font-bold text-emerald-400">
+                      {formatDecimal(dashboardData.quickStats.file.health)}%
+                    </span>
                   </div>
                 </div>
               </div>
@@ -754,10 +873,10 @@ export default function MainDashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 bg-slate-800/30 rounded-lg p-4 border border-slate-800/50">
               <div className="flex items-center justify-between mb-2">
-                <div className="text-xs text-slate-400">FIM Events Timeline (Last 24 Hours)</div>
+                <div className="text-xs text-slate-400">FIM Events Timeline ({selectedRangeLabel})</div>
                 <RangeFilter rangeKey={rangeKey} onRangeChange={setRangeKey} />
               </div>
-              <WaveChart data={mockData.fimEvents} color="#10b981" height={160} />
+              <WaveChart data={dashboardData.fimEvents} color="#10b981" height={160} rangeKey={rangeKey} />
             </div>
             <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-800/50 flex flex-col justify-between">
               <div>
@@ -765,20 +884,28 @@ export default function MainDashboard() {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-slate-400">Total Events</span>
-                    <span className="text-lg font-bold text-emerald-400">{mockData.stats.fimEvents}</span>
+                    <span className="text-lg font-bold text-emerald-400">
+                      {formatInteger(dashboardData.quickStats.fim.totalEvents)}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-400">Peak/Hour</span>
-                    <span className="text-lg font-bold text-emerald-400">52</span>
+                    <span className="text-xs text-slate-400">Peak Bucket</span>
+                    <span className="text-lg font-bold text-emerald-400">
+                      {formatInteger(dashboardData.quickStats.fim.peak)}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-400">Avg/Hour</span>
-                    <span className="text-lg font-bold text-emerald-400">32</span>
+                    <span className="text-xs text-slate-400">Avg/Bucket</span>
+                    <span className="text-lg font-bold text-emerald-400">
+                      {formatDecimal(dashboardData.quickStats.fim.avg)}
+                    </span>
                   </div>
                   <div className="h-px bg-slate-700 my-2"></div>
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-slate-400">Suspicious</span>
-                    <span className="text-lg font-bold text-yellow-500">~18</span>
+                    <span className="text-lg font-bold text-yellow-500">
+                      {formatInteger(dashboardData.quickStats.fim.suspicious)}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -808,10 +935,10 @@ export default function MainDashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 bg-slate-800/30 rounded-lg p-4 border border-slate-800/50">
               <div className="flex items-center justify-between mb-2">
-                <div className="text-xs text-slate-400">ML Detection Timeline (Last 24 Hours)</div>
+                <div className="text-xs text-slate-400">ML Detection Timeline ({selectedRangeLabel})</div>
                 <RangeFilter rangeKey={rangeKey} onRangeChange={setRangeKey} />
               </div>
-              <WaveChart data={mockData.mlEvents} color="#a78bfa" height={160} />
+              <WaveChart data={dashboardData.mlEvents} color="#a78bfa" height={160} rangeKey={rangeKey} />
             </div>
             <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-800/50 flex flex-col justify-between">
               <div>
@@ -819,20 +946,28 @@ export default function MainDashboard() {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-slate-400">Predictions</span>
-                    <span className="text-lg font-bold text-sky-400">156</span>
+                    <span className="text-lg font-bold text-sky-400">
+                      {formatInteger(dashboardData.quickStats.ml.predictions)}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-slate-400">Anomalies</span>
-                    <span className="text-lg font-bold text-orange-400">29</span>
+                    <span className="text-lg font-bold text-orange-400">
+                      {formatInteger(dashboardData.quickStats.ml.anomalies)}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-slate-400">Confidence</span>
-                    <span className="text-lg font-bold text-yellow-400">96.4%</span>
+                    <span className="text-lg font-bold text-yellow-400">
+                      {formatDecimal(dashboardData.quickStats.ml.confidence)}%
+                    </span>
                   </div>
                   <div className="h-px bg-slate-700 my-2"></div>
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-slate-400">Top Risk</span>
-                    <span className="text-lg font-bold text-red-400">Ransomware</span>
+                    <span className="text-lg font-bold text-red-400">
+                      {dashboardData.quickStats.ml.topRisk}
+                    </span>
                   </div>
                 </div>
               </div>

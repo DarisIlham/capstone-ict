@@ -3,6 +3,7 @@ import {
   BrainCircuit,
   ChevronDown,
   FileSearch,
+  Globe,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -40,6 +41,7 @@ const Navbar = () => {
     { label: "File Integrity Monitoring", href: "/fim-events", icon: ShieldAlert },
     { label: "Host Monitoring", href: "/attack-dashboard", icon: Activity },
     { label: "File Security Scanner", href: "/file-security", icon: FileSearch },
+    { label: "Web Defacement", href: "/web-defacement", icon: Globe },
   ];
 
   const menuItems = baseMenuItems;
