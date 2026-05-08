@@ -1,4 +1,4 @@
-import User from "../models/user.model.js";
+import pool from "../config/pg.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import axios from "axios";
@@ -67,13 +67,11 @@ export const register = async (req, res) => {
       await verifyCaptcha(captchaToken);
     }
 
-    // Cek apakah user sudah ada
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(409).json({
-        success: false,
-        message: "Email sudah terdaftar",
-      });
+    // Cek apakah user sudah ada (Postgres)
+    const qCheck = 'SELECT id FROM users WHERE email = $1 LIMIT 1';
+    const rCheck = await pool.query(qCheck, [email]);
+    if (rCheck && rCheck.rows && rCheck.rows.length > 0) {
+      return res.status(409).json({ success: false, message: "Email sudah terdaftar" });
     }
 
     // Hash password
@@ -82,23 +80,18 @@ export const register = async (req, res) => {
     // Set default role to "admin" untuk backward compatibility
     const userRole = role && ["admin", "user"].includes(role) ? role : "admin";
 
-    // Buat user baru
-    const newUser = new User({
-      email,
-      password: hashedPassword,
-      name,
-      role: userRole,
-      status: "active",
-    });
-
-    const savedUser = await newUser.save();
+    // Buat user baru di PostgreSQL
+    const qInsert = `INSERT INTO users (email, password, name, role, status, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, NOW(), NOW()) RETURNING *`;
+    const rInsert = await pool.query(qInsert, [email, hashedPassword, name, userRole, 'active']);
+    const savedRow = rInsert.rows[0];
 
     // Generate JWT Token
     const token = jwt.sign(
       {
-        userId: savedUser._id,
-        email: savedUser.email,
-        role: savedUser.role,
+        userId: savedRow.id,
+        email: savedRow.email,
+        role: savedRow.role,
       },
       process.env.JWT_SECRET || "your-secret-key",
       {
@@ -111,11 +104,11 @@ export const register = async (req, res) => {
       message: "Registrasi berhasil",
       token,
       user: {
-        id: savedUser._id,
-        email: savedUser.email,
-        name: savedUser.name,
-        role: savedUser.role,
-        status: savedUser.status,
+        id: savedRow.id,
+        email: savedRow.email,
+        name: savedRow.name,
+        role: savedRow.role,
+        status: savedRow.status,
       },
     });
   } catch (error) {
@@ -154,12 +147,44 @@ export const login = async (req, res) => {
     }
 
     // Cari user berdasarkan email
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Email atau password salah",
-      });
+    // PostgreSQL: gunakan pool untuk query tabel users
+    const q = 'SELECT * FROM users WHERE email = $1 LIMIT 1';
+    const result = await pool.query(q, [email]);
+    if (!result || !result.rows || result.rows.length === 0) {
+      return res.status(401).json({ success: false, message: "Email atau password salah" });
+    }
+    // map row to user object
+    const row = result.rows[0];
+    const user = {
+      id: row.id,
+      email: row.email,
+      password: row.password,
+      name: row.name || null,
+      role: row.role || 'user',
+      status: row.status || 'active',
+      pendingUntil: row.pending_until || null,
+    };
+
+    // Auto-upgrade: if stored password is plaintext (not bcrypt), verify equality
+    const looksLikeBcrypt = (p) => typeof p === 'string' && /^\$2[aby]\$/.test(p);
+    if (!looksLikeBcrypt(user.password)) {
+      // stored password appears plaintext
+      if (String(password) === String(user.password)) {
+        // hash and update DB, then replace in-memory so bcrypt.compare works below
+        const newHash = await bcrypt.hash(String(password), 10);
+        try {
+          await pool.query('UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2', [newHash, user.id]);
+        } catch (e) {
+          if (/updated_at/.test(String(e.message || ''))) {
+            await pool.query('UPDATE users SET password = $1 WHERE id = $2', [newHash, user.id]);
+          } else {
+            console.error('Failed to update password hash for user', user.id, e.message || e);
+          }
+        }
+        user.password = newHash;
+      } else {
+        return res.status(401).json({ success: false, message: "Email atau password salah" });
+      }
     }
 
     // Verifikasi password
@@ -186,17 +211,24 @@ export const login = async (req, res) => {
           pendingUntil: pendingUntil.toISOString(),
         });
       } else {
-        // Pending time has passed, auto-update status to active
-        user.status = "active";
-        user.pendingUntil = null;
-        await user.save();
+          // Pending time has passed, auto-update status to active
+            user.status = "active";
+            user.pendingUntil = null;
+            try {
+              await pool.query(
+                'UPDATE users SET status = $1, pending_until = $2, updated_at = NOW() WHERE id = $3',
+                ['active', null, user.id]
+              );
+            } catch (pgUpdateErr) {
+              console.error('Gagal mengupdate status user di Postgres:', pgUpdateErr.message);
+            }
       }
     }
 
     // Generate JWT Token
     const token = jwt.sign(
       {
-        userId: user._id,
+        userId: user.id,
         email: user.email,
         role: user.role,
       },
@@ -220,7 +252,7 @@ export const login = async (req, res) => {
       message: "Login berhasil",
       token,
       user: {
-        id: user._id,
+        id: user.id,
         email: user.email,
         name: user.name,
         role: user.role,

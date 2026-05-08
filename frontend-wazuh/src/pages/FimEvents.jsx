@@ -26,7 +26,7 @@ const formatDetailedTimestamp = (timestamp) =>
     second: "2-digit",
   });
 
-const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey }) => {
+const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey, compact = false }) => {
   const [selectedPoint, setSelectedPoint] = useState(null);
   const width = 800;
   const padding = { l: 28, r: 10, t: 8, b: 24 };
@@ -67,7 +67,7 @@ const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey }) => {
     }
   }
 
-  const tickCount = clamp(Math.floor(innerW / 160), 3, 7);
+  const tickCount = clamp(Math.floor(innerW / (compact ? 260 : 160)), compact ? 2 : 3, compact ? 4 : 7);
   const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
 
   return (
@@ -140,7 +140,7 @@ const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey }) => {
 
       {selectedPoint && (
         <div
-          className="pointer-events-none absolute z-10 min-w-[120px] rounded-lg border border-slate-700 bg-slate-900/95 px-3 py-2 text-xs shadow-lg"
+          className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-slate-700 bg-slate-900/95 px-3 py-2 text-xs shadow-lg"
           style={{
             left: `${Math.min(Math.max((selectedPoint.x / width) * 100, 10), 82)}%`,
             top: `${Math.max(((selectedPoint.y - 40) / height) * 100, 6)}%`,
@@ -196,13 +196,13 @@ const SimpleBarHistogram = ({ data, width = 800, height = 65, rangeKey }) => {
   );
 };
 
-const Donut = ({ items, size = 140, stroke = 14, centerLabelTop, centerLabelBottom }) => {
+const Donut = ({ items, size = 140, stroke = 14, centerLabelTop, centerLabelBottom, compact = false }) => {
   const total = items.reduce((a, b) => a + b.value, 0) || 1;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
       <g transform={`translate(${size / 2} ${size / 2})`}>
         <circle r={r} fill="transparent" stroke="#1e293b" strokeWidth={stroke} />
         {items.map((it, idx) => {
@@ -226,20 +226,20 @@ const Donut = ({ items, size = 140, stroke = 14, centerLabelTop, centerLabelBott
             </circle>
           );
         })}
-        <text y={-3} textAnchor="middle" fontSize="12" fill="#f1f5f9" fontWeight="700">{centerLabelTop}</text>
-        <text y={11} textAnchor="middle" fontSize="8" fill="#64748b">{centerLabelBottom}</text>
+        <text y={compact ? -1 : -3} textAnchor="middle" fontSize={compact ? "10" : "12"} fill="#f1f5f9" fontWeight="700">{centerLabelTop}</text>
+        <text y={compact ? 10 : 11} textAnchor="middle" fontSize={compact ? "7" : "8"} fill="#64748b">{centerLabelBottom}</text>
       </g>
     </svg>
   );
 };
 
 const Legend = ({ items }) => (
-  <div className="flex flex-col gap-1.5">
+  <div className="flex flex-col gap-1.5 w-full min-w-0">
     {items.map((it) => (
-      <div key={it.label} className="flex items-center gap-1.5 text-xs text-slate-400">
+      <div key={it.label} className="flex items-center gap-0.5 text-xs text-slate-400">
         <span className="inline-block w-2 h-2 rounded-sm shrink-0" style={{ background: it.color }} />
-        <span className="truncate max-w-[100px]">{it.label}</span>
-        <span className="text-slate-500 tabular-nums">{it.value}</span>
+        <span className="truncate min-w-0 max-w-[10rem]">{it.label}</span>
+        <span className="text-slate-500 tabular-nums shrink-0">{it.value}</span>
       </div>
     ))}
   </div>
@@ -316,13 +316,13 @@ const Top5DomainsCard = ({ domains }) => {
 
 const WORD_COLORS = ["#f472b6", "#38bdf8", "#4ade80", "#a78bfa", "#fb923c", "#34d399", "#f87171", "#facc15", "#60a5fa", "#e879f9"];
 
-const PayloadWordCloud = ({ words }) => {
+const PayloadWordCloud = ({ words, compact = false }) => {
   if (!words || words.length === 0) return <div className="flex items-center justify-center h-full text-slate-600 text-xs">No payload data</div>;
-  const W = 620, H = 200;
+  const W = compact ? 520 : 620, H = compact ? 180 : 200;
   const maxCount = words[0].count;
   const minCount = words[words.length - 1].count;
   const range = Math.max(1, maxCount - minCount);
-  const fontSize = (count) => Math.round(11 + ((count - minCount) / range) * 31);
+  const fontSize = (count) => Math.round((compact ? 9 : 11) + ((count - minCount) / range) * (compact ? 22 : 31));
   const estWidth = (text, fs) => text.length * fs * 0.6;
   const placed = [];
   const rects = [];
@@ -370,6 +370,9 @@ const FimEvents = ({ agentId = "all" }) => {
   const [loading, setLoading] = useState(true);
   const [rangeKey, setRangeKey] = useState("30d");
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth : 1280
+  );
 
   const USE_STATIC = false;
 
@@ -576,7 +579,17 @@ const FimEvents = ({ agentId = "all" }) => {
     return () => clearInterval(interval);
   }, [currentPage, rangeKey, refreshAllData]);
 
+  useEffect(() => {
+    const handleResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   const now = Date.now();
+  const isMobile = viewportWidth < 768;
+  const isTablet = viewportWidth < 1024;
+  const donutSize = isMobile ? 148 : isTablet ? 190 : 280;
+  const donutStroke = isMobile ? 16 : isTablet ? 18 : 24;
 
   const formatTime = (isoString) => {
     if (!isoString) return "-";
@@ -779,38 +792,34 @@ const FimEvents = ({ agentId = "all" }) => {
                 <div className="text-[11px] text-slate-600">Updated {formatLiveTimestamp(lastUpdated)}</div>
               </div>
             </div>
-            <WaveChart data={derived.series} color="#10b981" height={110} rangeKey={rangeKey} />
-          </div>
-
-          {/* Frequently Visited Domains - Full Width */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4 shadow-lg">
-            <div className="flex justify-between items-center mb-2">
-              <div className="text-xs md:text-sm font-semibold text-slate-300">Frequently Visited Domains</div>
-            </div>
-            <div className="bg-slate-800/30 rounded-lg px-0 py-4 border border-slate-800/50" style={{ minHeight: "280px" }}>
-              <DomainBarChart domains={domainData} />
+            <div className="overflow-x-auto">
+              <div className={isMobile ? "min-w-[620px]" : "min-w-0"}>
+                <WaveChart data={derived.series} color="#10b981" height={110} rangeKey={rangeKey} compact={isMobile} />
+              </div>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
             {/* Kotak 1: Event + Severity Chart (Berdampingan & Centered) */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4 shadow-lg flex flex-col md:flex-row gap-4 md:gap-6 items-center justify-center">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4 shadow-lg flex flex-col xl:flex-row gap-5 md:gap-6 items-stretch xl:items-center justify-center">
               {/* Event Chart */}
-              <div className="flex items-center gap-2 md:gap-3">
-                <Donut items={derived.eventItems} size={280} stroke={24} centerLabelTop={derived.total} centerLabelBottom="events" />
-                <div className="w-24 md:w-32 text-xs"><Legend items={derived.eventItems} /></div>
+              <div className="flex flex-col sm:flex-row items-center gap-3 md:gap-4 w-full xl:w-auto">
+                <Donut items={derived.eventItems} size={donutSize} stroke={donutStroke} centerLabelTop={derived.total} centerLabelBottom="events" compact={isMobile} />
+                <div className="w-full sm:w-40 text-xs"><Legend items={derived.eventItems} /></div>
               </div>
               {/* Severity Chart */}
-              <div className="flex items-center gap-2 md:gap-3">
-                <Donut items={derived.severityItems} size={280} stroke={24} centerLabelTop={derived.total} centerLabelBottom="severity" />
-                <div className="w-24 md:w-32 text-xs"><Legend items={derived.severityItems} /></div>
+              <div className="flex flex-col sm:flex-row items-center gap-3 md:gap-4 w-full xl:w-auto">
+                <Donut items={derived.severityItems} size={donutSize} stroke={donutStroke} centerLabelTop={derived.total} centerLabelBottom="severity" compact={isMobile} />
+                <div className="w-full sm:w-40 text-xs"><Legend items={derived.severityItems} /></div>
               </div>
             </div>
             {/* Kotak 2: Word Cloud */}
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4 shadow-lg flex flex-col gap-2 items-center justify-center">
               <div className="w-full text-xs md:text-sm font-semibold text-slate-300">Payload Pattern Cloud</div>
-              <div className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 md:p-4">
-                <PayloadWordCloud words={derived.payloadWords} />
+              <div className="w-full overflow-x-auto bg-slate-950 border border-slate-800 rounded-lg p-2 md:p-4">
+                <div className={isMobile ? "min-w-[520px]" : "min-w-0"}>
+                  <PayloadWordCloud words={derived.payloadWords} compact={isMobile} />
+                </div>
               </div>
             </div>
           </div>

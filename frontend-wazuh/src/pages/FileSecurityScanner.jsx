@@ -29,6 +29,13 @@ const rangeToMinutes = {
   "30d": 43200,
 };
 
+const rangeToBucketMs = {
+  "1h": 5 * 60 * 1000,
+  "24h": 60 * 60 * 1000,
+  "7d": 6 * 60 * 60 * 1000,
+  "30d": 24 * 60 * 60 * 1000,
+};
+
 const severityOrder = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, INFO: 0 };
 const severityColors = {
   CRITICAL: "text-red-400 bg-red-500/20",
@@ -122,6 +129,23 @@ function normalizeFileScan(item) {
     actionStatus: findingsCount > 0 ? "Review / Block" : "No Action",
     health: findingsCount > 0 ? Math.max(35, 100 - findingsCount * 15) : 100,
   };
+}
+
+function buildTimelineFallback(items, rangeKey) {
+  const bucketMs = rangeToBucketMs[rangeKey] || rangeToBucketMs["24h"];
+  const buckets = new Map();
+
+  items.forEach((item) => {
+    const ts = new Date(item.timestamp).getTime();
+    if (!Number.isFinite(ts)) return;
+
+    const bucket = Math.floor(ts / bucketMs) * bucketMs;
+    buckets.set(bucket, (buckets.get(bucket) || 0) + 1);
+  });
+
+  return Array.from(buckets.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([t, v]) => ({ t, v }));
 }
 
 async function fetchJson(url) {
@@ -460,39 +484,57 @@ const FileSecurityScanner = () => {
     setLoadError("");
 
     try {
-      const listEndpoint = activeTab === "errors" ? "file-scans/errors" : "file-scans/suspicious";
-      const listParams = new URLSearchParams({ page: String(page), limit: String(PAGE_LIMIT) });
       const minutes = rangeToMinutes[rangeKey] || 1440;
+      const suspiciousParams = new URLSearchParams({
+        page: activeTab === "suspicious" ? String(page) : "1",
+        limit: String(PAGE_LIMIT),
+      });
+      const errorParams = new URLSearchParams({
+        page: activeTab === "errors" ? String(page) : "1",
+        limit: String(PAGE_LIMIT),
+      });
 
-      const listResponse = await fetchJson(
-        `${API_ROOT}/${listEndpoint}?${listParams.toString()}`
-      );
+      const [suspiciousResponse, errorResponse, statsResponse, timelineResponse] = await Promise.all([
+        fetchJson(`${API_ROOT}/file-scans/suspicious?${suspiciousParams.toString()}`),
+        fetchJson(`${API_ROOT}/file-scans/errors?${errorParams.toString()}`),
+        fetchJson(`${API_ROOT}/file-scans/stats`),
+        fetchJson(`${API_ROOT}/file-scans/timeline?minutes=${minutes}`),
+      ]);
 
-      const statsResponse = await fetchJson(
-        `${API_ROOT}/file-scans/stats`
-      );
+      const normalizedSuspicious = (suspiciousResponse.data || []).map(normalizeFileScan);
+      const normalizedErrors = (errorResponse.data || []).map(normalizeFileScan);
 
-      const timelineResponse = await fetchJson(
-        `${API_ROOT}/file-scans/timeline?minutes=${minutes}`
-      );
-
-      const normalizedList = (listResponse.data || []).map(normalizeFileScan);
-      if (activeTab === "errors") {
-        setErrors(normalizedList);
-        setFiles([]);
-      } else {
-        setFiles(normalizedList);
-        setErrors([]);
-      }
+      setFiles(normalizedSuspicious);
+      setErrors(normalizedErrors);
 
       setStats(statsResponse.data || null);
-      setTimeline(
-        (timelineResponse.data || []).map((item) => ({
+      const mappedTimeline = (timelineResponse.data || [])
+        .map((item) => ({
           t: item.timestamp,
-          v: Number(item.suspicious ?? item.total ?? 0),
+          v: Number(item.suspicious || item.errors || item.total || 0),
         }))
+        .filter((item) => Number.isFinite(new Date(item.t).getTime()));
+
+      setTimeline(
+        mappedTimeline.length > 0
+          ? mappedTimeline
+          : buildTimelineFallback(
+              [...normalizedSuspicious, ...normalizedErrors],
+              rangeKey
+            )
       );
-      setPagination(listResponse.pagination || { page, limit: PAGE_LIMIT, total: normalizedList.length, totalPages: 1 });
+
+      const activePagination =
+        activeTab === "errors" ? errorResponse.pagination : suspiciousResponse.pagination;
+
+      setPagination(
+        activePagination || {
+          page,
+          limit: PAGE_LIMIT,
+          total: activeTab === "errors" ? normalizedErrors.length : normalizedSuspicious.length,
+          totalPages: 1,
+        }
+      );
     } catch (error) {
       console.error(error);
       setLoadError(error.message || "Failed to load file scan data");
@@ -524,10 +566,26 @@ const FileSecurityScanner = () => {
   }, [files, searchQuery, filterSeverity]);
 
   const analytics = useMemo(() => {
-    const fileTypes = (stats?.fileTypes || [])
+    const fileTypeSource =
+      (stats?.fileTypes || []).length > 0
+        ? (stats.fileTypes || []).map((item) => ({
+            label: item.fileType || "unknown",
+            value: item.count || 0,
+          }))
+        : Array.from(
+            files.reduce((map, file) => {
+              const fileType = file.fileType || "unknown";
+              map.set(fileType, (map.get(fileType) || 0) + 1);
+              return map;
+            }, new Map()).entries()
+          )
+            .map(([label, value]) => ({ label, value }))
+            .sort((a, b) => b.value - a.value);
+
+    const fileTypes = fileTypeSource
       .map((item, i) => ({
-        label: item.fileType || "unknown",
-        value: item.count || 0,
+        label: item.label,
+        value: item.value || 0,
         color: ["#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e", "#10b981", "#14b8a6"][i % 7],
       }))
       .slice(0, 7);
@@ -737,7 +795,6 @@ const FileSecurityScanner = () => {
               getLabel={(item) => item.scanner}
               getValue={(item) => item.count}
               getBarColor={() => "linear-gradient(90deg, #0ea5e9 0%, #38bdf8 100%)"}
-              secondaryValue={(item) => `${item.count} event(s)`}
             />
           </div>
 

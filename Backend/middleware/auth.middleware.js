@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import User from "../models/user.model.js";
+import pool from "../config/pg.js";
 
 export const verifyToken = async (req, res, next) => {
   try {
@@ -15,23 +15,40 @@ export const verifyToken = async (req, res, next) => {
 
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
-    if (!decoded || !decoded.userId) {
+    if (!decoded) {
       return res.status(401).json({ message: "Invalid token format" });
     }
 
-    // Find user
-    const user = await User.findById(decoded.userId);
-    if (!user) {
-      return res.status(401).json({ message: "User not found" });
+    const userId = decoded.userId || decoded.id;
+    const userEmail = decoded.email;
+
+    if (!userId && !userEmail) {
+      return res.status(401).json({ message: "Invalid token format" });
     }
 
-    // Add user to request object
+    // Support legacy tokens that only stored email without userId.
+    const q = userId
+      ? 'SELECT * FROM users WHERE id = $1 LIMIT 1'
+      : 'SELECT * FROM users WHERE email = $1 LIMIT 1';
+    const r = await pool.query(q, [userId || userEmail]);
+    if (!r || !r.rows || r.rows.length === 0) {
+      return res.status(401).json({ message: "User not found" });
+    }
+    const row = r.rows[0];
+    const user = {
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      role: row.role,
+      status: row.status,
+    };
+    // Attach user to request
     req.user = user;
     next();
   } catch (error) {
-    // if (error.name === "TokenExpiredError") {
-    //   return res.status(401).json({ message: "Token has expired" });
-    // }
+    if (error.name === "TokenExpiredError") {
+      return res.status(401).json({ message: "Token has expired" });
+    }
     if (error.name === "JsonWebTokenError") {
       return res.status(401).json({ message: "Invalid token" });
     }

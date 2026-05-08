@@ -39,3 +39,23 @@
     animation-delay: 2s;
   }
 }
+
+/* Hide native password reveal/clear icons in various browsers */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
+
+/* WebKit/Blink engines: try hiding decoration container/button */
+input[type="password"]::-webkit-textfield-decoration-container,
+input[type="password"]::-webkit-textfield-decoration-button,
+input[type="password"]::-webkit-textfield-decoration-wrapper {
+  display: none !important;
+  -webkit-appearance: none !important;
+}
+
+/* Fallback: remove default appearance so our toggle icon is used */
+input[type="password"] {
+  -webkit-appearance: none;
+  appearance: none;
+}

@@ -1,22 +1,26 @@
-import { API_BASE_URL } from "../config/Api";
+import API from "../config/Api.js";
 
 export async function scanWebDefacementEndpoint(endpoint, type = "all") {
-  const response = await fetch(`${API_BASE_URL}/api/web-defacement/scan`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      endpoint,
-      type,
-    }),
+  const response = await API.post("/api/web-defacement/scan", {
+    endpoint,
+    type,
   });
+  return response.data;
+}
 
-  const payload = await response.json();
+export async function fetchWebDefacementEndpoints() {
+  const response = await API.get("/api/web-defacement/endpoints");
+  return response.data;
+}
 
-  if (!response.ok) {
-    throw new Error(payload?.message || `Request failed with status ${response.status}`);
-  }
+export async function createWebDefacementEndpoint(endpointUrl) {
+  const response = await API.post("/api/web-defacement/endpoints", {
+    endpointUrl,
+  });
+  return response.data;
+}
 
-  return payload;
+export async function removeWebDefacementEndpoint(endpointId) {
+  const response = await API.delete(`/api/web-defacement/endpoints/${endpointId}`);
+  return response.data;
 }

@@ -506,7 +506,6 @@ const Legend = ({ items }) => (
       <div key={it.label} className="flex items-center gap-1.5 text-xs text-slate-400">
         <span className="inline-block w-2 h-2 rounded-sm shrink-0" style={{ background: it.color }} />
         <span className="truncate max-w-[120px]">{it.label}</span>
-        <span className="text-slate-500 tabular-nums">{it.value}</span>
       </div>
     ))}
   </div>
@@ -874,6 +873,7 @@ export default function MlDashboard() {
     }
     return Array.from(map.entries()).map(([name, value], i) => ({
       name,
+      label: name,
       value,
       color: COLORS[i % COLORS.length],
     }));
@@ -888,7 +888,7 @@ export default function MlDashboard() {
     return Array.from(map.entries())
       .map(([label, count]) => ({ label, count }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 10); // Top 10 source IPs
+      .slice(0, 5); // Top 5 source IPs
   }, [predictions]);
 
   const waveData = useMemo(() => {
@@ -1026,7 +1026,7 @@ export default function MlDashboard() {
           {/* Top Source IPs Bar Chart */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg">
             <div className="mb-3">
-              <div className="text-base font-bold text-slate-200">Top 10 Source IPs</div>
+              <div className="text-base font-bold text-slate-200">Top 5 Source IPs</div>
               <div className="mt-1 text-xs text-slate-500">Ranked traffic sources within the selected ML time range</div>
             </div>
             {topSourceIps.length === 0 ? (
@@ -1047,9 +1047,9 @@ export default function MlDashboard() {
             {distribution.length === 0 ? (
               <div className="h-40 flex items-center justify-center text-slate-500">No data</div>
             ) : (
-              <div className="flex items-center gap-4 justify-center w-full">
+              <div className="flex flex-col items-center gap-4 justify-center w-full">
                 <Donut items={distribution} size={140} centerLabelTop={filtered.length} centerLabelBottom="predictions" />
-                <div className="flex-1">
+                <div className="w-full flex justify-center">
                   <Legend items={distribution} />
                 </div>
               </div>
@@ -1162,16 +1162,6 @@ export default function MlDashboard() {
                   className="bg-slate-700 border border-slate-600 text-slate-200 text-xs rounded px-2 py-1 w-24 focus:outline-none focus:border-sky-500"
                 />
               </label>
-
-              <button
-                onClick={() => {
-                  setFilters({ label: '', sourceIp: '', destinationIp: '', service: '' });
-                  setPage(1);
-                }}
-                className="ml-auto text-xs font-bold text-slate-400 px-3 py-1 rounded border border-slate-600 hover:text-white hover:border-slate-500 transition-colors"
-              >
-                Reset
-              </button>
             </div>
           </div>
 

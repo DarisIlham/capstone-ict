@@ -1,5 +1,5 @@
 // server.js
-import dotenv from "dotenv";
+import 'dotenv/config';
 import express from "express";
 import axios from "axios";
 import https from "https";
@@ -7,17 +7,18 @@ import cors from "cors";
 import { sendAlert } from "./telegram.js";
 import os from "os";
 import { Pool } from "pg";
-import connectDB from "./config/dbLogin.js";
+// MongoDB removed: no connectDB import
 import authRouter from "./routes/auth.routes.js";
 import userRouter from "./routes/userRoutes.js";
 import notificationRouter from "./routes/notificationRoutes.js";
 import app from "./app.js";
+import { initializeWebDefacementEndpointStore } from "./services/webDefacementEndpointService.js";
 
-// Load environment variables dari .env
-dotenv.config();
+// Environment variables are loaded via `import 'dotenv/config'` above
+// Debug: show DB_PASS type to help diagnose startup auth issues
+console.log('DEBUG: DB_PASS typeof', typeof process.env.DB_PASS, 'present=', !!process.env.DB_PASS);
 
-// Connect MongoDB untuk Auth
-connectDB();
+// MongoDB connection removed (migrated to PostgreSQL)
 
 // Auth routes (MongoDB) attach to imported `app`
 app.use("/api/auth", authRouter);
@@ -27,6 +28,14 @@ app.use("/api/users", userRouter);
 
 // Notification routes (MongoDB, admin only)
 app.use("/api/notifications", notificationRouter);
+
+initializeWebDefacementEndpointStore()
+  .then(() => {
+    console.log("Web defacement endpoint store ready");
+  })
+  .catch((error) => {
+    console.error("Failed to initialize web defacement endpoint store:", error.message);
+  });
 
 const ENABLE_DB = process.env.ENABLE_DB !== "0";
 

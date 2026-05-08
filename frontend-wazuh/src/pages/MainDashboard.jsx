@@ -374,10 +374,10 @@ const DomainBarChart = ({ domains }) => {
           <g key={domain.name}>
             <title>{`${domain.name}: ${domain.count} events`}</title>
             <rect x="320" y={y + Math.floor(barGap / 2)} width={barWidth} height={barHeight} fill={color} opacity="0.92" rx="4" className="cursor-pointer" />
-            <text x="12" y={y + Math.floor(barGap / 2) + barHeight / 2 + 6} fontSize="15" fill="#e2e8f0" textAnchor="start" fontWeight="700" fontFamily="monospace">
+            <text x="12" y={y + Math.floor(barGap / 2) + barHeight / 2 + 6} fontSize="12" fill="#e2e8f0" textAnchor="start" fontWeight="700" fontFamily="monospace">
               {truncatedName}
             </text>
-            <text x={326 + barWidth + 8} y={y + Math.floor(barGap / 2) + barHeight / 2 + 6} fontSize="15" fill="#94a3b8" fontWeight="700">
+            <text x={326 + barWidth + 8} y={y + Math.floor(barGap / 2) + barHeight / 2 + 6} fontSize="12" fill="#94a3b8" fontWeight="700">
               {domain.count}
             </text>
           </g>
@@ -918,7 +918,7 @@ export default function MainDashboard() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
             <div>
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <BrainCircuit className="h-5 w-5 text-blue-400" />
+                <BrainCircuit className="h-5 w-5" style={{ color: "#a78bfa" }} />
                 Machine Learning Analytics
               </h2>
               <p className="text-xs text-slate-400 mt-1">Prediction confidence, anomaly trends, and model-based threat signals</p>

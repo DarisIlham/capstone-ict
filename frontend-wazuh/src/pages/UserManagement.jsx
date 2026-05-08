@@ -287,6 +287,7 @@ const UserManagement = () => {
                     <tr>
                       <th className="px-6 py-4 text-left text-slate-300 font-semibold">Name</th>
                       <th className="px-6 py-4 text-left text-slate-300 font-semibold">Email</th>
+                      <th className="px-6 py-4 text-left text-slate-300 font-semibold">Role</th>
                       <th className="px-6 py-4 text-left text-slate-300 font-semibold">Status</th>
                       <th className="px-6 py-4 text-left text-slate-300 font-semibold">Actions</th>
                     </tr>
@@ -301,6 +302,17 @@ const UserManagement = () => {
                             <div className="font-medium text-white">{user.name}</div>
                           </td>
                           <td className="px-6 py-4 text-slate-300">{user.email}</td>
+                          <td className="px-6 py-4">
+                            <span
+                              className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                                user.role === "admin"
+                                  ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-300"
+                                  : "border-slate-600 bg-slate-800 text-slate-300"
+                              }`}
+                            >
+                              {user.role === "admin" ? "Admin" : "User"}
+                            </span>
+                          </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2">
                               {user.status === "active" ? (

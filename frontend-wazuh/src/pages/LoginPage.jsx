@@ -3,7 +3,6 @@ import {
   User,
   Lock,
   Eye,
-  EyeOff,
   LogIn,
   AlertCircle,
   CheckCircle,
@@ -216,13 +215,10 @@ const LoginPage = () => {
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 disabled={isLoading}
-                className="absolute right-3 top-3 text-slate-400 hover:text-slate-300"
+                className="absolute right-3 top-3 text-white hover:text-slate-200"
+                aria-label="Toggle password visibility"
               >
-                {showPassword ? (
-                  <EyeOff className="h-5 w-5" />
-                ) : (
-                  <Eye className="h-5 w-5" />
-                )}
+                <Eye className="h-5 w-5" />
               </button>
             </div>
           </div>

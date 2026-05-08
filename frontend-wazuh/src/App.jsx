@@ -11,9 +11,14 @@ import UserManagement from "./pages/UserManagement.jsx";
 import WebDefacement from "./pages/WebDefacement.jsx";
 
 function App() {
+  const routerBasename =
+    import.meta.env.BASE_URL && import.meta.env.BASE_URL !== "/"
+      ? import.meta.env.BASE_URL.replace(/\/$/, "")
+      : undefined;
+
   return (
     <AuthProvider>
-      <Router basename="/Capstone">
+      <Router basename={routerBasename}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           {/* Protected Routes */}
@@ -68,7 +73,7 @@ function App() {
           <Route
             path="/users"
             element={
-              <PrivateRoute>
+              <PrivateRoute requiredRole="admin">
                 <UserManagement />
               </PrivateRoute>
             }

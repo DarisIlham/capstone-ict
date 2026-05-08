@@ -1,32 +1,32 @@
-import Notification from "../models/notification.model.js";
+import pool from "../config/pg.js";
 
 export const createAdminLoginNotification = async ({ name, email }) => {
   const displayName = name || email || "Admin";
+  const desc = `Admin login berhasil: ${displayName}${email ? ` (${email})` : ""}`;
 
-  const notification = new Notification({
-    deskripsi: `Admin login berhasil: ${displayName}${email ? ` (${email})` : ""}`,
-  });
-
-  const savedNotification = await notification.save();
+  const q = `INSERT INTO notifikasi (deskripsi, timestamp) VALUES ($1, NOW()) RETURNING *`;
+  const r = await pool.query(q, [desc]);
+  const row = r.rows[0];
 
   return {
-    id: savedNotification._id,
-    id_notifikasi: savedNotification.id_notifikasi,
-    deskripsi: savedNotification.deskripsi,
-    timestamp: savedNotification.timestamp,
+    id: row.id,
+    id_notifikasi: row.id_notifikasi || row.id,
+    deskripsi: row.deskripsi,
+    timestamp: row.timestamp,
   };
 };
 
 export const getNotifications = async (page = 1, limit = 10) => {
-  const skip = (page - 1) * limit;
+  const offset = (page - 1) * limit;
+  const qItems = `SELECT * FROM notifikasi ORDER BY timestamp DESC LIMIT $1 OFFSET $2`;
+  const qCount = `SELECT COUNT(*)::int AS total FROM notifikasi`;
 
-  const [notifications, total] = await Promise.all([
-    Notification.find()
-      .sort({ timestamp: -1 })
-      .skip(skip)
-      .limit(limit),
-    Notification.countDocuments(),
+  const [itemsRes, countRes] = await Promise.all([
+    pool.query(qItems, [limit, offset]),
+    pool.query(qCount),
   ]);
+
+  const total = countRes.rows[0]?.total || 0;
 
   return {
     pagination: {
@@ -35,11 +35,11 @@ export const getNotifications = async (page = 1, limit = 10) => {
       limit,
       pages: Math.ceil(total / limit) || 1,
     },
-    notifications: notifications.map((notification) => ({
-      id: notification._id,
-      id_notifikasi: notification.id_notifikasi,
-      deskripsi: notification.deskripsi,
-      timestamp: notification.timestamp,
+    notifications: (itemsRes.rows || []).map((row) => ({
+      id: row.id,
+      id_notifikasi: row.id_notifikasi || row.id,
+      deskripsi: row.deskripsi,
+      timestamp: row.timestamp,
     })),
   };
 };
