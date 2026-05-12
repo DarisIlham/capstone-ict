@@ -29,12 +29,96 @@ function buildFileScanMustClauses(status = "success") {
   return must;
 }
 
+function normalizeAgentValue(value) {
+  if (value === undefined || value === null) return null;
+
+  const normalized = String(value).trim();
+  if (!normalized || normalized === "-" || /^unknown agent$/i.test(normalized)) {
+    return null;
+  }
+
+  return normalized;
+}
+
+function getFirstMeaningfulField(source, paths = []) {
+  for (const path of paths) {
+    const value = normalizeAgentValue(getField(source, path));
+    if (value) return value;
+  }
+
+  return null;
+}
+
+function resolveAgentId(source) {
+  return getFirstMeaningfulField(source, [
+    "agentId",
+    "agent_id",
+    "agent.id",
+    "hostId",
+    "host_id",
+    "host.id"
+  ]);
+}
+
+function resolveAgentName(source) {
+  const label = getFirstMeaningfulField(source, [
+    "agentName",
+    "agent_name",
+    "agent.name",
+    "hostName",
+    "host_name",
+    "host.name",
+    "host.hostname",
+    "hostname",
+    "data.hostname",
+    "observer.hostname"
+  ]);
+
+  if (label) return label;
+
+  const agentId = resolveAgentId(source);
+  return agentId ? `Agent ${agentId}` : "Unknown agent";
+}
+
+const resolveAgentLabelScript = `
+def s = params['_source'];
+if (s == null) return 'Unknown agent';
+
+if (s.containsKey('agentName') && s.agentName != null && !s.agentName.toString().trim().isEmpty()) return s.agentName;
+if (s.containsKey('agent_name') && s.agent_name != null && !s.agent_name.toString().trim().isEmpty()) return s.agent_name;
+
+if (s.containsKey('agent') && s.agent != null) {
+  if (s.agent.containsKey('name') && s.agent.name != null && !s.agent.name.toString().trim().isEmpty()) return s.agent.name;
+}
+
+if (s.containsKey('hostName') && s.hostName != null && !s.hostName.toString().trim().isEmpty()) return s.hostName;
+if (s.containsKey('host_name') && s.host_name != null && !s.host_name.toString().trim().isEmpty()) return s.host_name;
+
+if (s.containsKey('host') && s.host != null) {
+  if (s.host.containsKey('name') && s.host.name != null && !s.host.name.toString().trim().isEmpty()) return s.host.name;
+  if (s.host.containsKey('hostname') && s.host.hostname != null && !s.host.hostname.toString().trim().isEmpty()) return s.host.hostname;
+}
+
+if (s.containsKey('hostname') && s.hostname != null && !s.hostname.toString().trim().isEmpty()) return s.hostname;
+if (s.containsKey('data') && s.data != null && s.data.containsKey('hostname') && s.data.hostname != null && !s.data.hostname.toString().trim().isEmpty()) return s.data.hostname;
+if (s.containsKey('observer') && s.observer != null && s.observer.containsKey('hostname') && s.observer.hostname != null && !s.observer.hostname.toString().trim().isEmpty()) return s.observer.hostname;
+
+if (s.containsKey('agent') && s.agent != null && s.agent.containsKey('id') && s.agent.id != null && !s.agent.id.toString().trim().isEmpty()) return 'Agent ' + s.agent.id;
+if (s.containsKey('agent_id') && s.agent_id != null && !s.agent_id.toString().trim().isEmpty()) return 'Agent ' + s.agent_id;
+if (s.containsKey('host') && s.host != null && s.host.containsKey('id') && s.host.id != null && !s.host.id.toString().trim().isEmpty()) return 'Agent ' + s.host.id;
+if (s.containsKey('host_id') && s.host_id != null && !s.host_id.toString().trim().isEmpty()) return 'Agent ' + s.host_id;
+
+return 'Unknown agent';
+`;
+
 function formatFileScan(hit) {
   const src = hit._source || {};
 
   return {
     id: hit._id,
     timestamp: getField(src, "@timestamp"),
+    agentId: resolveAgentId(src) || "-",
+    agentName: resolveAgentName(src),
     logType: getField(src, "log_type"),
     eventType: getField(src, "event_type"),
     scanner: getField(src, "scanner"),
@@ -150,8 +234,10 @@ export async function getLatestFileScan(query) {
   return hit ? formatFileScan(hit) : null;
 }
 
-export async function listSuspiciousFileScans(query) {
-  const { page, limit, from } = normalizePagination(query);
+export async function listSuspiciousFileScans(query, options = {}) {
+  const { page, limit, from } = normalizePagination(query, {
+    maxLimit: options.maxLimit || 100
+  });
   const { fileType, indicator, start, end } = query;
 
   const must = buildFileScanMustClauses("success");
@@ -268,6 +354,35 @@ export async function getFileScanStats() {
                 }
               }
             },
+            suspicious_agents: {
+              filter: {
+                range: {
+                  findings_count: { gt: 0 }
+                }
+              },
+              aggs: {
+                by_agent: {
+                  terms: {
+                    script: {
+                      source: resolveAgentLabelScript,
+                      lang: "painless"
+                    },
+                    size: 5
+                  },
+                  aggs: {
+                    last_seen: { max: { field: "@timestamp" } }
+                  }
+                },
+                unique_agents: {
+                  cardinality: {
+                    script: {
+                      source: resolveAgentLabelScript,
+                      lang: "painless"
+                    }
+                  }
+                }
+              }
+            },
             clean_count: {
               filter: {
                 term: {
@@ -300,6 +415,50 @@ export async function getFileScanStats() {
 
   const successAgg = response.aggregations?.success_scans;
   const errorAgg = response.aggregations?.error_scans;
+  const suspiciousAgg = successAgg?.suspicious_agents;
+
+  // If aggregations did not produce useful agent names (mapping may lack keyword fields),
+  // fallback to fetching hits and compute top agents from _source (same logic as formatFileScan).
+  let topAgents = [];
+  let uniqueAgents = 0;
+
+  try {
+    // Use the existing normalized suspicious listing to get agent names as seen in the UI
+    const suspiciousList = await listSuspiciousFileScans(
+      { limit: 10000 },
+      { maxLimit: 10000 }
+    );
+    const hits = suspiciousList?.data || [];
+    const map = new Map();
+
+    hits.forEach((item) => {
+      const name = resolveAgentName(item);
+      const ts = item.timestamp || null;
+      const existing = map.get(name) || { name, count: 0, lastSeen: null };
+      existing.count += 1;
+      if (ts) {
+        if (!existing.lastSeen || new Date(ts).getTime() > new Date(existing.lastSeen).getTime()) existing.lastSeen = ts;
+      }
+      map.set(name, existing);
+    });
+
+    uniqueAgents = map.size;
+    topAgents = Array.from(map.values())
+      .sort((a, b) => b.count - a.count || (new Date(b.lastSeen || 0).getTime() - new Date(a.lastSeen || 0).getTime()))
+      .slice(0, 5)
+      .map((a) => ({ name: a.name || "Unknown agent", count: a.count || 0, lastSeen: a.lastSeen || null }));
+  } catch (err) {
+    console.error("getFileScanStats: failed to compute topAgents from hits:", err && err.message ? err.message : err);
+    // fallback to aggregation results if hit-based computation fails
+    const agentBuckets = suspiciousAgg?.by_agent?.buckets || [];
+    topAgents = (agentBuckets || []).map((bucket) => ({
+      name: bucket.key || "Unknown agent",
+      count: bucket.doc_count || 0,
+      lastSeen: bucket.last_seen?.value_as_string || null
+    })).slice(0, 5);
+
+    uniqueAgents = suspiciousAgg?.unique_agents?.value ?? 0;
+  }
 
   return {
     totalEvents: getTotalHits(response),
@@ -309,10 +468,9 @@ export async function getFileScanStats() {
     cleanScans: successAgg?.clean_count?.doc_count ?? 0,
     averageFindings: successAgg?.avg_findings?.value ?? 0,
     maxFindings: successAgg?.max_findings?.value ?? 0,
-    fileTypes: (successAgg?.by_file_type?.buckets || []).map((bucket) => ({
-      fileType: bucket.key,
-      count: bucket.doc_count
-    }))
+    uniqueAgents,
+    topAgents: topAgents,
+    fileTypes: (successAgg?.by_file_type?.buckets || []).map((bucket) => ({ fileType: bucket.key, count: bucket.doc_count }))
   };
 }
 

@@ -186,6 +186,7 @@ function formatLinuxCommand(hit) {
   const command = getField(src, "linux.command");
   const commandName = getField(src, "linux.command_name");
   const indicators = classifyLinuxCommand(command, commandName);
+  const agentName = getField(src, "agent.name") || getField(src, "host.name") || "-";
 
   return {
     id: hit._id,
@@ -195,6 +196,7 @@ function formatLinuxCommand(hit) {
     session: getField(src, "linux.session"),
     command,
     commandName,
+    agentName,
     hostName: getField(src, "host.name"),
     hostIp: getField(src, "host.ip"),
     message: getField(src, "message"),
@@ -209,6 +211,7 @@ export async function listLinuxCommands(query) {
   const { page, limit, from } = normalizePagination(query);
   const {
     user,
+    agentName,
     commandName,
     session,
     hostName,
@@ -222,15 +225,20 @@ export async function listLinuxCommands(query) {
   const mustNot = [];
 
   const userFilter = buildOptionalExactFilter("linux.user", user);
+  const agentNameFilter = buildOptionalExactFilter("agent.name", agentName);
   const commandNameFilter = buildOptionalExactFilter("linux.command_name", commandName);
   const sessionFilter = buildOptionalExactFilter("linux.session", session);
   const hostNameFilter = buildOptionalExactFilter("host.name", hostName);
   const containsFilter = buildContainsClause("linux.command", contains);
 
   if (userFilter) must.push(userFilter);
+  if (agentNameFilter) {
+    must.push(agentNameFilter);
+  } else if (hostNameFilter) {
+    must.push(hostNameFilter);
+  }
   if (commandNameFilter) must.push(commandNameFilter);
   if (sessionFilter) must.push(sessionFilter);
-  if (hostNameFilter) must.push(hostNameFilter);
   if (containsFilter) must.push(containsFilter);
 
   addDateRange(must, start, end);
@@ -392,6 +400,11 @@ export async function getLinuxCommandStats() {
             field: "linux.session.keyword"
           }
         },
+        total_users: {
+          cardinality: {
+            field: "linux.user.keyword"
+          }
+        },
         by_user: {
           terms: {
             field: "linux.user.keyword",
@@ -425,6 +438,7 @@ export async function getLinuxCommandStats() {
   return {
     totalCommands: getTotalHits(response),
     totalSessions: response.aggregations?.total_sessions?.value ?? 0,
+    totalUsers: response.aggregations?.total_users?.value ?? 0,
     suspiciousCommands: response.aggregations?.suspicious_count?.doc_count ?? 0,
     users: (response.aggregations?.by_user?.buckets || []).map((bucket) => ({
       user: bucket.key,

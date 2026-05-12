@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Navbar from "../components/Navbar";
 import { API_BASE_URL } from "../config/Api";
 import {
@@ -10,17 +10,14 @@ import {
   FileText,
   AlertCircle,
   BarChart3,
-  Zap,
   RefreshCw,
   FolderOpen,
   ShieldCheck,
   Network,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 
-const API_ROOT = "http://localhost:5000/api";;
-const PAGE_LIMIT = 20;
+const API_ROOT = `${API_BASE_URL}/api`;
+const DEFAULT_PAGE_SIZE = 20;
 
 const rangeToMinutes = {
   "1h": 60,
@@ -35,6 +32,28 @@ const rangeToBucketMs = {
   "7d": 6 * 60 * 60 * 1000,
   "30d": 24 * 60 * 60 * 1000,
 };
+
+const clamp = (n, a, b) => Math.min(Math.max(n, a), b);
+
+const getBucketMsForRange = (rangeKey) => rangeToBucketMs[rangeKey] || rangeToBucketMs["24h"];
+
+const formatBucketLabel = (ms, currentRangeKey) => {
+  const date = new Date(ms);
+  if (currentRangeKey === "1h") return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  if (currentRangeKey === "24h") return date.toLocaleTimeString("en-US", { hour: "2-digit" });
+  if (currentRangeKey === "7d") return date.toLocaleString("en-US", { weekday: "short", hour: "2-digit" });
+  return date.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
+};
+
+const formatDetailedTimestamp = (timestamp) =>
+  new Date(timestamp).toLocaleString("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 
 const severityOrder = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, INFO: 0 };
 const severityColors = {
@@ -60,9 +79,90 @@ function formatBytes(value) {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
+function formatLiveTimestamp(isoString) {
+  if (!isoString) return "-";
+  return new Date(isoString).toLocaleString("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 function normalizeSeverity(value, fallback = "HIGH") {
   const sev = String(value || fallback).toUpperCase();
   return severityOrder[sev] !== undefined ? sev : fallback;
+}
+
+function getNestedValue(source, path) {
+  if (!source || !path) return null;
+  if (Object.prototype.hasOwnProperty.call(source, path)) return source[path];
+
+  const keys = path.split(".");
+  let current = source;
+
+  for (const key of keys) {
+    if (current == null || typeof current !== "object") {
+      return null;
+    }
+    current = current[key];
+  }
+
+  return current ?? null;
+}
+
+function normalizeAgentLabel(value) {
+  if (value === undefined || value === null) return null;
+
+  const normalized = String(value).trim();
+  if (!normalized || normalized === "-" || /^unknown agent$/i.test(normalized)) {
+    return null;
+  }
+
+  return normalized;
+}
+
+function getFirstAgentValue(source, paths = []) {
+  for (const path of paths) {
+    const value = normalizeAgentLabel(getNestedValue(source, path));
+    if (value) return value;
+  }
+
+  return null;
+}
+
+function resolveAgentId(source) {
+  return getFirstAgentValue(source, [
+    "agentId",
+    "agent_id",
+    "agent.id",
+    "hostId",
+    "host_id",
+    "host.id",
+  ]);
+}
+
+function resolveAgentName(source) {
+  const label = getFirstAgentValue(source, [
+    "name",
+    "agentName",
+    "agent_name",
+    "agent.name",
+    "hostName",
+    "host_name",
+    "host.name",
+    "host.hostname",
+    "hostname",
+    "data.hostname",
+    "observer.hostname",
+  ]);
+
+  if (label) return label;
+
+  const agentId = resolveAgentId(source);
+  return agentId ? `Agent ${agentId}` : "Unknown agent";
 }
 
 function normalizeFinding(finding, index) {
@@ -110,6 +210,8 @@ function normalizeFileScan(item) {
   return {
     id: item.id || `${filePath}-${item.timestamp}`,
     timestamp: item.timestamp,
+    agentId: resolveAgentId(item) || "-",
+    agentName: resolveAgentName(item),
     logType: item.logType,
     eventType: item.eventType,
     scanner: item.scanner || "file-content-scanner",
@@ -132,7 +234,7 @@ function normalizeFileScan(item) {
 }
 
 function buildTimelineFallback(items, rangeKey) {
-  const bucketMs = rangeToBucketMs[rangeKey] || rangeToBucketMs["24h"];
+  const bucketMs = getBucketMsForRange(rangeKey);
   const buckets = new Map();
 
   items.forEach((item) => {
@@ -166,44 +268,60 @@ async function fetchJson(url) {
 }
 
 const RangeFilter = ({ rangeKey, onRangeChange }) => (
-  <div className="flex items-center gap-2">
-    <span className="text-xs text-slate-500">Range</span>
-    <div className="flex bg-slate-800 rounded-lg p-0.5 border border-slate-700">
+  <div className="flex items-center gap-1 md:gap-2">
+    <span className="hidden sm:inline text-xs text-slate-500">Range</span>
+    <div className="flex bg-slate-800 rounded p-0.5 border border-slate-700 gap-0.5">
       {["1h", "24h", "7d", "30d"].map((k) => (
         <button
           key={k}
           onClick={() => onRangeChange(k)}
-          className={`px-2.5 py-1 text-xs rounded-md ${rangeKey === k ? "bg-sky-600 text-white" : "text-slate-400"}`}
+          className={`px-1.5 md:px-2.5 py-0.5 md:py-1 text-xs rounded-sm ${rangeKey === k ? "bg-sky-600 text-white" : "text-slate-400"}`}
         >
-          Last {k}
+          {k}
         </button>
       ))}
     </div>
   </div>
 );
 
-const WaveChart = ({ data, height = 200 }) => {
+const WaveChart = ({
+  data,
+  color = "#ef4444",
+  activeColor = "#fb7185",
+  height = 200,
+  rangeKey,
+  compact = false,
+  activePointKey = null,
+  onPointSelect = null,
+}) => {
   const [selectedPoint, setSelectedPoint] = useState(null);
-  const width = 1000;
+  const width = 800;
   const padding = { l: 28, r: 10, t: 8, b: 24 };
   const innerW = width - padding.l - padding.r;
   const innerH = height - padding.t - padding.b;
 
   if (!data || data.length === 0) {
-    return <div className="w-full h-48 flex items-center justify-center text-slate-500 text-sm">No timeline data available</div>;
+    return (
+      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="block">
+        <text x={width / 2} y={height / 2} textAnchor="middle" fontSize="12" fill="#64748b">No data</text>
+      </svg>
+    );
   }
 
   const maxV = Math.max(1, ...data.map((d) => Number(d.v || 0)));
   const pointSpacing = data.length > 1 ? innerW / (data.length - 1) : innerW;
+  const defaultBucketMs = getBucketMsForRange(rangeKey);
 
-  const gridLines = Array.from({ length: 5 }, (_, i) => {
-    const ratio = i / 4;
-    return {
+  const gridSteps = 5;
+  const gridLines = [];
+  for (let i = 0; i < gridSteps; i += 1) {
+    const ratio = i / (gridSteps - 1);
+    gridLines.push({
       value: Math.round(ratio * maxV),
       y: padding.t + innerH - ratio * innerH,
       ratio,
-    };
-  });
+    });
+  }
 
   let pathD = "";
   for (let i = 0; i < data.length; i += 1) {
@@ -219,64 +337,116 @@ const WaveChart = ({ data, height = 200 }) => {
     }
   }
 
-  const formatPointTime = (timestamp) =>
-    new Date(timestamp).toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  const tickCount = clamp(Math.floor(innerW / (compact ? 260 : 160)), compact ? 2 : 3, compact ? 4 : 7);
+  const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
 
   return (
     <div className="relative" onMouseLeave={() => setSelectedPoint(null)}>
       <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="block">
-        <defs>
-          <linearGradient id="waveGradientFileScanner" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#ef4444" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="#ef4444" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-
-        {gridLines.map((grid, idx) => (
-          <g key={`grid-${idx}`}>
-            <line
-              x1={padding.l}
-              y1={grid.y}
-              x2={padding.l + innerW}
-              y2={grid.y}
-              stroke="#1e293b"
-              strokeWidth="1"
-              opacity={grid.ratio === 0 || grid.ratio === 1 ? "1" : "0.5"}
-            />
-            <text x={padding.l - 5} y={grid.y + 4} textAnchor="end" fontSize="10" fill="#64748b" fontWeight="600">
-              {grid.value}
-            </text>
+        {gridLines.map((grid) => (
+          <g key={`grid-${grid.ratio}`}>
+            <line x1={padding.l} y1={grid.y} x2={padding.l + innerW} y2={grid.y} stroke="#334155" strokeDasharray="2,2" opacity="0.5" />
+            <text x={padding.l - 5} y={grid.y + 3} textAnchor="end" fontSize="8" fill="#64748b">{grid.value}</text>
           </g>
         ))}
 
-        <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="#334155" strokeWidth="1.5" />
-        <line x1={padding.l} y1={padding.t + innerH} x2={padding.l + innerW} y2={padding.t + innerH} stroke="#334155" strokeWidth="1.5" />
-        <path d={pathD} stroke="#ef4444" strokeWidth="2.5" fill="none" opacity="0.8" />
-        <path
-          d={`${pathD} L ${padding.l + (data.length - 1) * pointSpacing} ${padding.t + innerH} L ${padding.l} ${padding.t + innerH} Z`}
-          fill="url(#waveGradientFileScanner)"
-        />
+        <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="#334155" />
+        <line x1={padding.l} y1={padding.t + innerH} x2={padding.l + innerW} y2={padding.t + innerH} stroke="#334155" />
+        <path d={pathD} stroke={color} strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
+        <defs>
+          <linearGradient id="waveGradientFileScanner" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor={color} stopOpacity="0.24" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={pathD + ` L ${padding.l + (data.length - 1) * pointSpacing} ${padding.t + innerH} L ${padding.l} ${padding.t + innerH} Z`} fill="url(#waveGradientFileScanner)" />
 
         {data.map((d, i) => {
           const x = padding.l + i * pointSpacing;
           const y = padding.t + innerH - (Number(d.v || 0) / maxV) * innerH;
-          const isSelected = selectedPoint?.index === i;
-          const pointData = { index: i, x, y, value: d.v, time: d.t };
+          const pointKey = String(d.key ?? d.t);
+          const bucketMsForPoint = d.bucketMs || defaultBucketMs;
+          const pointData = {
+            index: i,
+            x,
+            y,
+            key: pointKey,
+            value: d.v,
+            time: d.t,
+            start: new Date(Number(d.t)).toISOString(),
+            end: new Date(Number(d.t) + bucketMsForPoint - 1).toISOString(),
+            bucketMs: bucketMsForPoint,
+          };
+          const isHovered = selectedPoint?.index === i;
+          const isActive =
+            activePointKey !== null && typeof activePointKey !== "undefined"
+              ? String(activePointKey) === pointKey
+              : false;
+          const isHighlighted = isHovered || isActive;
+
           return (
-            <g key={`${d.t}-${i}`}>
+            <g key={`point-${pointKey}`}>
+              {isActive && (
+                <circle
+                  cx={x}
+                  cy={y}
+                  r="7.5"
+                  fill="transparent"
+                  stroke={activeColor}
+                  strokeWidth="1.5"
+                  opacity="0.85"
+                  className="pointer-events-none"
+                />
+              )}
               <circle
                 cx={x}
                 cy={y}
-                r="10"
+                r={isHighlighted ? "7" : "10"}
                 fill="transparent"
                 className="cursor-pointer"
+                role="button"
+                tabIndex={0}
+                aria-label={`Filter file detections for ${formatDetailedTimestamp(pointData.start)}`}
+                onClick={() => onPointSelect?.(pointData)}
                 onMouseEnter={() => setSelectedPoint(pointData)}
+                onMouseLeave={() => setSelectedPoint(null)}
                 onFocus={() => setSelectedPoint(pointData)}
+                onBlur={() => setSelectedPoint(null)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onPointSelect?.(pointData);
+                  }
+                }}
               />
-              <circle cx={x} cy={y} r={isSelected ? "5" : "3.5"} fill="#ef4444" stroke="#0f172a" strokeWidth="1.5" opacity="0.95" />
+              <circle
+                cx={x}
+                cy={y}
+                r={isHighlighted ? "5" : "3.5"}
+                fill={isActive ? activeColor : color}
+                stroke="#0f172a"
+                strokeWidth="1.5"
+                opacity="0.95"
+                className="pointer-events-none"
+              />
+            </g>
+          );
+        })}
+        {data.map((d, i) => {
+          if (i % tickEvery !== 0) return null;
+          const x = padding.l + i * pointSpacing;
+          return (
+            <g key={`tick-${d.t}`}>
+              <line x1={x} y1={padding.t + innerH} x2={x} y2={padding.t + innerH + 3} stroke="#334155" />
+              <text
+                x={x}
+                y={padding.t + innerH + 14}
+                textAnchor={i === 0 ? "start" : i >= data.length - tickEvery ? "end" : "middle"}
+                fontSize="8"
+                fill="#64748b"
+              >
+                {formatBucketLabel(d.t, rangeKey)}
+              </text>
             </g>
           );
         })}
@@ -284,15 +454,15 @@ const WaveChart = ({ data, height = 200 }) => {
 
       {selectedPoint && (
         <div
-          className="pointer-events-none absolute z-10 min-w-[130px] rounded-lg border border-slate-700 bg-slate-900/95 px-3 py-2 text-xs shadow-lg"
+          className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-slate-700 bg-slate-900/95 px-3 py-2 text-xs shadow-lg"
           style={{
             left: `${Math.min(Math.max((selectedPoint.x / width) * 100, 10), 82)}%`,
-            top: `${Math.max(((selectedPoint.y - 48) / height) * 100, 4)}%`,
+            top: `${Math.max(((selectedPoint.y - 40) / height) * 100, 6)}%`,
             transform: "translate(-50%, -100%)",
           }}
         >
           <div className="font-semibold text-white">{selectedPoint.value} detections</div>
-          <div className="mt-1 text-slate-400">{formatPointTime(selectedPoint.time)}</div>
+          <div className="mt-1 text-slate-400">{formatDetailedTimestamp(selectedPoint.time)}</div>
         </div>
       )}
     </div>
@@ -339,7 +509,7 @@ const Donut = ({ items, size = 120, stroke = 12, centerLabelTop, centerLabelBott
 };
 
 const Legend = ({ items }) => (
-  <div className="flex flex-col gap-1.5">
+  <div className="flex flex-col gap-1.5 items-center">
     {items.length === 0 ? (
       <div className="text-xs text-slate-500">No data available</div>
     ) : (
@@ -347,7 +517,7 @@ const Legend = ({ items }) => (
         <div key={it.label} className="flex items-center gap-1.5 text-xs text-slate-400">
           <span className="inline-block w-2 h-2 rounded-sm shrink-0" style={{ background: it.color }} />
           <span className="truncate max-w-[120px]">{it.label}</span>
-          <span className="text-slate-500 tabular-nums ml-auto">{it.value}</span>
+          <span className="text-slate-500 tabular-nums">{it.value}</span>
         </div>
       ))
     )}
@@ -387,6 +557,56 @@ const CompactBarChart = ({ items, getKey, getLabel, getValue, getBarColor = () =
   );
 };
 
+const TOP_AGENT_COLORS = ["#34d399", "#38bdf8", "#fbbf24", "#f97316", "#a78bfa"];
+
+const TopAgentsCard = ({ agents }) => {
+  if (!agents || agents.length === 0) {
+    return <div className="flex h-full items-center justify-center text-xs text-slate-600">No agent data</div>;
+  }
+
+  const peakCount = Math.max(...agents.map((agent) => agent.count), 1);
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      {agents.map((agent, idx) => {
+        const accent = TOP_AGENT_COLORS[idx % TOP_AGENT_COLORS.length];
+        const fillWidth = Math.max(10, Math.round((agent.count / peakCount) * 100));
+
+        return (
+          <div key={`${agent.name}-${idx}`} className="rounded-xl border border-slate-700/60 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <span
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black"
+                  style={{ backgroundColor: `${accent}1f`, color: accent }}
+                >
+                  {idx + 1}
+                </span>
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-slate-100">{agent.name}</div>
+                  <div className="text-[11px] text-slate-500">
+                    Last seen {formatLiveTimestamp(agent.lastSeen)}
+                  </div>
+                </div>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className="text-sm font-black" style={{ color: accent }}>{agent.count}</div>
+                <div className="text-[11px] uppercase tracking-wide text-slate-500">files</div>
+              </div>
+            </div>
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800">
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${fillWidth}%`, background: accent }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 const RiskIndicator = ({ severity }) => {
   const sev = normalizeSeverity(severity, "INFO");
   return <span className={`px-3 py-1 rounded-full text-xs font-bold ${severityColors[sev]}`}>{sev}</span>;
@@ -404,50 +624,62 @@ const HealthIndicator = ({ health }) => {
   return <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${tone}`}>{value}%</span>;
 };
 
-const PaginationControls = ({ pagination, page, loading, onPageChange }) => {
+const PaginationControls = ({ pagination, page, pageSize, loading, onPageChange }) => {
   const totalPages = pagination?.totalPages || 1;
   const total = pagination?.total || 0;
-  const start = total === 0 ? 0 : (page - 1) * PAGE_LIMIT + 1;
-  const end = Math.min(page * PAGE_LIMIT, total);
-
-  const pages = [];
-  const first = Math.max(1, page - 2);
-  const last = Math.min(totalPages, page + 2);
-  for (let value = first; value <= last; value += 1) pages.push(value);
+  const limit = pagination?.limit || pageSize;
+  const start = total === 0 ? 0 : (page - 1) * limit + 1;
+  const end = Math.min(page * limit, total);
 
   return (
-    <div className="flex flex-col gap-3 border-t border-slate-800 bg-slate-900/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="text-xs text-slate-400">
-        Showing <span className="font-semibold text-slate-200">{start}</span> - <span className="font-semibold text-slate-200">{end}</span> of{" "}
-        <span className="font-semibold text-slate-200">{total}</span> records
+    <div className="p-2 md:p-4 border-t border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-2 md:gap-0 bg-slate-900/50 rounded-b-lg md:rounded-b-xl">
+      <div className="text-xs text-slate-500 font-mono">
+        <span className="hidden md:inline">SHOWING </span>
+        <span className="text-sky-400 font-bold">{start}</span>
+        <span className="hidden md:inline">{" - "}</span>
+        <span className="md:hidden">-</span>
+        <span className="text-sky-400 font-bold">{end}</span>
+        <span className="hidden md:inline">{" OF "}</span>
+        <span className="md:hidden"> / </span>
+        <span className="text-sky-400 font-bold">{total}</span>
+        <span className="hidden md:inline"> RECORDS</span>
       </div>
-      <div className="flex items-center gap-2">
+
+      <div className="flex flex-wrap gap-1 md:gap-2 items-center">
+        <button
+          onClick={() => onPageChange(1)}
+          disabled={loading || page <= 1}
+          className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
+        >
+          <span className="hidden md:inline">FIRST</span>
+          <span className="md:hidden">«</span>
+        </button>
         <button
           onClick={() => onPageChange(Math.max(1, page - 1))}
           disabled={loading || page <= 1}
-          className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-300 disabled:cursor-not-allowed disabled:opacity-40"
+          className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
         >
-          <ChevronLeft className="h-3.5 w-3.5" /> Prev
+          <span className="hidden md:inline">PREV</span>
+          <span className="md:hidden">‹</span>
         </button>
-        <div className="hidden items-center gap-1 sm:flex">
-          {pages.map((value) => (
-            <button
-              key={value}
-              onClick={() => onPageChange(value)}
-              disabled={loading || value === page}
-              className={`h-8 min-w-8 rounded-lg px-2 text-xs font-semibold ${value === page ? "bg-sky-600 text-white" : "border border-slate-700 bg-slate-800 text-slate-400 hover:bg-slate-700"
-                }`}
-            >
-              {value}
-            </button>
-          ))}
-        </div>
+        <span className="text-xs font-black text-slate-400 px-1 md:px-2">
+          <span className="hidden md:inline">PAGE </span><span className="text-white">{page}</span> / {totalPages}
+        </span>
         <button
           onClick={() => onPageChange(Math.min(totalPages, page + 1))}
           disabled={loading || page >= totalPages}
-          className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-300 disabled:cursor-not-allowed disabled:opacity-40"
+          className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
         >
-          Next <ChevronRight className="h-3.5 w-3.5" />
+          <span className="hidden md:inline">NEXT</span>
+          <span className="md:hidden">›</span>
+        </button>
+        <button
+          onClick={() => onPageChange(totalPages)}
+          disabled={loading || page >= totalPages}
+          className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
+        >
+          <span className="hidden md:inline">LAST</span>
+          <span className="md:hidden">»</span>
         </button>
       </div>
     </div>
@@ -456,28 +688,35 @@ const PaginationControls = ({ pagination, page, loading, onPageChange }) => {
 
 const EmptyState = ({ message }) => (
   <tr>
-    <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-500">
+    <td colSpan={9} className="px-4 py-10 text-center text-sm text-slate-500">
       {message}
     </td>
   </tr>
 );
 
 const FileSecurityScanner = () => {
-  const [activeTab, setActiveTab] = useState("suspicious");
   const [selectedFile, setSelectedFile] = useState(null);
   const [copiedText, setCopiedText] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterSeverity, setFilterSeverity] = useState("all");
   const [isScanning, setIsScanning] = useState(false);
   const [rangeKey, setRangeKey] = useState("24h");
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [files, setFiles] = useState([]);
-  const [errors, setErrors] = useState([]);
   const [stats, setStats] = useState(null);
   const [timeline, setTimeline] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, limit: PAGE_LIMIT, total: 0, totalPages: 1 });
+  const [pagination, setPagination] = useState({ page: 1, limit: DEFAULT_PAGE_SIZE, total: 0, totalPages: 1 });
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth : 1280
+  );
+  const [timelineChartHeight, setTimelineChartHeight] = useState(160);
+  const [selectedTimelinePoint, setSelectedTimelinePoint] = useState(null);
+  const topAgentsPanelRef = useRef(null);
+  const filesTableRef = useRef(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -486,62 +725,58 @@ const FileSecurityScanner = () => {
     try {
       const minutes = rangeToMinutes[rangeKey] || 1440;
       const suspiciousParams = new URLSearchParams({
-        page: activeTab === "suspicious" ? String(page) : "1",
-        limit: String(PAGE_LIMIT),
+        page: String(page),
+        limit: String(pageSize),
       });
-      const errorParams = new URLSearchParams({
-        page: activeTab === "errors" ? String(page) : "1",
-        limit: String(PAGE_LIMIT),
-      });
+      if (selectedTimelinePoint?.start && selectedTimelinePoint?.end) {
+        suspiciousParams.set("start", selectedTimelinePoint.start);
+        suspiciousParams.set("end", selectedTimelinePoint.end);
+      }
 
-      const [suspiciousResponse, errorResponse, statsResponse, timelineResponse] = await Promise.all([
+      const [suspiciousResponse, statsResponse, timelineResponse] = await Promise.all([
         fetchJson(`${API_ROOT}/file-scans/suspicious?${suspiciousParams.toString()}`),
-        fetchJson(`${API_ROOT}/file-scans/errors?${errorParams.toString()}`),
         fetchJson(`${API_ROOT}/file-scans/stats`),
         fetchJson(`${API_ROOT}/file-scans/timeline?minutes=${minutes}`),
       ]);
 
       const normalizedSuspicious = (suspiciousResponse.data || []).map(normalizeFileScan);
-      const normalizedErrors = (errorResponse.data || []).map(normalizeFileScan);
 
       setFiles(normalizedSuspicious);
-      setErrors(normalizedErrors);
-
       setStats(statsResponse.data || null);
+      const bucketMs = getBucketMsForRange(rangeKey);
       const mappedTimeline = (timelineResponse.data || [])
-        .map((item) => ({
-          t: item.timestamp,
-          v: Number(item.suspicious || item.errors || item.total || 0),
-        }))
-        .filter((item) => Number.isFinite(new Date(item.t).getTime()));
+        .map((item) => {
+          const ts = new Date(item.timestamp).getTime();
+          return {
+            t: ts,
+            v: Number(item.suspicious || item.errors || item.total || 0),
+            bucketMs,
+          };
+        })
+        .filter((item) => Number.isFinite(item.t));
 
       setTimeline(
         mappedTimeline.length > 0
           ? mappedTimeline
-          : buildTimelineFallback(
-              [...normalizedSuspicious, ...normalizedErrors],
-              rangeKey
-            )
+          : buildTimelineFallback(normalizedSuspicious, rangeKey)
       );
 
-      const activePagination =
-        activeTab === "errors" ? errorResponse.pagination : suspiciousResponse.pagination;
-
       setPagination(
-        activePagination || {
+        suspiciousResponse.pagination || {
           page,
-          limit: PAGE_LIMIT,
-          total: activeTab === "errors" ? normalizedErrors.length : normalizedSuspicious.length,
+          limit: pageSize,
+          total: normalizedSuspicious.length,
           totalPages: 1,
         }
       );
+      setLastUpdated(new Date().toISOString());
     } catch (error) {
       console.error(error);
       setLoadError(error.message || "Failed to load file scan data");
     } finally {
       setLoading(false);
     }
-  }, [activeTab, page, rangeKey]);
+  }, [page, pageSize, rangeKey, selectedTimelinePoint]);
 
   useEffect(() => {
     loadData();
@@ -549,15 +784,59 @@ const FileSecurityScanner = () => {
 
   useEffect(() => {
     setPage(1);
-  }, [activeTab, rangeKey]);
+    setSelectedTimelinePoint(null);
+  }, [rangeKey]);
 
-  const visibleRows = activeTab === "errors" ? errors : files;
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const handleResize = () => {
+      setViewportWidth(window.innerWidth);
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const isMobile = viewportWidth < 768;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const updateTimelineHeight = () => {
+      if (isMobile) {
+        setTimelineChartHeight(100);
+        return;
+      }
+
+      const panelHeight = topAgentsPanelRef.current?.getBoundingClientRect().height;
+      if (!panelHeight) return;
+
+      const nextHeight = clamp(Math.round(panelHeight - 104), 160, 300);
+      setTimelineChartHeight(nextHeight);
+    };
+
+    updateTimelineHeight();
+
+    if (typeof ResizeObserver === "undefined" || !topAgentsPanelRef.current) {
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(() => {
+      updateTimelineHeight();
+    });
+
+    observer.observe(topAgentsPanelRef.current);
+    return () => observer.disconnect();
+  }, [isMobile, viewportWidth]);
 
   const filteredFiles = useMemo(() => {
     let result = files;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      result = result.filter((file) => `${file.fileName} ${file.filePath} ${file.sha256}`.toLowerCase().includes(q));
+      result = result.filter((file) =>
+        `${file.fileName} ${file.filePath} ${file.sha256} ${file.agentName} ${file.scanner}`.toLowerCase().includes(q)
+      );
     }
     if (filterSeverity !== "all") {
       result = result.filter((file) => file.findings.some((finding) => finding.severity === filterSeverity));
@@ -603,45 +882,61 @@ const FileSecurityScanner = () => {
         color: { CRITICAL: "#ef4444", HIGH: "#f97316", MEDIUM: "#eab308", LOW: "#3b82f6", INFO: "#64748b" }[item.label] || "#64748b",
       }));
 
-    const errorTypeMap = new Map();
-    errors.forEach((error) => {
-      const label = error.error ? String(error.error).split(":")[0] : "Scan Error";
-      errorTypeMap.set(label, (errorTypeMap.get(label) || 0) + 1);
-    });
-    const errorTypes = Array.from(errorTypeMap.entries()).map(([label, value], i) => ({
-      label,
-      value,
-      color: ["#f87171", "#fb923c", "#fbbf24", "#a78bfa"][i % 4],
-    }));
-
     const folderMap = new Map();
-    visibleRows.forEach((file) => folderMap.set(file.folder, (folderMap.get(file.folder) || 0) + 1));
+    filteredFiles.forEach((file) => folderMap.set(file.folder, (folderMap.get(file.folder) || 0) + 1));
     const topFolders = Array.from(folderMap.entries())
       .map(([folder, count]) => ({ folder, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
     const scannerMap = new Map();
-    visibleRows.forEach((file) => scannerMap.set(file.scanner, (scannerMap.get(file.scanner) || 0) + 1));
+    filteredFiles.forEach((file) => scannerMap.set(file.scanner, (scannerMap.get(file.scanner) || 0) + 1));
     const topScanners = Array.from(scannerMap.entries())
       .map(([scanner, count]) => ({ scanner, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
-    return { fileTypes, severities, errorTypes, topFolders, topScanners };
-  }, [stats, files, errors, visibleRows]);
+    const fallbackAgentMap = new Map();
+    files.forEach((file) => {
+      const key = resolveAgentName(file);
+      const existing = fallbackAgentMap.get(key) || { name: key, count: 0, lastSeen: null };
+      existing.count += 1;
+      if (!existing.lastSeen || new Date(file.timestamp).getTime() > new Date(existing.lastSeen).getTime()) {
+        existing.lastSeen = file.timestamp || null;
+      }
+      fallbackAgentMap.set(key, existing);
+    });
+
+    const fallbackTopAgents = Array.from(fallbackAgentMap.values())
+      .sort((a, b) => b.count - a.count || new Date(b.lastSeen || 0).getTime() - new Date(a.lastSeen || 0).getTime())
+      .slice(0, 5);
+
+    const statsTopAgents = (stats?.topAgents || []).map((agent) => ({
+      name: resolveAgentName(agent),
+      count: Number(agent.count || 0),
+      lastSeen: agent.lastSeen || agent.last_seen || null,
+    }));
+
+    const hasUsefulStatsTopAgents =
+      statsTopAgents.length > 0 &&
+      statsTopAgents.some((agent) => normalizeAgentLabel(agent.name));
+
+    const topAgents = hasUsefulStatsTopAgents ? statsTopAgents : fallbackTopAgents;
+
+    const fallbackUniqueAgents = new Set(files.map((file) => resolveAgentName(file))).size;
+
+    const uniqueAgents = Number(
+      hasUsefulStatsTopAgents ? (stats?.uniqueAgents ?? fallbackUniqueAgents) : fallbackUniqueAgents
+    );
+
+    return { fileTypes, severities, topFolders, topScanners, topAgents, uniqueAgents };
+  }, [stats, files, filteredFiles]);
 
   const health = useMemo(() => {
     const total = Number(stats?.totalEvents || 0);
     if (!total) return 100;
     const errorsCount = Number(stats?.totalErrorScans || 0);
     return Math.max(0, Number((((total - errorsCount) / total) * 100).toFixed(1)));
-  }, [stats]);
-
-  const detectionRate = useMemo(() => {
-    const total = Number(stats?.totalSuccessScans || 0);
-    if (!total) return "0.0";
-    return ((Number(stats?.suspiciousScans || 0) / total) * 100).toFixed(1);
   }, [stats]);
 
   const copyToClipboard = (text, type) => {
@@ -659,329 +954,350 @@ const FileSecurityScanner = () => {
   };
 
   const handleRangeChange = (nextRange) => {
+    setPage(1);
+    setSelectedTimelinePoint(null);
     setRangeKey(nextRange);
   };
+
+  const handleTimelinePointSelect = useCallback(
+    (point) => {
+      if (!point) return;
+
+      const pointKey = String(point.key ?? point.t ?? point.start ?? point);
+      const bucketMs = point.bucketMs || getBucketMsForRange(rangeKey);
+      const startIso = point.start || new Date(Number(point.t)).toISOString();
+      const endIso = point.end || new Date(Number(point.t) + bucketMs - 1).toISOString();
+
+      setPage(1);
+      if (selectedTimelinePoint?.key === pointKey) {
+        setSelectedTimelinePoint(null);
+      } else {
+        setSelectedTimelinePoint({ key: pointKey, start: startIso, end: endIso, bucketMs, time: point.t });
+      }
+
+      if (filesTableRef.current && typeof filesTableRef.current.scrollIntoView === "function") {
+        try {
+          filesTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+        } catch {
+          // ignore scroll errors
+        }
+      }
+    },
+    [rangeKey, selectedTimelinePoint]
+  );
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans">
       <Navbar />
 
-      <div className="p-4 md:p-6 flex flex-col gap-4">
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg flex flex-col gap-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="p-2 md:p-4 flex flex-col gap-3 md:gap-4">
+        <div className="bg-slate-900 border border-slate-800 rounded-lg md:rounded-xl p-3 md:p-4 shadow-lg">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-4">
             <div>
-              <h1 className="text-xl font-bold text-white flex items-center gap-2">
-                <Bug className="h-6 w-6 text-red-400" />
+              <h1 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
+                <Bug className="h-5 md:h-6 w-5 md:w-6 text-red-400" />
                 File Content Scanner
               </h1>
-              <p className="text-sm text-slate-400">Data diambil langsung dari backend File Scan dan Elasticsearch</p>
+              <p className="text-xs md:text-sm text-slate-400 mt-1">
+                Real-time file content scanning and suspicious file detection
+              </p>
             </div>
+          </div>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-lg md:rounded-xl p-2 md:p-4 shadow-lg flex flex-col gap-3 md:gap-4">
+          <div className="flex items-center justify-between gap-1 md:gap-2 flex-wrap">
             <div className="flex items-center gap-2">
               <button
                 onClick={handleRefresh}
                 disabled={isScanning || loading}
-                className="disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 bg-sky-600 hover:bg-sky-700 rounded-lg text-sm font-medium text-white transition-colors flex items-center gap-2"
+                className="inline-flex items-center gap-2 px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs text-slate-200 transition-colors border border-slate-700 disabled:opacity-60"
               >
-                {isScanning || loading ? (
-                  <>
-                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
-                    Loading...
-                  </>
-                ) : (
-                  <>
-                    <Zap className="h-4 w-4" />
-                    Refresh Data
-                  </>
+                <RefreshCw className={`h-3.5 w-3.5 ${(isScanning || loading) ? "animate-spin" : ""}`} />
+                <span>{isScanning || loading ? "Loading..." : "Refresh"}</span>
+              </button>
+
+              <label className="flex items-center gap-2 text-xs text-slate-400">
+                <span className="hidden sm:inline">Rows</span>
+                <select
+                  value={pageSize}
+                  onChange={(event) => {
+                    setPage(1);
+                    setPageSize(Number(event.target.value));
+                  }}
+                  className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-200 focus:border-sky-500 focus:outline-none"
+                >
+                  {[10, 20, 50, 100].map((size) => (
+                    <option key={size} value={size}>{size}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <RangeFilter rangeKey={rangeKey} onRangeChange={handleRangeChange} />
+          </div>
+
+          {loadError && (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+              {loadError}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-3">
+            <div className="bg-slate-800/50 border border-slate-700/60 rounded p-2 md:p-3">
+              <div className="text-[8px] md:text-[10px] text-slate-500 uppercase font-semibold">Total Events</div>
+              <div className="text-lg md:text-2xl font-black text-blue-400 mt-0.5 md:mt-1">{stats?.totalEvents ?? 0}</div>
+            </div>
+            <div className="bg-red-500/10 border border-red-500/30 rounded p-2 md:p-3">
+              <div className="text-[8px] md:text-[10px] text-red-400 uppercase font-semibold">Suspicious</div>
+              <div className="text-lg md:text-2xl font-black text-red-300 mt-0.5 md:mt-1">{stats?.suspiciousScans ?? 0}</div>
+            </div>
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded p-2 md:p-3">
+              <div className="text-[8px] md:text-[10px] text-emerald-400 uppercase font-semibold">Clean</div>
+              <div className="text-lg md:text-2xl font-black text-emerald-300 mt-0.5 md:mt-1">{stats?.cleanScans ?? 0}</div>
+            </div>
+            <div className="bg-orange-500/10 border border-orange-500/30 rounded p-2 md:p-3">
+              <div className="text-[8px] md:text-[10px] text-orange-400 uppercase font-semibold">Errors</div>
+              <div className="text-lg md:text-2xl font-black text-orange-300 mt-0.5 md:mt-1">{stats?.totalErrorScans ?? 0}</div>
+            </div>
+            <div className="bg-slate-800/50 border border-slate-700/60 rounded p-2 md:p-3">
+              <div className="text-[8px] md:text-[10px] text-slate-400 uppercase font-semibold">Scan Success Rate</div>
+              <div className="text-lg md:text-2xl font-black text-emerald-400 mt-0.5 md:mt-1">{health}%</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch">
+            <div className="bg-slate-800/30 border border-slate-800/50 rounded-lg p-4 md:p-6 flex flex-col h-full">
+              <div className="flex justify-between items-center mb-4 md:mb-6 gap-2">
+                <div>
+                  <div className="text-xs md:text-sm font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
+                    <BarChart3 className="h-3 md:h-4 w-3 md:w-4 text-red-400" />
+                    Detection Timeline
+                  </div>
+                  <div className="mt-1 text-[11px] text-slate-500">Click a point to filter suspicious files by time bucket</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-slate-500">Last {rangeKey}</div>
+                  <div className="text-[11px] text-slate-600">Updated {formatLiveTimestamp(lastUpdated)}</div>
+                </div>
+              </div>
+              <div className="overflow-x-auto flex-1 bg-slate-800/30 rounded-lg border border-slate-800/40 p-2 md:p-4">
+                <div className={isMobile ? "min-w-[620px]" : "min-w-0"}>
+                  <WaveChart
+                    data={timeline}
+                    color="#ef4444"
+                    activeColor="#fb7185"
+                    height={timelineChartHeight}
+                    rangeKey={rangeKey}
+                    compact={isMobile}
+                    activePointKey={selectedTimelinePoint?.key ?? null}
+                    onPointSelect={handleTimelinePointSelect}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div ref={topAgentsPanelRef} className="bg-slate-800/30 border border-slate-800/50 rounded-lg p-4 md:p-6 h-full">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-xs md:text-sm font-semibold text-slate-300">Top 5 Agents</div>
+                  <div className="mt-1 text-[11px] text-slate-500">Most suspicious file findings by agent</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-slate-500">Unique agents</div>
+                  <div className="text-sm font-black text-emerald-300">{analytics.uniqueAgents}</div>
+                </div>
+              </div>
+              <TopAgentsCard agents={analytics.topAgents} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+            <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4 shadow-lg flex flex-col">
+              <div className="text-xs md:text-sm font-semibold text-slate-300 mb-4 w-full">File Type Distribution</div>
+              <div className="flex items-center justify-center flex-1">
+                <div className="flex flex-col items-center gap-4">
+                  <Donut items={analytics.fileTypes} size={150} centerLabelTop={stats?.totalSuccessScans ?? 0} centerLabelBottom="files" />
+                  <div className="text-xs w-44"><Legend items={analytics.fileTypes} /></div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4 shadow-lg flex flex-col">
+              <div className="text-xs md:text-sm font-semibold text-slate-300 mb-4 w-full">Severity Distribution</div>
+              <div className="flex items-center justify-center flex-1">
+                <div className="flex flex-col items-center gap-4">
+                  <Donut items={analytics.severities} size={150} centerLabelTop={files.length} centerLabelBottom="page" />
+                  <div className="text-xs w-44"><Legend items={analytics.severities} /></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4">
+            <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Network className="h-4 w-4 text-red-400" />
+                <div>
+                  <div className="text-xs md:text-sm font-semibold text-slate-200">Top Scanner Sources</div>
+                  <div className="text-xs text-slate-500">Scanner frequency from the current table page</div>
+                </div>
+              </div>
+              <CompactBarChart
+                items={analytics.topScanners}
+                getKey={(item) => item.scanner}
+                getLabel={(item) => item.scanner}
+                getValue={(item) => item.count}
+                getBarColor={() => "linear-gradient(90deg, #0ea5e9 0%, #38bdf8 100%)"}
+              />
+            </div>
+
+            <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4">
+              <div className="flex items-center gap-2 mb-4">
+                <FolderOpen className="h-4 w-4 text-amber-400" />
+                <div>
+                  <div className="text-xs md:text-sm font-semibold text-slate-200">Top Scanned Folders</div>
+                  <div className="text-xs text-slate-500">Most frequent file paths from the current table page</div>
+                </div>
+              </div>
+              <CompactBarChart
+                items={analytics.topFolders}
+                getKey={(item) => item.folder}
+                getLabel={(item) => item.folder}
+                getValue={(item) => item.count}
+                getBarColor={() => "linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%)"}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-lg md:rounded-xl shadow-lg overflow-hidden">
+          <div className="border-b border-slate-800 bg-slate-800/50 px-6 py-4">
+            <span className="flex items-center gap-2 font-medium text-red-400">
+              <Bug className="h-4 w-4" />
+              Suspicious Files ({pagination.total})
+            </span>
+          </div>
+
+          <div className="p-3 md:p-4">
+            <div className="mb-[12px] space-y-4">
+              <div className="flex gap-3 flex-wrap">
+                <div className="flex-1 min-w-64 relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="Search current page by file, path, agent, scanner, or SHA-256..."
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 placeholder-slate-500"
+                  />
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  {["all", "CRITICAL", "HIGH", "MEDIUM", "LOW"].map((severity) => (
+                    <button
+                      key={severity}
+                      onClick={() => setFilterSeverity(severity)}
+                      className={`px-3 py-2 text-xs rounded-lg font-medium transition-colors ${filterSeverity === severity ? "bg-red-600 text-white" : "bg-slate-700 text-slate-400 hover:bg-slate-600"
+                        }`}
+                    >
+                      {severity}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div ref={filesTableRef} className="overflow-x-auto rounded-lg border border-slate-800">
+                {selectedTimelinePoint && (
+                  <div className="flex flex-col items-start justify-between gap-3 border-b border-slate-800 bg-slate-800/60 p-3 sm:flex-row sm:items-center">
+                    <div className="text-xs text-red-300">
+                      Timeline filter: {formatDetailedTimestamp(selectedTimelinePoint.start)}
+                      {selectedTimelinePoint.end ? ` - ${formatDetailedTimestamp(selectedTimelinePoint.end)}` : ""}
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedTimelinePoint(null);
+                        setPage(1);
+                      }}
+                      className="rounded border border-slate-700 bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-slate-300 transition-colors hover:border-red-400/50 hover:text-red-300"
+                    >
+                      Clear filter
+                    </button>
+                  </div>
                 )}
-              </button>
-              <button
-                onClick={handleRefresh}
-                disabled={loading}
-                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm text-slate-400 transition-colors border border-slate-700 disabled:opacity-50"
-              >
-                <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-              </button>
-            </div>
-          </div>
-
-          {loadError && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">{loadError}</div>}
-
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <div className="bg-slate-800/50 border border-slate-700/60 rounded-lg p-3">
-              <div className="text-[10px] text-slate-500 uppercase font-semibold">Total Events</div>
-              <div className="text-2xl font-black text-blue-400 mt-1">{stats?.totalEvents ?? 0}</div>
-            </div>
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
-              <div className="text-[10px] text-red-400 uppercase font-semibold">Suspicious</div>
-              <div className="text-2xl font-black text-red-300 mt-1">{stats?.suspiciousScans ?? 0}</div>
-            </div>
-            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3">
-              <div className="text-[10px] text-emerald-400 uppercase font-semibold">Clean</div>
-              <div className="text-2xl font-black text-emerald-300 mt-1">{stats?.cleanScans ?? 0}</div>
-            </div>
-            <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
-              <div className="text-[10px] text-orange-400 uppercase font-semibold">Errors</div>
-              <div className="text-2xl font-black text-orange-300 mt-1">{stats?.totalErrorScans ?? 0}</div>
-            </div>
-            <div className="bg-slate-800/50 border border-slate-700/60 rounded-lg p-3">
-              <div className="text-[10px] text-slate-400 uppercase font-semibold">Health</div>
-              <div className="text-2xl font-black text-emerald-400 mt-1">{health}%</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-4">
-            <div className="flex justify-between items-center mb-4 gap-3 flex-wrap">
-              <div className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                <BarChart3 className="h-4 w-4" />
-                Detection Timeline
-              </div>
-              <RangeFilter rangeKey={rangeKey} onRangeChange={handleRangeChange} />
-            </div>
-            <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-800/50">
-              <WaveChart data={timeline} />
-            </div>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center justify-center">
-            <div className="text-center">
-              <div className="text-4xl font-black text-red-400">{stats?.suspiciousScans ?? 0}</div>
-              <div className="text-xs text-slate-400 uppercase font-semibold mt-1">Threats Detected</div>
-              <div className="text-lg font-bold text-slate-300 mt-4">{detectionRate}%</div>
-              <div className="text-xs text-slate-500">Detection Rate</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-center items-center">
-            <div className="text-sm font-semibold text-slate-300 mb-4 w-full">File Type Distribution</div>
-            <div className="flex items-center gap-4 justify-center w-full">
-              <Donut items={analytics.fileTypes} size={120} centerLabelTop={stats?.totalSuccessScans ?? 0} centerLabelBottom="files" />
-              <div className="flex-1 min-w-0"><Legend items={analytics.fileTypes} /></div>
-            </div>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-center items-center">
-            <div className="text-sm font-semibold text-slate-300 mb-4 w-full">Severity Distribution</div>
-            <div className="flex items-center gap-4 justify-center w-full">
-              <Donut items={analytics.severities} size={120} centerLabelTop={files.length} centerLabelBottom="page" />
-              <div className="flex-1 min-w-0"><Legend items={analytics.severities} /></div>
-            </div>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-center items-center">
-            <div className="text-sm font-semibold text-slate-300 mb-4 w-full">Error Type Breakdown</div>
-            <div className="flex items-center gap-4 justify-center w-full">
-              <Donut items={analytics.errorTypes} size={120} centerLabelTop={errors.length} centerLabelBottom="page" />
-              <div className="flex-1 min-w-0"><Legend items={analytics.errorTypes} /></div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-4">
-              <Network className="h-4 w-4 text-red-400" />
-              <div>
-                <div className="text-sm font-semibold text-slate-200">Top Scanner Sources</div>
-                <div className="text-xs text-slate-500">Scanner frequency from the current table page</div>
-              </div>
-            </div>
-            <CompactBarChart
-              items={analytics.topScanners}
-              getKey={(item) => item.scanner}
-              getLabel={(item) => item.scanner}
-              getValue={(item) => item.count}
-              getBarColor={() => "linear-gradient(90deg, #0ea5e9 0%, #38bdf8 100%)"}
-            />
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-4">
-              <FolderOpen className="h-4 w-4 text-amber-400" />
-              <div>
-                <div className="text-sm font-semibold text-slate-200">Top Scanned Folders</div>
-                <div className="text-xs text-slate-500">Most frequent file paths from the current table page</div>
-              </div>
-            </div>
-            <CompactBarChart
-              items={analytics.topFolders}
-              getKey={(item) => item.folder}
-              getLabel={(item) => item.folder}
-              getValue={(item) => item.count}
-              getBarColor={() => "linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%)"}
-            />
-          </div>
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-          <div className="flex border-b border-slate-800 bg-slate-800/50">
-            <button
-              onClick={() => setActiveTab("suspicious")}
-              className={`flex-1 px-6 py-4 font-medium transition-all border-b-2 ${activeTab === "suspicious" ? "text-red-400 border-red-400 bg-slate-800/50" : "text-slate-400 border-transparent hover:text-slate-300"
-                }`}
-            >
-              <span className="flex items-center gap-2 justify-center">
-                <Bug className="h-4 w-4" />
-                Suspicious Files ({activeTab === "suspicious" ? pagination.total : stats?.suspiciousScans ?? 0})
-              </span>
-            </button>
-            <button
-              onClick={() => setActiveTab("errors")}
-              className={`flex-1 px-6 py-4 font-medium transition-all border-b-2 ${activeTab === "errors" ? "text-orange-400 border-orange-400 bg-slate-800/50" : "text-slate-400 border-transparent hover:text-slate-300"
-                }`}
-            >
-              <span className="flex items-center gap-2 justify-center">
-                <AlertCircle className="h-4 w-4" />
-                Error Logs ({activeTab === "errors" ? pagination.total : stats?.totalErrorScans ?? 0})
-              </span>
-            </button>
-          </div>
-
-          <div className="p-6">
-            {activeTab === "suspicious" && (
-              <div className="mb-[12px] space-y-4">
-                <div className="flex gap-3 flex-wrap">
-                  <div className="flex-1 min-w-64 relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-500" />
-                    <input
-                      type="text"
-                      placeholder="Search current page by file name, path, or SHA-256..."
-                      value={searchQuery}
-                      onChange={(event) => setSearchQuery(event.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 placeholder-slate-500"
-                    />
-                  </div>
-                  <div className="flex gap-2 flex-wrap">
-                    {["all", "CRITICAL", "HIGH", "MEDIUM", "LOW"].map((severity) => (
-                      <button
-                        key={severity}
-                        onClick={() => setFilterSeverity(severity)}
-                        className={`px-3 py-2 text-xs rounded-lg font-medium transition-colors ${filterSeverity === severity ? "bg-red-600 text-white" : "bg-slate-700 text-slate-400 hover:bg-slate-600"
-                          }`}
-                      >
-                        {severity}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="overflow-x-auto rounded-lg border border-slate-800">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-800 bg-slate-800/50">
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">File</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Type</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Scanner</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">File Path</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Severity</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Findings</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Detected</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {loading ? (
-                        <EmptyState message="Loading file scan data from backend..." />
-                      ) : filteredFiles.length === 0 ? (
-                        <EmptyState message="No suspicious file scan data found on this page." />
-                      ) : (
-                        filteredFiles.map((file, idx) => {
-                          const maxSeverity = file.findings.reduce(
-                            (max, finding) => (severityOrder[finding.severity] > severityOrder[max.severity] ? finding : max),
-                            file.findings[0]
-                          );
-
-                          return (
-                            <tr key={file.id} className={`border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors ${idx % 2 !== 0 ? "bg-slate-900/30" : ""}`}>
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-8 h-8 bg-slate-700 rounded flex items-center justify-center text-xs font-bold text-slate-300">
-                                    {String(file.fileType || "?").charAt(0).toUpperCase()}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <div className="font-mono text-sky-300 text-xs truncate max-w-xs">{file.fileName}</div>
-                                    <div className="text-[11px] text-slate-500">{file.sizeLabel}</div>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-xs text-slate-400">{file.fileType}</td>
-                              <td className="px-4 py-3 text-xs text-slate-400 font-mono">{file.scanner}</td>
-                              <td className="px-4 py-3 max-w-[300px]">
-                                <div className="font-mono text-xs text-amber-300 truncate" title={file.filePath}>{file.filePath || "-"}</div>
-                              </td>
-                              <td className="px-4 py-3"><RiskIndicator severity={maxSeverity?.severity || "HIGH"} /></td>
-                              <td className="px-4 py-3 text-xs"><span className="text-slate-300 font-mono">{file.findingsCount} found</span></td>
-                              <td className="px-4 py-3 text-xs text-slate-400">
-                                {file.timestamp ? new Date(file.timestamp).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}
-                              </td>
-                              <td className="px-4 py-3">
-                                <button
-                                  onClick={() => setSelectedFile(file)}
-                                  className="px-3 py-1.5 rounded text-xs font-medium transition-colors flex items-center gap-1 bg-red-500/10 text-red-300 hover:bg-red-500/20"
-                                >
-                                  <FileText className="h-3.5 w-3.5" />
-                                  Detail
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {activeTab === "errors" && (
-              <div className="overflow-x-auto rounded-lg border border-slate-800">
-                <table className="w-full text-sm">
+                <table className="w-full text-xs md:text-sm">
                   <thead>
                     <tr className="border-b border-slate-800 bg-slate-800/50">
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">File Name</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Scanner</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">File Path</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Error Message</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Timestamp</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Action</th>
+                      <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">File</th>
+                      <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Agent</th>
+                      <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Type</th>
+                      <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Scanner</th>
+                      <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">File Path</th>
+                      <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Severity</th>
+                      <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Findings</th>
+                      <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Detected</th>
+                      <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {loading ? (
-                      <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">Loading error logs from backend...</td></tr>
-                    ) : errors.length === 0 ? (
-                      <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">No file scan error data found.</td></tr>
+                      <EmptyState message="Loading file scan data from backend..." />
+                    ) : filteredFiles.length === 0 ? (
+                      <EmptyState message="No suspicious file scan data found on this page." />
                     ) : (
-                      errors.map((error, idx) => (
-                        <tr key={error.id} className={`border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors ${idx % 2 !== 0 ? "bg-slate-900/30" : ""}`}>
-                          <td className="px-4 py-3 text-xs text-sky-300 font-mono truncate max-w-xs">{error.fileName}</td>
-                          <td className="px-4 py-3 text-xs text-slate-400 font-mono">{error.scanner}</td>
-                          <td className="px-4 py-3 max-w-[300px]"><div className="font-mono text-xs text-amber-300 truncate" title={error.filePath}>{error.filePath || "-"}</div></td>
-                          <td className="px-4 py-3 text-xs text-slate-400 max-w-[360px]"><div className="truncate" title={error.error}>{error.error || "Scan error"}</div></td>
-                          <td className="px-4 py-3 text-xs text-slate-500">
-                            {error.timestamp ? new Date(error.timestamp).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}
-                          </td>
-                          <td className="px-4 py-3">
-                            <button
-                              onClick={() => setSelectedFile(error)}
-                              className="px-3 py-1.5 rounded text-xs font-medium transition-colors flex items-center gap-1 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20"
-                            >
-                              <FileText className="h-3.5 w-3.5" /> Detail
-                            </button>
-                          </td>
-                        </tr>
-                      ))
+                      filteredFiles.map((file, idx) => {
+                        const maxSeverity = file.findings.reduce(
+                          (max, finding) => (severityOrder[finding.severity] > severityOrder[max.severity] ? finding : max),
+                          file.findings[0]
+                        );
+
+                        return (
+                          <tr key={file.id} className={`border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors ${idx % 2 !== 0 ? "bg-slate-900/30" : ""}`}>
+                            <td className="px-2 md:px-4 py-1.5 md:py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 bg-slate-700 rounded flex items-center justify-center text-xs font-bold text-slate-300">
+                                  {String(file.fileType || "?").charAt(0).toUpperCase()}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="font-mono text-sky-300 text-xs truncate max-w-xs">{file.fileName}</div>
+                                  <div className="text-[11px] text-slate-500">{file.sizeLabel}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-2 md:px-4 py-1.5 md:py-3">
+                              <div className="min-w-[140px]">
+                                <div className="truncate text-xs font-semibold text-slate-200">{file.agentName || "Unknown agent"}</div>
+                              </div>
+                            </td>
+                            <td className="px-2 md:px-4 py-1.5 md:py-3 text-xs text-slate-400">{file.fileType}</td>
+                            <td className="px-2 md:px-4 py-1.5 md:py-3 text-xs text-slate-400 font-mono">{file.scanner}</td>
+                            <td className="px-2 md:px-4 py-1.5 md:py-3 max-w-[300px]">
+                              <div className="font-mono text-xs text-amber-300 truncate" title={file.filePath}>{file.filePath || "-"}</div>
+                            </td>
+                            <td className="px-2 md:px-4 py-1.5 md:py-3"><RiskIndicator severity={maxSeverity?.severity || "HIGH"} /></td>
+                            <td className="px-2 md:px-4 py-1.5 md:py-3 text-xs"><span className="text-slate-300 font-mono">{file.findingsCount} found</span></td>
+                            <td className="px-2 md:px-4 py-1.5 md:py-3 text-xs text-slate-400">
+                              {file.timestamp ? new Date(file.timestamp).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}
+                            </td>
+                            <td className="px-2 md:px-4 py-1.5 md:py-3">
+                              <button
+                                onClick={() => setSelectedFile(file)}
+                                className="px-3 py-1.5 rounded text-xs font-medium transition-colors flex items-center gap-1 bg-red-500/10 text-red-300 hover:bg-red-500/20"
+                              >
+                                <FileText className="h-3.5 w-3.5" />
+                                Detail
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
               </div>
-            )}
+            </div>
           </div>
 
-          <PaginationControls pagination={pagination} page={page} loading={loading} onPageChange={setPage} />
+          <PaginationControls pagination={pagination} page={page} pageSize={pageSize} loading={loading} onPageChange={setPage} />
         </div>
       </div>
 
@@ -1004,14 +1320,16 @@ const FileSecurityScanner = () => {
             <div className="p-6 space-y-6">
               <div>
                 <h3 className="text-sm font-semibold text-slate-200 mb-4 flex items-center gap-2"><FileText className="h-4 w-4" /> File Metadata</h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 bg-slate-700/30 rounded-lg p-4 border border-slate-700">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-slate-700/30 rounded-lg p-4 border border-slate-700">
                   <div><p className="text-xs text-slate-400 uppercase font-semibold mb-1">File Type</p><p className="text-sm text-slate-100">{selectedFile.fileType}</p></div>
                   <div><p className="text-xs text-slate-400 uppercase font-semibold mb-1">Size</p><p className="text-sm text-slate-100">{selectedFile.sizeLabel}</p></div>
                   <div><p className="text-xs text-slate-400 uppercase font-semibold mb-1">Scanner</p><p className="text-sm text-slate-100">{selectedFile.scanner}</p></div>
+                  <div><p className="text-xs text-slate-400 uppercase font-semibold mb-1">Agent</p><p className="text-sm text-slate-100">{selectedFile.agentName || "Unknown agent"}</p></div>
                   <div className="md:col-span-2"><p className="text-xs text-slate-400 uppercase font-semibold mb-1">File Path</p><p className="text-sm font-mono text-amber-300 break-all">{selectedFile.filePath || "-"}</p></div>
                   <div><p className="text-xs text-slate-400 uppercase font-semibold mb-1">Detected</p><p className="text-sm text-slate-100">{selectedFile.timestamp ? new Date(selectedFile.timestamp).toLocaleString() : "-"}</p></div>
                   <div><p className="text-xs text-slate-400 uppercase font-semibold mb-1">Action</p><p className="text-sm text-slate-100">{selectedFile.actionStatus}</p></div>
-                  <div><p className="text-xs text-slate-400 uppercase font-semibold mb-1">Scan Health</p><HealthIndicator health={selectedFile.health} /></div>
+                  {/* Agent ID intentionally hidden from UI per request */}
+                  <div><p className="text-xs text-slate-400 uppercase font-semibold mb-1">File Risk Score</p><HealthIndicator health={selectedFile.health} /></div>
                 </div>
               </div>
 

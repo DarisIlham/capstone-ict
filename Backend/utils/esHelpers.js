@@ -118,9 +118,10 @@ export function addDateRange(must, start, end) {
   });
 }
 
-export function normalizePagination(query = {}) {
+export function normalizePagination(query = {}, options = {}) {
+  const maxLimit = Math.max(parseInt(options.maxLimit || "100", 10), 1);
   const page = Math.max(parseInt(query.page || "1", 10), 1);
-  const limit = Math.min(Math.max(parseInt(query.limit || "20", 10), 1), 100);
+  const limit = Math.min(Math.max(parseInt(query.limit || "20", 10), 1), maxLimit);
   const from = (page - 1) * limit;
 
   return { page, limit, from };

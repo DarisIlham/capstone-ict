@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Navbar from '../components/Navbar';
-import { BrainCircuit } from "lucide-react";
+import { BrainCircuit, RefreshCw } from "lucide-react";
 import {
   PieChart,
   Pie,
@@ -165,15 +165,83 @@ const withAlpha = (hex, alpha) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
+const TOP_SOURCE_IPS_COLORS = ["#34d399", "#38bdf8", "#fbbf24", "#f97316", "#a78bfa"];
+
+const getValidDate = (value) => {
+  if (!value) return null;
+  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const getTimestampMs = (value) => getValidDate(value)?.getTime() ?? null;
+
+const formatDetailedTimestamp = (timestamp) => {
+  const date = getValidDate(timestamp);
+  if (!date) return '-';
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+};
+
+const TopSourceIpsCard = ({ sourceIps }) => {
+  if (!sourceIps || sourceIps.length === 0) {
+    return <div className="flex h-full items-center justify-center text-xs text-slate-600">No source IP data</div>;
+  }
+
+  const peakCount = Math.max(...sourceIps.map((ip) => ip.count), 1);
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      {sourceIps.map((ip, idx) => {
+        const accent = TOP_SOURCE_IPS_COLORS[idx % TOP_SOURCE_IPS_COLORS.length];
+        const fillWidth = Math.max(10, Math.round((ip.count / peakCount) * 100));
+
+        return (
+          <div key={ip.label} className="rounded-xl border border-slate-700/60 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <span
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black"
+                  style={{ backgroundColor: `${accent}1f`, color: accent }}
+                >
+                  {idx + 1}
+                </span>
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-slate-100">{ip.label}</div>
+                  <div className="text-[11px] text-slate-500">
+                    Last seen {formatDetailedTimestamp(ip.lastSeen)}
+                  </div>
+                </div>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className="text-sm font-black" style={{ color: accent }}>{ip.count}</div>
+                <div className="text-[11px] uppercase tracking-wide text-slate-500">events</div>
+              </div>
+            </div>
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800">
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${fillWidth}%`, background: accent }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 const SourceIpRankingPanel = ({ data }) => {
   if (!data || data.length === 0) {
     return <div className="h-32 flex items-center justify-center text-slate-500">No data</div>;
   }
 
   const maxCount = Math.max(1, ...data.map((item) => item.count));
-  const totalCount = data.reduce((sum, item) => sum + item.count, 0);
-  const topSource = data[0];
-  const topShare = totalCount ? ((topSource.count / totalCount) * 100).toFixed(1) : '0.0';
   const palette = ['#f97316', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#eab308', '#ef4444', '#6366f1'];
 
   return (
@@ -182,7 +250,6 @@ const SourceIpRankingPanel = ({ data }) => {
         {data.map((item, i) => {
           const color = palette[i % palette.length];
           const ratio = item.count / maxCount;
-          const share = totalCount ? ((item.count / totalCount) * 100).toFixed(1) : '0.0';
 
           return (
             <div
@@ -246,6 +313,7 @@ const clamp = (n, a, b) => Math.min(Math.max(n, a), b);
 const WORD_COLORS = ['#f472b6', '#38bdf8', '#4ade80', '#a78bfa', '#fb923c', '#34d399', '#f87171', '#facc15', '#60a5fa', '#e879f9'];
 const COLORS = ['#10b981', '#ef4444', '#f97316', '#3b82f6', '#a78bfa', '#ec4899', '#14b8a6', '#8b5cf6'];
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const PREDICTIONS_FETCH_BATCH_SIZE = 1000;
 const TIME_RANGE_OPTIONS = [
   { label: '1h', value: '1h', description: '1 hour' },
   { label: '24h', value: '24h', description: '24 hours' },
@@ -261,8 +329,8 @@ const RANGE_TO_MINUTES = {
 };
 
 const formatTime = (isoString) => {
-  if (!isoString) return '-';
-  const date = new Date(isoString);
+  const date = getValidDate(isoString);
+  if (!date) return '-';
   return date.toLocaleString('en-US', {
     month: 'short',
     day: '2-digit',
@@ -280,8 +348,40 @@ const formatConfidenceValue = (score) => {
   return value.toFixed(2);
 };
 
+const formatLiveTimestamp = (isoString) => {
+  const date = getValidDate(isoString);
+  if (!date) return '-';
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+};
+
 const getTimelineRangeDescription = (value) =>
   TIME_RANGE_OPTIONS.find((option) => option.value === String(value))?.description || String(value);
+
+const RangeFilter = ({ rangeKey, onRangeChange }) => (
+  <div className="flex items-center gap-1 md:gap-2">
+    <span className="hidden sm:inline text-xs text-slate-500">Range</span>
+    <div className="flex bg-slate-800 rounded p-0.5 border border-slate-700 gap-0.5">
+      {TIME_RANGE_OPTIONS.map((option) => (
+        <button
+          key={option.value}
+          onClick={() => onRangeChange(option.value)}
+          className={`px-1.5 md:px-2.5 py-0.5 md:py-1 text-xs rounded-sm ${
+            rangeKey === option.value ? 'bg-sky-600 text-white' : 'text-slate-400'
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  </div>
+);
 
 const getRangeWindow = (rangeKey) => {
   const end = new Date();
@@ -310,7 +410,8 @@ const getRangeWindow = (rangeKey) => {
 };
 
 const formatBucketLabel = (timestamp, rangeKey) => {
-  const date = new Date(timestamp);
+  const date = getValidDate(timestamp);
+  if (!date) return '-';
 
   if (rangeKey === '1h') {
     return date.toLocaleTimeString('en-US', {
@@ -341,35 +442,39 @@ const formatBucketLabel = (timestamp, rangeKey) => {
   });
 };
 
-const formatTooltipTimestamp = (timestamp, rangeKey) => {
-  const date = new Date(timestamp);
-
-  if (rangeKey === '30d') {
-    return date.toLocaleString('en-US', {
-      month: 'short',
-      day: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  }
-
-  return date.toLocaleString('en-US', {
-    month: 'short',
-    day: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-};
-
 const getTimelineBucketMs = (minutes) => {
   if (minutes <= 60) return 5 * 60 * 1000;
-  if (minutes <= 360) return 30 * 60 * 1000;
-  if (minutes <= 1440) return 60 * 60 * 1000;
-  if (minutes <= 10080) return 6 * 60 * 60 * 1000;
+  if (minutes <= 1440) return 30 * 60 * 1000;
+  if (minutes <= 10080) return 3 * 60 * 60 * 1000;
   return 24 * 60 * 60 * 1000;
+};
+
+const createTimelineBucketPoint = (bucketStartMs, value, bucketMs) => {
+  const startDate = new Date(bucketStartMs);
+  if (Number.isNaN(startDate.getTime())) return null;
+
+  const start = startDate.toISOString();
+  const end = new Date(bucketStartMs + bucketMs - 1).toISOString();
+
+  return {
+    key: start,
+    t: bucketStartMs,
+    time: start,
+    start,
+    end,
+    bucketMs,
+    v: value,
+  };
+};
+
+const formatTimelineBucketLabel = (point, rangeKey) => {
+  if (!point?.start) return '-';
+
+  if ((point.bucketMs || getTimelineBucketMs(RANGE_TO_MINUTES[rangeKey] || RANGE_TO_MINUTES[DEFAULT_TIME_RANGE])) <= 60 * 60 * 1000) {
+    return formatDetailedTimestamp(point.start);
+  }
+
+  return `${formatDetailedTimestamp(point.start)} - ${formatDetailedTimestamp(point.end)}`;
 };
 
 const buildTimelineFromPredictions = (predictions, minutes) => {
@@ -383,7 +488,7 @@ const buildTimelineFromPredictions = (predictions, minutes) => {
   const filteredPredictions = predictions
     .map((item) => ({
       ...item,
-      _ts: new Date(item.timestamp).getTime(),
+      _ts: getTimestampMs(item.timestamp),
     }))
     .filter((item) => Number.isFinite(item._ts) && item._ts >= startMs && item._ts <= now);
 
@@ -404,11 +509,17 @@ const buildTimelineFromPredictions = (predictions, minutes) => {
 
   const output = [];
   for (let ts = minBucket; ts <= maxBucket; ts += stepMs) {
-    output.push({
-      timestamp: new Date(ts).toISOString(),
-      total: buckets.get(ts) || 0,
-      labels: [],
-    });
+    const point = createTimelineBucketPoint(ts, buckets.get(ts) || 0, stepMs);
+    if (point) {
+      output.push({
+        timestamp: point.start,
+        total: point.v,
+        start: point.start,
+        end: point.end,
+        bucketMs: point.bucketMs,
+        labels: [],
+      });
+    }
   }
 
   return output;
@@ -505,19 +616,19 @@ const Legend = ({ items }) => (
     {items.map((it) => (
       <div key={it.label} className="flex items-center gap-1.5 text-xs text-slate-400">
         <span className="inline-block w-2 h-2 rounded-sm shrink-0" style={{ background: it.color }} />
-        <span className="truncate max-w-[120px]">{it.label}</span>
+        <span className="max-w-[160px] break-all leading-snug" title={it.label}>{it.label}</span>
       </div>
     ))}
   </div>
 );
 
-const WaveChart = ({ data, width = 1000, height = 320, rangeKey }) => {
+const WaveChart = ({ data, width = 1000, height = 320, rangeKey, onPointSelect, activePointKey }) => {
   const [selectedPoint, setSelectedPoint] = useState(null);
   const maxV = Math.max(1, ...data.map((d) => d.v));
   const padding = { l: 28, r: 10, t: 8, b: 36 };
   const innerW = width - padding.l - padding.r;
   const innerH = height - padding.t - padding.b;
-  const pointSpacing = data.length ? innerW / (data.length - 1) : innerW;
+  const pointSpacing = data.length > 1 ? innerW / (data.length - 1) : 0;
 
   const gridLines = [];
   const seenValues = new Set();
@@ -563,8 +674,8 @@ const WaveChart = ({ data, width = 1000, height = 320, rangeKey }) => {
   const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
 
   return (
-    <div className="relative" onMouseLeave={() => setSelectedPoint(null)}>
-      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="block">
+    <div className="relative w-full overflow-visible" onMouseLeave={() => setSelectedPoint(null)}>
+      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="block overflow-visible">
         {gridLines.map((grid, idx) => (
           <g key={`grid-${idx}`}>
             <line x1={padding.l} y1={grid.y} x2={padding.l + innerW} y2={grid.y} stroke="#1e293b" strokeWidth="1" opacity={grid.ratio === 0 || grid.ratio === 1 ? "1" : "0.5"} />
@@ -588,26 +699,61 @@ const WaveChart = ({ data, width = 1000, height = 320, rangeKey }) => {
         {data.map((d, i) => {
           const x = padding.l + i * pointSpacing;
           const y = padding.t + innerH - (d.v / maxV) * innerH;
+          const pointKey = d.key || d.start || d.time || d.t || `point-${i}`;
           const isSelected = selectedPoint?.index === i;
-          const pointData = { index: i, x, y, value: d.v, time: d.t };
+          const isActive = activePointKey === pointKey;
+          const pointData = {
+            index: i,
+            key: pointKey,
+            x,
+            y,
+            value: d.v,
+            t: d.t,
+            time: d.time || d.start || d.t,
+            start: d.start || d.time || d.t,
+            end: d.end || d.time || d.t,
+            bucketMs: d.bucketMs,
+          };
           return (
-            <g key={i}>
+            <g key={pointKey}>
+              {isActive && (
+                <circle
+                  cx={x}
+                  cy={y}
+                  r="7.5"
+                  fill="transparent"
+                  stroke="#a78bfa"
+                  strokeWidth="1.5"
+                  opacity="0.85"
+                  className="pointer-events-none"
+                />
+              )}
               <circle
                 cx={x}
                 cy={y}
                 r="10"
                 fill="transparent"
                 className="cursor-pointer"
+                role="button"
+                tabIndex={0}
+                aria-label={`Select prediction data`}
+                onClick={() => onPointSelect?.(pointData)}
                 onMouseEnter={() => setSelectedPoint(pointData)}
                 onMouseLeave={() => setSelectedPoint(null)}
                 onFocus={() => setSelectedPoint(pointData)}
                 onBlur={() => setSelectedPoint(null)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onPointSelect?.(pointData);
+                  }
+                }}
               />
               <circle
                 cx={x}
                 cy={y}
-                r={isSelected ? "5" : "3.5"}
-                fill="#a78bfa"
+                r={isActive ? "5" : isSelected ? "5" : "3.5"}
+                fill={isActive ? "#a78bfa" : "#a78bfa"}
                 stroke="#0f172a"
                 strokeWidth="1.5"
                 opacity="0.95"
@@ -619,8 +765,9 @@ const WaveChart = ({ data, width = 1000, height = 320, rangeKey }) => {
         {data.map((d, i) => {
           if (i !== data.length - 1 && i % tickEvery !== 0) return null;
           const x = padding.l + i * pointSpacing;
+          const tickKey = d.key || d.start || d.time || d.t || i;
           return (
-            <g key={`tick-${d.t}`}>
+            <g key={`tick-${tickKey}`}>
               <line x1={x} y1={padding.t + innerH} x2={x} y2={padding.t + innerH + 4} stroke="#334155" />
               <text
                 x={x}
@@ -646,7 +793,7 @@ const WaveChart = ({ data, width = 1000, height = 320, rangeKey }) => {
           }}
         >
           <div className="font-semibold text-white">{selectedPoint.value} predictions</div>
-          <div className="mt-1 text-slate-400">{formatTooltipTimestamp(selectedPoint.time, rangeKey)}</div>
+          <div className="mt-1 text-slate-400">{formatTimelineBucketLabel(selectedPoint, rangeKey)}</div>
         </div>
       )}
     </div>
@@ -684,10 +831,10 @@ const PredictionBadge = ({ label }) => {
   );
 };
 
-const StatCard = ({ label, value, unit = '' }) => (
-  <div className="bg-slate-800/50 border border-slate-700/60 rounded-lg p-3">
+const StatCard = ({ label, value, unit = '', className = '', valueClassName = 'text-sky-400' }) => (
+  <div className={`border rounded p-2 md:p-3 ${className}`}>
     <div className="text-[10px] text-slate-500 uppercase font-semibold">{label}</div>
-    <div className="text-2xl font-black text-sky-400 mt-1">{value}</div>
+    <div className={`text-lg md:text-2xl font-black mt-0.5 md:mt-1 ${valueClassName}`}>{value}</div>
     {unit && <div className="text-xs text-slate-500 mt-1">{unit}</div>}
   </div>
 );
@@ -701,13 +848,26 @@ export default function MlDashboard() {
   const [predictions, setPredictions] = useState([]);
   const [stats, setStats] = useState(null);
   const [timeline, setTimeline] = useState([]);
+  const [totalPredictionsCount, setTotalPredictionsCount] = useState(0);
 
   const [filters, setFilters] = useState({ label: '', sourceIp: '', destinationIp: '', service: '' });
   const [timeRange, setTimeRange] = useState(DEFAULT_TIME_RANGE);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(100); // Default to 100 rows per page
+  const [pageSize, setPageSize] = useState(25);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [selectedTimelinePoint, setSelectedTimelinePoint] = useState(null);
+  const predictionsTableRef = React.useRef(null);
+  const scrollPredictionsTableIntoView = React.useCallback(() => {
+    if (predictionsTableRef.current?.scrollIntoView) {
+      try {
+        predictionsTableRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch {
+        // Ignore browsers that reject smooth scrolling in this context.
+      }
+    }
+  }, []);
 
-  const loadAll = async () => {
+  const loadAll = React.useCallback(async () => {
     setLoading(true);
     setError(null);
     setDataNotice('');
@@ -715,18 +875,58 @@ export default function MlDashboard() {
       const minutes = RANGE_TO_MINUTES[timeRange] || RANGE_TO_MINUTES['24h'];
       const { start, end } = getRangeWindow(timeRange);
       const [predictionsResult, timelineResult] = await Promise.allSettled([
-        mlApi.getPredictions({ start, end }),
+        mlApi.getPredictions({ start, end, page: 1, limit: PREDICTIONS_FETCH_BATCH_SIZE }),
         mlApi.getTimeline(minutes),
       ]);
 
       const notices = [];
-      const preds =
+      let preds =
         predictionsResult.status === 'fulfilled' && Array.isArray(predictionsResult.value?.data)
           ? predictionsResult.value.data
           : [];
+      let responseTotalPredictions =
+        predictionsResult.status === 'fulfilled'
+          ? Number(predictionsResult.value?.pagination?.total ?? preds.length)
+          : 0;
 
       if (predictionsResult.status !== 'fulfilled') {
         notices.push('Predictions list gagal dimuat dari endpoint utama.');
+      } else {
+        const firstPagePagination = predictionsResult.value?.pagination || {};
+        const totalPages = Math.max(
+          Number(firstPagePagination.totalPages || Math.ceil(responseTotalPredictions / PREDICTIONS_FETCH_BATCH_SIZE) || 1),
+          1,
+        );
+
+        if (totalPages > 1) {
+          const remainingPageResults = await Promise.allSettled(
+            Array.from({ length: totalPages - 1 }, (_, index) =>
+              mlApi.getPredictions({
+                start,
+                end,
+                page: index + 2,
+                limit: PREDICTIONS_FETCH_BATCH_SIZE,
+              })
+            )
+          );
+
+          const failedPages = [];
+          for (let i = 0; i < remainingPageResults.length; i += 1) {
+            const result = remainingPageResults[i];
+            const pageNumber = i + 2;
+
+            if (result.status === 'fulfilled' && Array.isArray(result.value?.data)) {
+              preds = preds.concat(result.value.data);
+            } else {
+              failedPages.push(pageNumber);
+            }
+          }
+
+          if (failedPages.length > 0) {
+            responseTotalPredictions = preds.length;
+            notices.push(`Sebagian data predictions gagal dimuat pada page ${failedPages.join(', ')}.`);
+          }
+        }
       }
 
       const nextStats = buildStatsFromPredictions(preds);
@@ -751,9 +951,11 @@ export default function MlDashboard() {
 
       if (predictionsResult.status === 'fulfilled' || timelineResult.status === 'fulfilled') {
         setPredictions(Array.isArray(preds) ? preds : []);
+        setTotalPredictionsCount(responseTotalPredictions);
         setStats(nextStats);
         setTimeline(nextTimeline);
         setUsingMockData(false);
+        setLastUpdated(new Date().toISOString());
         if (!preds.length && !nextTimeline.length) {
           notices.push('Tidak ada data ML pada range yang dipilih.');
         }
@@ -813,18 +1015,20 @@ export default function MlDashboard() {
 
       const mockPreds = genMockPredictions(200);
       setPredictions(mockPreds);
+      setTotalPredictionsCount(mockPreds.length);
       setStats(genMockStats());
       setTimeline(genMockTimeline(RANGE_TO_MINUTES[timeRange] || RANGE_TO_MINUTES['24h']));
+      setLastUpdated(new Date().toISOString());
     } finally {
       setLoading(false);
     }
-  };
+  }, [timeRange]);
 
   useEffect(() => {
     loadAll();
     const interval = setInterval(() => loadAll(), 60_000);
     return () => clearInterval(interval);
-  }, [timeRange]);
+  }, [loadAll]);
 
   const uniqueOptions = useMemo(() => {
     const labels = new Set();
@@ -846,19 +1050,31 @@ export default function MlDashboard() {
   }, [predictions]);
 
   const filtered = useMemo(() => {
-    return predictions.filter((p) => {
+    let result = predictions.filter((p) => {
       if (filters.label && String(p.predictedLabel) !== String(filters.label)) return false;
       if (filters.sourceIp && !String(p.sourceIp || '').includes(filters.sourceIp)) return false;
       if (filters.destinationIp && !String(p.destinationIp || '').includes(filters.destinationIp)) return false;
       if (filters.service && !String(p.service || '').includes(filters.service)) return false;
       return true;
     });
-  }, [predictions, filters]);
+
+    // Apply timeline filter if selected
+    if (selectedTimelinePoint?.start && selectedTimelinePoint?.end) {
+      const startMs = getTimestampMs(selectedTimelinePoint.start);
+      const endMs = getTimestampMs(selectedTimelinePoint.end);
+      result = result.filter((p) => {
+        const pMs = getTimestampMs(p.timestamp);
+        return Number.isFinite(pMs) && Number.isFinite(startMs) && Number.isFinite(endMs) && pMs >= startMs && pMs <= endMs;
+      });
+    }
+
+    return result;
+  }, [predictions, filters, selectedTimelinePoint]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   useEffect(() => {
     if (page > totalPages) setPage(1);
-  }, [totalPages]);
+  }, [page, totalPages]);
 
   const pageItems = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -883,10 +1099,12 @@ export default function MlDashboard() {
     const map = new Map();
     for (const p of predictions) { // Use ALL predictions, not filtered
       const ip = p.sourceIp || 'unknown';
-      map.set(ip, (map.get(ip) || 0) + 1);
+      const existing = map.get(ip) || { label: ip, count: 0, lastSeen: 0 };
+      existing.count += 1;
+      existing.lastSeen = Math.max(existing.lastSeen, getTimestampMs(p.timestamp) || 0);
+      map.set(ip, existing);
     }
-    return Array.from(map.entries())
-      .map(([label, count]) => ({ label, count }))
+    return Array.from(map.values())
       .sort((a, b) => b.count - a.count)
       .slice(0, 5); // Top 5 source IPs
   }, [predictions]);
@@ -896,35 +1114,49 @@ export default function MlDashboard() {
       return [];
     }
 
-    // Aggregate data: group by timestamp, sum the counts
+    const minutes = RANGE_TO_MINUTES[timeRange] || RANGE_TO_MINUTES[DEFAULT_TIME_RANGE];
+    const bucketMs = getTimelineBucketMs(minutes);
     const map = new Map();
-    let minTs = Infinity;
-    let maxTs = -Infinity;
-    
+
     for (const t of timeline) {
       if (!t) continue;
-      const ts = new Date(t.timestamp || t.ts).getTime();
-      if (isNaN(ts)) continue;
-      
-      minTs = Math.min(minTs, ts);
-      maxTs = Math.max(maxTs, ts);
-      
-      const count = parseInt(t.total || t.count || 0);
-      const key = ts; // Use exact timestamp as key
-      map.set(key, (map.get(key) || 0) + count);
+      const ts = getTimestampMs(t.timestamp || t.ts || t.start || t.time);
+      if (!Number.isFinite(ts)) continue;
+
+      const bucketStartMs = Math.floor(ts / bucketMs) * bucketMs;
+      const count = Number(t.total ?? t.count ?? t.v ?? 0);
+      map.set(bucketStartMs, (map.get(bucketStartMs) || 0) + (Number.isFinite(count) ? count : 0));
     }
-    
-    if (minTs === Infinity) {
-      return [];
-    }
-    
-    // Convert to sorted array of data points (only existing data, no sparse buckets)
-    const data = Array.from(map.entries())
-      .map(([ts, count]) => ({ t: ts, v: count }))
-      .sort((a, b) => a.t - b.t);
-    
-    return data;
+
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([bucketStartMs, count]) => createTimelineBucketPoint(bucketStartMs, count, bucketMs))
+      .filter(Boolean);
   }, [timeline, timeRange]);
+
+  const timelinePredictionsCount = useMemo(
+    () => waveData.reduce((sum, point) => sum + (Number(point?.v) || 0), 0),
+    [waveData]
+  );
+
+  const handleTimelinePointSelect = (pointData) => {
+    if (selectedTimelinePoint?.key === pointData.key) {
+      setSelectedTimelinePoint(null);
+      setPage(1);
+    } else {
+      setSelectedTimelinePoint({
+        key: pointData.key,
+        time: pointData.time,
+        start: pointData.start,
+        end: pointData.end,
+        bucketMs: pointData.bucketMs,
+        t: pointData.t,
+      });
+      setPage(1);
+    }
+
+    scrollPredictionsTableIntoView();
+  };
 
   if (loading) {
     return (
@@ -950,100 +1182,123 @@ export default function MlDashboard() {
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans">
       <Navbar />
 
-      <div className="p-4 md:p-6 flex flex-col gap-4">
-        {/* Header & Controls */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg flex flex-col gap-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="p-2 md:p-4 flex flex-col gap-3 md:gap-4">
+        <div className="bg-slate-900 border border-slate-800 rounded-lg md:rounded-xl p-3 md:p-4 shadow-lg">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-4">
             <div>
-              <h1 className="text-xl font-bold text-white flex items-center gap-2">
-                <BrainCircuit className="h-6 w-6 text-violet-400" />
+              <h1 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
+                <BrainCircuit className="h-5 md:h-6 w-5 md:w-6 text-violet-400" />
                 ML Predictions Dashboard
               </h1>
-              <p className="text-sm text-slate-400">Real-time machine learning threat detection</p>
-
+              <p className="text-xs md:text-sm text-slate-400 mt-1">
+                Real-time machine learning traffic prediction and threat classification
+              </p>
             </div>
+          </div>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-lg md:rounded-xl p-2 md:p-4 shadow-lg flex flex-col gap-3 md:gap-4">
+          <div className="flex items-center justify-between gap-1 md:gap-2 flex-wrap">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => loadAll()}
-                className="text-sky-400 text-sm font-medium px-3 py-1.5 rounded-md border border-slate-700 hover:bg-sky-900/20 transition-all"
+                disabled={loading}
+                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs text-slate-200 transition-colors border border-slate-700 inline-flex items-center gap-1.5 disabled:opacity-60"
               >
-                ↻ Refresh
+                <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+                Refresh
               </button>
-              <div className="flex bg-slate-800 rounded-lg p-0.5 border border-slate-700 gap-1">
-                {TIME_RANGE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setTimeRange(opt.value)}
-                    className={`px-2.5 py-1 text-xs rounded-md font-semibold transition-all ${
-                      timeRange === opt.value
-                        ? 'bg-sky-600 text-white'
-                        : 'text-slate-400 hover:text-slate-300'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+              <label className="flex items-center gap-2 text-xs text-slate-400">
+                <span className="hidden sm:inline">Rows</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-200 focus:border-sky-500 focus:outline-none"
+                >
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>{size}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <RangeFilter
+              rangeKey={timeRange}
+              onRangeChange={(nextRange) => {
+                if (timeRange !== nextRange) {
+                  setTimeRange(nextRange);
+                  setPage(1);
+                }
+              }}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+            <StatCard label="Predictions" value={totalPredictionsCount || predictions.length} className="bg-slate-800/50 border-slate-700/60" valueClassName="text-sky-400" />
+            <StatCard label="Filtered" value={filtered.length} className="bg-violet-500/10 border-violet-500/30" valueClassName="text-violet-300" />
+            <StatCard label="Labels" value={uniqueOptions.labels.length} className="bg-emerald-500/10 border-emerald-500/30" valueClassName="text-emerald-300" />
+            <StatCard label="Timeline Predictions" value={timelinePredictionsCount} className="bg-amber-500/10 border-amber-500/30" valueClassName="text-amber-300" />
+          </div>
+          {dataNotice && (
+            <div className={`rounded-lg border px-3 md:px-4 py-3 text-xs md:text-sm ${
+              usingMockData
+                ? 'border-amber-500/30 bg-amber-500/10 text-amber-100'
+                : 'border-sky-500/20 bg-sky-500/10 text-sky-100'
+            }`}>
+              {dataNotice}
+            </div>
+          )}
+
+        {/* Timeline Wave Chart + Top Source IPs */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch">
+          <div className="bg-slate-800/30 border border-slate-800/50 rounded-lg p-4 md:p-6 flex flex-col h-full overflow-visible">
+            <div className="flex justify-between items-center mb-4 md:mb-6 gap-2">
+              <div className="text-xs md:text-sm font-semibold text-slate-300">ML Predictions Timeline</div>
+              <div className="text-right">
+                <div className="text-xs text-slate-500">Last {getTimelineRangeDescription(timeRange)}</div>
+                <div className="text-[11px] text-slate-600">Updated {formatLiveTimestamp(lastUpdated)}</div>
+              </div>
+            </div>
+            <div className="flex-1 rounded-lg border border-slate-800/40 p-2 md:p-4 overflow-visible">
+              <div className="min-w-[620px] md:min-w-0 overflow-visible">
+              {waveData.length === 0 ? (
+                <div className="h-48 flex items-center justify-center text-slate-500">No timeline data</div>
+              ) : (
+                <WaveChart 
+                  data={waveData} 
+                  rangeKey={timeRange} 
+                  onPointSelect={handleTimelinePointSelect}
+                  activePointKey={selectedTimelinePoint?.key ?? null}
+                />
+              )}
               </div>
             </div>
           </div>
 
-          {/* KPI Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatCard label="Total Predictions" value={predictions.length} />
-            <StatCard label="Shown (Filtered)" value={filtered.length} />
-            <StatCard label="Distinct Labels" value={uniqueOptions.labels.length} />
-            <StatCard label="Timeline Points" value={waveData.length} />
-          </div>
-        </div>
-
-        {dataNotice && (
-          <div className={`rounded-xl border px-4 py-3 text-sm ${
-            usingMockData
-              ? 'border-amber-500/30 bg-amber-500/10 text-amber-100'
-              : 'border-sky-500/20 bg-sky-500/10 text-sky-100'
-          }`}>
-            {dataNotice}
-          </div>
-        )}
-
-        {/* Timeline Wave Chart + Top Source IPs */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Timeline */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg">
-            <div className="flex justify-between items-center mb-4">
-              <div className="text-sm font-semibold text-slate-300">ML Predictions Timeline</div>
-              <div className="text-xs text-slate-500">Last {getTimelineRangeDescription(timeRange)}</div>
-            </div>
-            <div className="bg-slate-800/30 rounded-lg p-3 border border-slate-800/50">
-              {waveData.length === 0 ? (
-                <div className="h-48 flex items-center justify-center text-slate-500">No timeline data</div>
-              ) : (
-                <WaveChart data={waveData} rangeKey={timeRange} />
-              )}
-            </div>
-          </div>
-
-          {/* Top Source IPs Bar Chart */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg">
-            <div className="mb-3">
-              <div className="text-base font-bold text-slate-200">Top 5 Source IPs</div>
-              <div className="mt-1 text-xs text-slate-500">Ranked traffic sources within the selected ML time range</div>
+          <div className="bg-slate-800/30 border border-slate-800/50 rounded-lg p-4 md:p-6 h-full">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs md:text-sm font-semibold text-slate-300">Top 5 Source IPs</div>
+                <div className="mt-1 text-[11px] text-slate-500">Ranked traffic sources within the selected ML range</div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-slate-500">Unique sources</div>
+                <div className="text-sm font-black text-emerald-300">{uniqueOptions.srcs.length}</div>
+              </div>
             </div>
             {topSourceIps.length === 0 ? (
               <div className="h-48 flex items-center justify-center text-slate-500">No data</div>
             ) : (
-              <div className="bg-slate-800/30 rounded-lg p-3 border border-slate-800/50">
-                <SourceIpRankingPanel data={topSourceIps} />
-              </div>
+              <TopSourceIpsCard sourceIps={topSourceIps} />
             )}
           </div>
         </div>
 
-        {/* Label Distribution + Stats */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Distribution */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-center items-center">
-            <div className="text-sm font-semibold text-slate-300 mb-4 w-full">Label Distribution</div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-4">
+          <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4 flex flex-col justify-center items-center">
+            <div className="text-xs md:text-sm font-semibold text-slate-300 mb-4 w-full">Label Distribution</div>
             {distribution.length === 0 ? (
               <div className="h-40 flex items-center justify-center text-slate-500">No data</div>
             ) : (
@@ -1056,13 +1311,12 @@ export default function MlDashboard() {
             )}
           </div>
 
-          {/* Stats */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-around">
-            <div className="text-sm font-semibold text-slate-300 mb-4">Key Statistics</div>
+          <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4 flex flex-col justify-around">
+            <div className="text-xs md:text-sm font-semibold text-slate-300 mb-4">Key Statistics</div>
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-xs text-slate-400">Total Predictions:</span>
-                <span className="text-lg font-bold text-sky-400">{predictions.length}</span>
+                <span className="text-lg font-bold text-sky-400">{totalPredictionsCount || predictions.length}</span>
               </div>
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-slate-400">Average Confidence:</span>
@@ -1081,9 +1335,8 @@ export default function MlDashboard() {
             </div>
           </div>
 
-          {/* Top Labels */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-            <div className="text-sm font-semibold text-slate-300 mb-3">Top Labels</div>
+          <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4">
+            <div className="text-xs md:text-sm font-semibold text-slate-300 mb-3">Top Labels</div>
             <div className="space-y-2">
               {distribution.slice(0, 5).map((item, i) => (
                 <div key={item.name} className="flex items-center justify-between text-sm">
@@ -1101,9 +1354,30 @@ export default function MlDashboard() {
 
 
         {/* Filter & Table Section */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-lg overflow-hidden">
+        <div className="bg-slate-900 border border-slate-800 rounded-lg md:rounded-xl shadow-lg overflow-hidden">
+          {selectedTimelinePoint && (
+            <div className="p-3 border-b border-slate-800 bg-slate-800/60 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="text-xs text-orange-300">
+                Timeline filter: {formatTimelineBucketLabel(selectedTimelinePoint, timeRange)}
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedTimelinePoint(null);
+                  setPage(1);
+                }}
+                className="rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs font-medium text-orange-200 transition-colors hover:bg-orange-500/20"
+              >
+                Reset Time Filter
+              </button>
+            </div>
+          )}
           {/* Filter Bar */}
-          <div className="border-b border-slate-800 bg-slate-800/50 p-4">
+          <div className="border-b border-slate-800 bg-slate-800/50 p-3 md:p-4">
+            <div className="mb-4">
+              <div className="text-xs md:text-sm font-semibold text-slate-300">
+                Predictions Table ({filtered.length})
+              </div>
+            </div>
             <div className="flex flex-wrap gap-3 items-center">
               <label className="flex items-center gap-2 text-sm">
                 <span className="text-slate-400">Label:</span>
@@ -1166,22 +1440,22 @@ export default function MlDashboard() {
           </div>
 
           {/* Table */}
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" ref={predictionsTableRef}>
             {filtered.length === 0 ? (
               <div className="p-8 text-center text-slate-500">
                 <div className="text-sm">No predictions match current filters.</div>
               </div>
             ) : (
-              <table className="w-full text-sm text-left">
+              <table className="w-full text-xs md:text-sm text-left whitespace-nowrap">
                 <thead>
                   <tr className="border-b border-slate-800 bg-slate-800/70">
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">↓ Timestamp</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Label</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Source IP</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Dest IP</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Service</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Confidence</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Meaning</th>
+                    <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Timestamp</th>
+                    <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Label</th>
+                    <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Source IP</th>
+                    <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Destination IP</th>
+                    <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Service</th>
+                    <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Confidence</th>
+                    <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Meaning</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1192,25 +1466,25 @@ export default function MlDashboard() {
                         idx % 2 !== 0 ? 'bg-slate-900/60' : ''
                       }`}
                     >
-                      <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">
+                      <td className="px-2 md:px-4 py-1.5 md:py-3 text-slate-500 text-xs whitespace-nowrap">
                         {formatTime(p.timestamp)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 md:px-4 py-1.5 md:py-3">
                         <PredictionBadge label={p.predictedLabel} />
                       </td>
-                      <td className="px-4 py-3 text-emerald-400 font-mono text-xs">
+                      <td className="px-2 md:px-4 py-1.5 md:py-3 text-emerald-400 font-mono text-xs">
                         {p.sourceIp || '-'}
                       </td>
-                      <td className="px-4 py-3 text-violet-400 font-mono text-xs">
+                      <td className="px-2 md:px-4 py-1.5 md:py-3 text-violet-400 font-mono text-xs">
                         {p.destinationIp || '-'}
                       </td>
-                      <td className="px-4 py-3 text-slate-300 text-xs">
+                      <td className="px-2 md:px-4 py-1.5 md:py-3 text-slate-300 text-xs">
                         {p.service || '-'}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 md:px-4 py-1.5 md:py-3">
                         <ConfidenceBadge score={p.confidence} />
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-400">
+                      <td className="px-2 md:px-4 py-1.5 md:py-3 text-xs text-slate-400">
                         {getConfidenceMeaning(p.predictedLabel, p.confidence)}
                       </td>
                     </tr>
@@ -1222,80 +1496,84 @@ export default function MlDashboard() {
 
           {/* Pagination */}
           {filtered.length > 0 && (
-            <div className="p-4 border-t border-slate-800 flex items-center justify-between bg-slate-800/50">
+            <div className="p-2 md:p-4 border-t border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-2 md:gap-0 bg-slate-900/50 rounded-b-lg md:rounded-b-xl">
               <div className="text-xs text-slate-500 font-mono">
-                SHOWING{' '}
+                <span className="hidden md:inline">SHOWING </span>
                 <span className="text-sky-400 font-bold">
                   {filtered.length === 0 ? 0 : (page - 1) * pageSize + 1}
                 </span>
-                {' - '}
+                <span className="hidden md:inline">{' - '}</span>
+                <span className="md:hidden">-</span>
                 <span className="text-sky-400 font-bold">
                   {Math.min(page * pageSize, filtered.length)}
                 </span>
-                {' OF '}
-                <span className="text-sky-400 font-bold">{filtered.length}</span> PREDICTIONS
+                <span className="hidden md:inline">{' OF '}</span>
+                <span className="md:hidden"> / </span>
+                <span className="text-sky-400 font-bold">{filtered.length}</span>
+                <span className="hidden md:inline"> PREDICTIONS</span>
               </div>
 
-              <div className="flex gap-2 items-center">
+              <div className="flex flex-wrap gap-1 md:gap-2 items-center">
                 <button
-                  disabled={page === 1}
-                  onClick={() => setPage(1)}
-                  className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs font-bold hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
+                  disabled={page === 1 || loading}
+                  onClick={() => {
+                    setPage(1);
+                    scrollPredictionsTableIntoView();
+                  }}
+                  className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
                 >
                   FIRST
                 </button>
 
                 <button
-                  disabled={page === 1}
-                  onClick={() => setPage((v) => Math.max(1, v - 1))}
-                  className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs font-bold hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
+                  disabled={page === 1 || loading}
+                  onClick={() => {
+                    setPage((v) => Math.max(1, v - 1));
+                    scrollPredictionsTableIntoView();
+                  }}
+                  className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
                 >
-                  ← PREV
+                  PREV
                 </button>
 
-                <span className="text-xs font-black text-slate-400 px-2">
-                  Page <span className="text-white">{page}</span> / {totalPages}
+                <span className="text-xs font-black text-slate-400 px-1 md:px-2">
+                  <span className="hidden md:inline">PAGE </span><span className="text-white">{page}</span> / {totalPages}
                 </span>
 
                 <button
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((v) => Math.min(totalPages, v + 1))}
-                  className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs font-bold hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
+                  disabled={page >= totalPages || loading}
+                  onClick={() => {
+                    setPage((v) => Math.min(totalPages, v + 1));
+                    scrollPredictionsTableIntoView();
+                  }}
+                  className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
                 >
-                  NEXT →
+                  NEXT
                 </button>
 
                 <button
-                  disabled={page >= totalPages}
-                  onClick={() => setPage(totalPages)}
-                  className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs font-bold hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
+                  disabled={page >= totalPages || loading}
+                  onClick={() => {
+                    setPage(totalPages);
+                    scrollPredictionsTableIntoView();
+                  }}
+                  className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
                 >
                   LAST
                 </button>
 
-                <div className="ml-4 flex items-center gap-2">
-                  <span className="text-xs text-slate-400">Page size:</span>
-                  <select
-                    value={pageSize}
-                    onChange={(e) => {
-                      setPageSize(Number(e.target.value));
-                      setPage(1);
-                    }}
-                    className="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1 focus:outline-none focus:border-sky-500"
-                  >
-                    {PAGE_SIZE_OPTIONS.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
               </div>
             </div>
           )}
+        </div>
         </div>
       </div>
     </div>
   );
 }
+
+
+
+
+
 

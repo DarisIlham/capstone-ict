@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Navbar from "../components/Navbar";
 import { Activity, FileText } from "lucide-react";
 import { API_BASE_URL } from "../config/Api";
@@ -26,7 +26,7 @@ const formatDetailedTimestamp = (timestamp) =>
     second: "2-digit",
   });
 
-const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey, compact = false }) => {
+const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey, compact = false, activePointKey = null, onPointSelect = null }) => {
   const [selectedPoint, setSelectedPoint] = useState(null);
   const width = 800;
   const padding = { l: 28, r: 10, t: 8, b: 24 };
@@ -43,6 +43,7 @@ const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey, compact = f
 
   const maxV = Math.max(1, ...data.map((d) => d.v));
   const pointSpacing = data.length ? innerW / (data.length - 1) : innerW;
+  const defaultBucketMs = rangeKey === "1h" ? 300000 : rangeKey === "24h" ? 3600000 : rangeKey === "7d" ? 21600000 : 86400000;
 
   const gridSteps = 5;
   const gridLines = [];
@@ -92,24 +93,64 @@ const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey, compact = f
         {data.map((d, i) => {
           const x = padding.l + i * pointSpacing;
           const y = padding.t + innerH - (d.v / maxV) * innerH;
-          const isSelected = selectedPoint?.index === i;
+          const pointKey = String(d.t);
+          const bucketMsForPoint = d.bucketMs || defaultBucketMs;
+          const pointData = {
+            index: i,
+            x,
+            y,
+            key: pointKey,
+            value: d.v,
+            time: d.t,
+            start: new Date(Number(d.t)).toISOString(),
+            end: new Date(Number(d.t) + bucketMsForPoint - 1).toISOString(),
+            bucketMs: bucketMsForPoint,
+          };
+
+          const isHovered = selectedPoint?.index === i;
+          const isActive = (activePointKey !== null && typeof activePointKey !== "undefined") ? String(activePointKey) === pointKey : false;
+          const isHighlighted = isHovered || isActive;
 
           return (
-            <g key={`point-${d.t}`}>
+            <g key={`point-${pointKey}`}>
+              {isActive && (
+                <circle
+                  cx={x}
+                  cy={y}
+                  r="7.5"
+                  fill="transparent"
+                  stroke="#34d399"
+                  strokeWidth="1.5"
+                  opacity="0.85"
+                  className="pointer-events-none"
+                />
+              )}
               <circle
                 cx={x}
                 cy={y}
-                r={isSelected ? "7" : "10"}
+                r={isHighlighted ? "7" : "10"}
                 fill="transparent"
                 className="cursor-pointer"
-                onMouseEnter={() => setSelectedPoint({ index: i, x, y, value: d.v, time: d.t })}
+                role="button"
+                tabIndex={0}
+                aria-label={`Filter events for ${formatDetailedTimestamp(pointData.start)}`}
+                onClick={() => onPointSelect?.(pointData)}
+                onMouseEnter={() => setSelectedPoint(pointData)}
                 onMouseLeave={() => setSelectedPoint(null)}
+                onFocus={() => setSelectedPoint(pointData)}
+                onBlur={() => setSelectedPoint(null)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onPointSelect?.(pointData);
+                  }
+                }}
               />
               <circle
                 cx={x}
                 cy={y}
-                r={isSelected ? "5" : "3.5"}
-                fill={color}
+                r={isHighlighted ? "5" : "3.5"}
+                fill={isActive ? "#34d399" : color}
                 stroke="#0f172a"
                 strokeWidth="1.5"
                 opacity="0.95"
@@ -255,7 +296,6 @@ const DomainBarChart = ({ domains }) => {
   const maxCount = Math.max(...domains.map(d => d.count), 1);
   const barGap = 12;
   const barHeight = 10;
-  const rowHeight = barHeight + barGap;
   const chartHeight = barHeight * domains.length + barGap * Math.max(0, domains.length - 1);
   const CHART_COLORS = ["#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e", "#10b981", "#14b8a6", "#06b6d4", "#0ea5e9", "#3b82f6", "#8b5cf6", "#d946ef"];
 
@@ -314,6 +354,56 @@ const Top5DomainsCard = ({ domains }) => {
   );
 };
 
+const TOP_AGENT_COLORS = ["#34d399", "#38bdf8", "#fbbf24", "#f97316", "#a78bfa"];
+
+const TopAgentsCard = ({ agents }) => {
+  if (!agents || agents.length === 0) {
+    return <div className="flex h-full items-center justify-center text-xs text-slate-600">No agent data</div>;
+  }
+
+  const peakCount = Math.max(...agents.map((agent) => agent.count), 1);
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      {agents.map((agent, idx) => {
+        const accent = TOP_AGENT_COLORS[idx % TOP_AGENT_COLORS.length];
+        const fillWidth = Math.max(10, Math.round((agent.count / peakCount) * 100));
+
+        return (
+          <div key={agent.name} className="rounded-xl border border-slate-700/60 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <span
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black"
+                  style={{ backgroundColor: `${accent}1f`, color: accent }}
+                >
+                  {idx + 1}
+                </span>
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-slate-100">{agent.name}</div>
+                  <div className="text-[11px] text-slate-500">
+                    Last seen {formatDetailedTimestamp(agent.lastSeen)}
+                  </div>
+                </div>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className="text-sm font-black" style={{ color: accent }}>{agent.count}</div>
+                <div className="text-[11px] uppercase tracking-wide text-slate-500">events</div>
+              </div>
+            </div>
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800">
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${fillWidth}%`, background: accent }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 const WORD_COLORS = ["#f472b6", "#38bdf8", "#4ade80", "#a78bfa", "#fb923c", "#34d399", "#f87171", "#facc15", "#60a5fa", "#e879f9"];
 
 const PayloadWordCloud = ({ words, compact = false }) => {
@@ -365,7 +455,7 @@ const PayloadWordCloud = ({ words, compact = false }) => {
 const FimEvents = ({ agentId = "all" }) => {
   const [events, setEvents] = useState([]);
   const [aggregatedEvents, setAggregatedEvents] = useState([]);
-  const [domainData, setDomainData] = useState([]);
+  const [_domainData, setDomainData] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [rangeKey, setRangeKey] = useState("30d");
@@ -373,6 +463,11 @@ const FimEvents = ({ agentId = "all" }) => {
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth : 1280
   );
+  const topAgentsPanelRef = useRef(null);
+  const logsTableRef = useRef(null);
+  const skipNextFetchRef = useRef(false);
+  const [timelineChartHeight, setTimelineChartHeight] = useState(250);
+  const [selectedTimelinePoint, setSelectedTimelinePoint] = useState(null);
 
   const USE_STATIC = false;
 
@@ -404,7 +499,12 @@ const FimEvents = ({ agentId = "all" }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalHits, setTotalHits] = useState(0);
-  const pageSize = 100;
+  const [pageSize, setPageSize] = useState(25);
+
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, []);
 
   const getRangeWindow = (key) => {
     const end = new Date();
@@ -432,13 +532,26 @@ const FimEvents = ({ agentId = "all" }) => {
     };
   };
 
-  const fetchEvents = useCallback(async (page = 1, rk) => {
+  const fetchEvents = useCallback(async (page = 1, rk, startOverride = null, endOverride = null) => {
     try {
       setLoading(true);
       setError(null);
 
       const effectiveRange = rk || rangeKey;
-      const { start, end } = getRangeWindow(effectiveRange);
+      let start;
+      let end;
+
+      if (startOverride && endOverride) {
+        start = startOverride;
+        end = endOverride;
+      } else if (selectedTimelinePoint?.start && selectedTimelinePoint?.end) {
+        start = selectedTimelinePoint.start;
+        end = selectedTimelinePoint.end;
+      } else {
+        const rangeWindow = getRangeWindow(effectiveRange);
+        start = rangeWindow.start;
+        end = rangeWindow.end;
+      }
 
       const baseEndpoint =
         agentId === "all"
@@ -470,7 +583,7 @@ const FimEvents = ({ agentId = "all" }) => {
     } finally {
       setLoading(false);
     }
-  }, [agentId, pageSize]);
+  }, [agentId, pageSize, rangeKey, selectedTimelinePoint]);
 
   const fetchAggregated = useCallback(async (size = 1000, rk) => {
     try {
@@ -560,6 +673,12 @@ const FimEvents = ({ agentId = "all" }) => {
 
   useEffect(() => {
     if (USE_STATIC) return;
+    if (skipNextFetchRef.current) {
+      // Skip a single scheduled fetch because we already fetched manually
+      skipNextFetchRef.current = false;
+      return;
+    }
+
     let cancelled = false;
 
     (async () => {
@@ -579,6 +698,33 @@ const FimEvents = ({ agentId = "all" }) => {
     return () => clearInterval(interval);
   }, [currentPage, rangeKey, refreshAllData]);
 
+  // Only react to real pageSize changes, not the initial mount/effect re-run in StrictMode.
+  const previousPageSizeRef = useRef(pageSize);
+  useEffect(() => {
+    if (previousPageSizeRef.current === pageSize) {
+      return;
+    }
+
+    previousPageSizeRef.current = pageSize;
+
+    (async () => {
+      setCurrentPage(1);
+      try {
+        await refreshAllData(1, rangeKey);
+      } catch (e) {
+        // ignore refresh errors here
+      }
+
+      if (logsTableRef.current && typeof logsTableRef.current.scrollIntoView === "function") {
+        try {
+          logsTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+        } catch (err) {
+          // ignore
+        }
+      }
+    })();
+  }, [pageSize, refreshAllData, rangeKey]);
+
   useEffect(() => {
     const handleResize = () => setViewportWidth(window.innerWidth);
     window.addEventListener("resize", handleResize);
@@ -590,6 +736,96 @@ const FimEvents = ({ agentId = "all" }) => {
   const isTablet = viewportWidth < 1024;
   const donutSize = isMobile ? 148 : isTablet ? 190 : 280;
   const donutStroke = isMobile ? 16 : isTablet ? 18 : 24;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const updateTimelineHeight = () => {
+      if (isMobile) {
+        setTimelineChartHeight(110);
+        return;
+      }
+
+      const panelHeight = topAgentsPanelRef.current?.getBoundingClientRect().height;
+      if (!panelHeight) return;
+
+      const nextHeight = clamp(Math.round(panelHeight - 104), 180, 420);
+      setTimelineChartHeight(nextHeight);
+    };
+
+    updateTimelineHeight();
+
+    if (typeof ResizeObserver === "undefined" || !topAgentsPanelRef.current) {
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(() => {
+      updateTimelineHeight();
+    });
+
+    observer.observe(topAgentsPanelRef.current);
+    return () => observer.disconnect();
+  }, [isMobile, viewportWidth]);
+
+  const goToPage = useCallback(
+    async (next) => {
+      if (!Number.isFinite(next)) return;
+      const target = Math.max(1, Math.min(next, totalPages || next));
+      skipNextFetchRef.current = true;
+      try {
+        await refreshAllData(target, rangeKey);
+      } catch (err) {
+        // ignore fetch errors
+      }
+      setCurrentPage(target);
+
+      if (logsTableRef.current && typeof logsTableRef.current.scrollIntoView === "function") {
+        try {
+          logsTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+        } catch (e) {
+          // ignore
+        }
+      }
+    },
+    [refreshAllData, rangeKey, totalPages]
+  );
+
+  const handleTimelinePointSelect = useCallback(
+    async (point) => {
+      if (!point) return;
+      const pointKey = String(point.key ?? point.t ?? point.start ?? point);
+      const bucketMs = point.bucketMs || (rangeKey === "1h" ? 300000 : rangeKey === "24h" ? 3600000 : rangeKey === "7d" ? 21600000 : 86400000);
+      const startIso = point.start || new Date(Number(point.t)).toISOString();
+      const endIso = point.end || new Date(Number(point.t) + bucketMs - 1).toISOString();
+
+      setCurrentPage(1);
+
+      if (selectedTimelinePoint?.key === pointKey) {
+        setSelectedTimelinePoint(null);
+        try {
+          await refreshAllData(1, rangeKey);
+        } catch (e) {
+          // ignore
+        }
+      } else {
+        setSelectedTimelinePoint({ key: pointKey, start: startIso, end: endIso, bucketMs, time: point.t });
+        try {
+          await fetchEvents(1, rangeKey, startIso, endIso);
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      if (logsTableRef.current && typeof logsTableRef.current.scrollIntoView === "function") {
+        try {
+          logsTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+        } catch (e) {
+          // ignore
+        }
+      }
+    },
+    [fetchEvents, refreshAllData, rangeKey, selectedTimelinePoint]
+  );
 
   const formatTime = (isoString) => {
     if (!isoString) return "-";
@@ -647,7 +883,7 @@ const FimEvents = ({ agentId = "all" }) => {
     }
     const series = [];
     for (let t = bucketStart(startMs); t <= bucketStart(now); t += stepMs) {
-      series.push({ t, v: buckets.get(t) || 0 });
+      series.push({ t, v: buckets.get(t) || 0, bucketMs: stepMs });
     }
 
     const byEvent = new Map();
@@ -660,6 +896,18 @@ const FimEvents = ({ agentId = "all" }) => {
     const eventItemsAll = Array.from(byEvent.entries()).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
     const eventTop = eventItemsAll.slice(0, 6);
     const eventItems = eventTop.map((it, i) => ({ ...it, color: ["#38bdf8", "#34D399", "#FBBF24", "#F87171", "#A78BFA", "#F472B6", "#9CA3AF"][i % 7] }));
+
+    const byAgent = new Map();
+    for (const e of filtered) {
+      const agentLabel = String(e.agentName || e.agent_name || "Unknown agent").trim() || "Unknown agent";
+      const existing = byAgent.get(agentLabel) || { name: agentLabel, count: 0, lastSeen: 0 };
+      existing.count += 1;
+      existing.lastSeen = Math.max(existing.lastSeen, e._ms || 0);
+      byAgent.set(agentLabel, existing);
+    }
+    const topAgents = Array.from(byAgent.values())
+      .sort((a, b) => b.count - a.count || b.lastSeen - a.lastSeen || a.name.localeCompare(b.name))
+      .slice(0, 5);
 
     const byPayload = new Map();
     const STOP = new Set(["", "---", "@@", "+", "-", "//", "#", "the", "is", "to", "and"]);
@@ -694,12 +942,14 @@ const FimEvents = ({ agentId = "all" }) => {
       filtered,
       series,
       eventItems,
+      topAgents,
       severityItems,
       payloadWords,
       total: totalForUI,
       eps,
       startMs,
       now,
+      uniqueAgents: byAgent.size,
     };
   }, [events, rangeKey, totalHits, aggregatedEvents, now]);
 
@@ -734,14 +984,33 @@ const FimEvents = ({ agentId = "all" }) => {
 
         {/* FIM Data Container */}
         <div className="bg-slate-900 border border-slate-800 rounded-lg md:rounded-xl p-2 md:p-4 shadow-lg flex flex-col gap-3 md:gap-4">
-          <div className="flex flex-col xs:flex-row xs:flex-wrap items-start xs:items-center gap-1 md:gap-2">
-            <button
-              onClick={async () => {
-                await refreshAllData(currentPage, rangeKey);
-              }}
-              className="px-2 md:px-4 py-1 md:py-2 bg-slate-800 hover:bg-slate-700 rounded text-xs md:text-sm text-slate-300 transition-colors border border-slate-700 flex items-center gap-1"
-            >↻ Refresh</button>
-            <div className="ml-auto flex items-center gap-1 md:gap-2">
+          <div className="flex items-center justify-between gap-1 md:gap-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={async () => {
+                  await refreshAllData(currentPage, rangeKey);
+                  if (logsTableRef.current && typeof logsTableRef.current.scrollIntoView === "function") {
+                    try { logsTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) { }
+                  }
+                }}
+                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs text-slate-200 transition-colors border border-slate-700"
+              >↻ Refresh</button>
+
+              <label className="flex items-center gap-2 text-xs text-slate-400">
+                <span className="hidden sm:inline">Rows</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value))}
+                  className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-200 focus:border-sky-500 focus:outline-none"
+                >
+                  {[10, 25, 50, 100].map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="flex items-center gap-1 md:gap-2">
               <span className="text-xs text-slate-500 hidden sm:inline">Range</span>
               <div className="flex bg-slate-800 rounded p-0.5 border border-slate-700 gap-0.5">
                {["1h", "24h", "7d", "30d"].map((k) => (
@@ -781,21 +1050,44 @@ const FimEvents = ({ agentId = "all" }) => {
             </div>
           </div>
 
-          <div className="bg-slate-800/30 border border-slate-800/50 rounded-lg p-4 md:p-6">
-            <div className="flex justify-between items-center mb-4 md:mb-6 gap-2">
-              <div className="text-xs md:text-sm font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
-                <Activity className="h-3 md:h-4 w-3 md:w-4 text-sky-400" />
-                Timeline
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch">
+            <div className="bg-slate-800/30 border border-slate-800/50 rounded-lg p-4 md:p-6 flex flex-col h-full">
+              <div className="flex justify-between items-center mb-4 md:mb-6 gap-2">
+                <div className="text-xs md:text-sm font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
+                  <Activity className="h-3 md:h-4 w-3 md:w-4 text-sky-400" />
+                  Timeline
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-slate-500">Last {rangeKey}</div>
+                  <div className="text-[11px] text-slate-600">Updated {formatLiveTimestamp(lastUpdated)}</div>
+                </div>
               </div>
-              <div className="text-right">
-                <div className="text-xs text-slate-500">Last {rangeKey}</div>
-                <div className="text-[11px] text-slate-600">Updated {formatLiveTimestamp(lastUpdated)}</div>
+              <div className="overflow-x-auto flex-1">
+                <div className={isMobile ? "min-w-[620px]" : "min-w-0"}>
+                  <WaveChart
+                    data={derived.series}
+                    color="#10b981"
+                    height={timelineChartHeight}
+                    rangeKey={rangeKey}
+                    compact={isMobile}
+                    activePointKey={selectedTimelinePoint?.key ?? null}
+                    onPointSelect={handleTimelinePointSelect}
+                  />
+                </div>
               </div>
             </div>
-            <div className="overflow-x-auto">
-              <div className={isMobile ? "min-w-[620px]" : "min-w-0"}>
-                <WaveChart data={derived.series} color="#10b981" height={110} rangeKey={rangeKey} compact={isMobile} />
+            <div ref={topAgentsPanelRef} className="bg-slate-800/30 border border-slate-800/50 rounded-lg p-4 md:p-6 h-full">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-xs md:text-sm font-semibold text-slate-300">Top 5 Agents</div>
+                  <div className="mt-1 text-[11px] text-slate-500">Most active agents from FIM events</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-slate-500">Unique agents</div>
+                  <div className="text-sm font-black text-emerald-300">{derived.uniqueAgents}</div>
+                </div>
               </div>
+              <TopAgentsCard agents={derived.topAgents} />
             </div>
           </div>
 
@@ -826,7 +1118,29 @@ const FimEvents = ({ agentId = "all" }) => {
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-lg md:rounded-xl shadow-lg overflow-hidden">
-          <div className="overflow-x-auto">
+          <div ref={logsTableRef} className="overflow-x-auto">
+            {selectedTimelinePoint && (
+              <div className="p-3 border-b border-slate-800 bg-slate-800/60 flex items-center justify-between">
+                <div className="text-xs text-orange-300">
+                  Timeline filter: {formatDetailedTimestamp(selectedTimelinePoint.start)}
+                  {selectedTimelinePoint.end ? ` - ${formatDetailedTimestamp(selectedTimelinePoint.end)}` : ""}
+                </div>
+                <button
+                  onClick={async () => {
+                    setSelectedTimelinePoint(null);
+                    setCurrentPage(1);
+                    try {
+                      await refreshAllData(1, rangeKey);
+                    } catch (e) {
+                      // ignore
+                    }
+                  }}
+                  className="rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs font-medium text-orange-200 transition-colors hover:bg-orange-500/20"
+                >
+                  Reset Time Filter
+                </button>
+              </div>
+            )}
             <table className="w-full text-xs md:text-sm text-left whitespace-nowrap">
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-800/70">
@@ -909,7 +1223,7 @@ const FimEvents = ({ agentId = "all" }) => {
               <div className="flex flex-wrap gap-1 md:gap-2 items-center">
                 <button
                   disabled={currentPage === 1 || loading}
-                  onClick={() => setCurrentPage(1)}
+                  onClick={() => goToPage(1)}
                   className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
                 >
                   <span className="hidden md:inline">FIRST</span>
@@ -918,7 +1232,7 @@ const FimEvents = ({ agentId = "all" }) => {
 
                 <button
                   disabled={currentPage === 1 || loading}
-                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                  onClick={() => goToPage(Math.max(currentPage - 1, 1))}
                   className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
                 >
                   <span className="hidden md:inline">← PREV</span>
@@ -931,7 +1245,7 @@ const FimEvents = ({ agentId = "all" }) => {
 
                 <button
                   disabled={currentPage === totalPages || loading}
-                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                  onClick={() => goToPage(Math.min(currentPage + 1, totalPages))}
                   className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
                 >
                   <span className="hidden md:inline">NEXT →</span>
@@ -940,7 +1254,7 @@ const FimEvents = ({ agentId = "all" }) => {
 
                 <button
                   disabled={currentPage === totalPages || loading}
-                  onClick={() => setCurrentPage(totalPages)}
+                  onClick={() => goToPage(totalPages)}
                   className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
                 >
                   <span className="hidden md:inline">LAST</span>
