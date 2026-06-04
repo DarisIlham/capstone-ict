@@ -43,7 +43,8 @@ function formatPrediction(hit) {
 
 // 2. Gunakan 'export' di depan setiap fungsi utama
 export async function listPredictions(query) {
-  const { page, limit, from } = normalizePagination(query, { maxLimit: 10000 });
+  // Use maxLimit: 0 to indicate "no cap" so callers can request larger result windows.
+  const { page, limit, from } = normalizePagination(query, { maxLimit: 0 });
   const { label, sourceIp, destinationIp, service, start, end } = query;
 
   const must = buildMlMustClauses();

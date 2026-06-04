@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { ThemeProvider } from "./context/ThemeContext";
 import PrivateRoute from "./components/PrivateRoute";
 import LoginPage from "./pages/LoginPage.jsx";
 import MainDashboard from "./pages/MainDashboard.jsx";
@@ -17,73 +18,75 @@ function App() {
       : undefined;
 
   return (
-    <AuthProvider>
-      <Router basename={routerBasename}>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          {/* Protected Routes */}
-          <Route
-            path="/"
-            element={
-              <PrivateRoute>
-                <MainDashboard />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/ml-dashboard"
-            element={
-              <PrivateRoute>
-                <MlDashboard />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/fim-events"
-            element={
-              <PrivateRoute>
-                <FimEvents />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/attack-dashboard"
-            element={
-              <PrivateRoute>
-                <AttackDashboard />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/file-security"
-            element={
-              <PrivateRoute>
-                <FileSecurityScanner />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/web-defacement"
-            element={
-              <PrivateRoute>
-                <WebDefacement />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/users"
-            element={
-              <PrivateRoute requiredRole="admin">
-                <UserManagement />
-              </PrivateRoute>
-            }
-          />
-          
-          {/* Catch all - redirect ke login */}
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
-      </Router>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <Router basename={routerBasename}>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            {/* Protected Routes */}
+            <Route
+              path="/"
+              element={
+                <PrivateRoute>
+                  <MainDashboard />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/ml-dashboard"
+              element={
+                <PrivateRoute>
+                  <MlDashboard />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/fim-events"
+              element={
+                <PrivateRoute>
+                  <FimEvents />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/attack-dashboard"
+              element={
+                <PrivateRoute>
+                  <AttackDashboard />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/file-security"
+              element={
+                <PrivateRoute>
+                  <FileSecurityScanner />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/web-defacement"
+              element={
+                <PrivateRoute>
+                  <WebDefacement />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/users"
+              element={
+                <PrivateRoute requiredRole="admin">
+                  <UserManagement />
+                </PrivateRoute>
+              }
+            />
+            
+            {/* Catch all - redirect ke login */}
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </Router>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

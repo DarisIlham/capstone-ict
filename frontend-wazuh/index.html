@@ -7,6 +7,17 @@
     <title>frontend-wazuh</title>
   </head>
   <body>
+    <script>
+      (function () {
+        var theme = "light";
+        try {
+          theme = localStorage.getItem("dashboard-theme") === "dark" ? "dark" : "light";
+        } catch (error) {
+          theme = "light";
+        }
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

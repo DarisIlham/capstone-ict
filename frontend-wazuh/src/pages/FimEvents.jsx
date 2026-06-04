@@ -441,7 +441,7 @@ const PayloadWordCloud = ({ words, compact = false }) => {
   return (
     <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="block w-full" style={{ minHeight: 140 }}>
       <defs><radialGradient id="wcGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#0f172a" stopOpacity="0" /><stop offset="100%" stopColor="#020617" stopOpacity="0.6" /></radialGradient></defs>
-      <rect width={W} height={H} fill="url(#wcGlow)" rx={8} />
+      <rect className="command-word-cloud-bg" width={W} height={H} fill="url(#wcGlow)" rx={8} />
       {placed.map((w) => (
         <text key={w.text} x={w.x} y={w.y} textAnchor="middle" dominantBaseline="middle" fontSize={w.fs} fontWeight={w.fs > 26 ? "800" : w.fs > 18 ? "700" : "500"} fill={w.color} opacity={w.opacity} style={{ cursor: "default", fontFamily: "monospace" }}>
           <title>{`${w.text}: ${w.count} occurrences`}</title>{w.text}
@@ -1108,7 +1108,7 @@ const FimEvents = ({ agentId = "all" }) => {
             {/* Kotak 2: Word Cloud */}
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4 shadow-lg flex flex-col gap-2 items-center justify-center">
               <div className="w-full text-xs md:text-sm font-semibold text-slate-300">Payload Pattern Cloud</div>
-              <div className="w-full overflow-x-auto bg-slate-950 border border-slate-800 rounded-lg p-2 md:p-4">
+              <div className="command-keywords-distribution-box w-full overflow-x-auto bg-slate-950 border border-slate-800 rounded-lg p-2 md:p-4">
                 <div className={isMobile ? "min-w-[520px]" : "min-w-0"}>
                   <PayloadWordCloud words={derived.payloadWords} compact={isMobile} />
                 </div>

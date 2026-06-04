@@ -10,12 +10,15 @@ import {
 import { useNavigate } from "react-router-dom";
 import ReCAPTCHA from "react-google-recaptcha";
 import { useAuth } from "../hooks/useAuth";
+import { useTheme } from "../hooks/useTheme";
+import ThemeToggle from "../components/ThemeToggle";
 import logo from "../assets/Undip.svg";
 import { API_BASE_URL } from "../config/Api";
 
 const LoginPage = () => {
   const navigate = useNavigate();
   const { login, isAuthenticated } = useAuth();
+  const { theme } = useTheme();
   const recaptchaRef = useRef();
 
   const [email, setEmail] = useState("");
@@ -39,7 +42,7 @@ const LoginPage = () => {
   }, [isAuthenticated, navigate]);
 
   const sanitizeInput = (value) => {
-    return value.replace(/<[^>]*>?/gm, "").replace(/[<>{}[\]()*&^%$#!]/g, "");
+    return value.replace(/<[^>]*>?/gm, "").replace(/[<>{}[\]()&^%$#!]/g, "");
   };
 
   const handleEmailChange = (e) => {
@@ -133,11 +136,17 @@ const LoginPage = () => {
     }
   }, [notification.show]);
 
+  useEffect(() => {
+    setIsRecaptchaFilled(false);
+    recaptchaRef.current?.reset?.();
+  }, [theme]);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center px-4 py-8 relative overflow-hidden">
       {/* Background decoration */}
       <div className="absolute top-0 left-0 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl"></div>
       <div className="absolute bottom-0 right-0 w-80 h-80 bg-cyan-500/20 rounded-full blur-3xl"></div>
+      <ThemeToggle className="absolute right-4 top-4 z-20" />
 
       <div className="max-w-sm w-full relative z-10">
         {/* Header */}
@@ -226,10 +235,11 @@ const LoginPage = () => {
           {/* CAPTCHA */}
           <div className="bg-slate-700/30 p-3 rounded-lg border border-slate-600/50">
             <ReCAPTCHA
+              key={theme}
               ref={recaptchaRef}
               sitekey="6Le7BYksAAAAAASn99_SYX6OAX7r8siw5H8m_YWr"
               onChange={handleRecaptchaChange}
-              theme="dark"
+              theme={theme}
             />
           </div>
 

@@ -494,9 +494,9 @@ const PayloadWordCloud = ({ words }) => {
     }
   }
   return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="block w-full" style={{ minHeight: 140 }}>
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="command-word-cloud block w-full" style={{ minHeight: 140 }}>
       <defs><radialGradient id="wcGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#0f172a" stopOpacity="0" /><stop offset="100%" stopColor="#020617" stopOpacity="0.6" /></radialGradient></defs>
-      <rect width={W} height={H} fill="url(#wcGlow)" rx={8} />
+      <rect className="command-word-cloud-bg" width={W} height={H} fill="url(#wcGlow)" rx={8} />
       {placed.map((w) => (
         <text key={w.text} x={w.x} y={w.y} textAnchor="middle" dominantBaseline="middle" fontSize={w.fs} fontWeight={w.fs > 26 ? "800" : w.fs > 18 ? "700" : "500"} fill={w.color} opacity={w.opacity} style={{ cursor: "default", fontFamily: "monospace" }}>
           <title>{`${w.text}: ${w.count} occurrences`}</title>{w.text}
@@ -1193,7 +1193,7 @@ const HostMonitoring = () => {
                 <Terminal className="h-4 w-4" />
                 Command Keywords Distribution
               </div>
-              <div className="w-full overflow-x-auto bg-slate-950 border border-slate-800 rounded-lg p-2 md:p-4">
+              <div className="command-keywords-distribution-box w-full overflow-x-auto bg-slate-800/30 rounded-lg p-4 border border-slate-800/50">
                 <div className="min-w-[520px] md:min-w-0">
                   <PayloadWordCloud words={commandPayloadWords} />
                 </div>

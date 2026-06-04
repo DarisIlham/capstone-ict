@@ -14,6 +14,7 @@ import {
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import ThemeToggle from "./ThemeToggle";
 import logo from "../assets/Undip.svg";
 
 const Navbar = () => {
@@ -81,73 +82,77 @@ const Navbar = () => {
               </div>
             </div>
 
-            {/* User Info Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-slate-800/60 transition-colors text-slate-300 hover:text-white"
-              >
-                <div className="text-right">
-                  <p className="text-sm font-medium text-white">{user?.name || user?.email}</p>
-                  <p className="text-xs text-slate-400">{user?.email || "Signed in account"}</p>
-                </div>
-                <ChevronDown className={`h-4 w-4 transition-transform ${isUserDropdownOpen ? "rotate-180" : ""}`} />
-              </button>
+            <div className="flex items-center gap-3">
+              <ThemeToggle />
 
-              {/* User Dropdown Menu */}
-              {isUserDropdownOpen && (
-                <>
-                  {/* Overlay */}
-                  <div
-                    className="fixed inset-0 z-30"
-                    onClick={() => setIsUserDropdownOpen(false)}
-                  />
-                  
-                  {/* Dropdown Content */}
-                  <div className="absolute right-0 top-full mt-2 w-64 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-40 backdrop-blur-xl">
-                    {/* User Info */}
-                    <div className="p-4 border-b border-slate-700/50">
-                      <p className="text-white font-medium mb-1">{user?.name || user?.email}</p>
-                      <p className="text-sm text-slate-400 mb-3">{user?.email}</p>
-                      <div className="flex items-center gap-2">
-                        {user?.status === "pending" && (
-                          <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
-                            Pending
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Menu Items */}
-                    {user?.role === "admin" && (
-                      <>
-                        <button
-                          onClick={() => {
-                            handleNavigation("/users");
-                            setIsUserDropdownOpen(false);
-                          }}
-                          className="w-full text-left px-4 py-3 text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors flex items-center gap-2 border-b border-slate-700/50 font-medium"
-                        >
-                          <Users className="h-4 w-4" />
-                          User Management
-                        </button>
-                      </>
-                    )}
-
-                    {/* Logout Button */}
-                    <button
-                      onClick={() => {
-                        handleLogout();
-                        setIsUserDropdownOpen(false);
-                      }}
-                      className="w-full text-left px-4 py-3 text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors flex items-center gap-2 font-medium"
-                    >
-                      <LogOut className="h-4 w-4" />
-                      Logout
-                    </button>
+              {/* User Info Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+                  className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-slate-800/60 transition-colors text-slate-300 hover:text-white"
+                >
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-white">{user?.name || user?.email}</p>
+                    <p className="text-xs text-slate-400">{user?.email || "Signed in account"}</p>
                   </div>
-                </>
-              )}
+                  <ChevronDown className={`h-4 w-4 transition-transform ${isUserDropdownOpen ? "rotate-180" : ""}`} />
+                </button>
+
+                {/* User Dropdown Menu */}
+                {isUserDropdownOpen && (
+                  <>
+                    {/* Overlay */}
+                    <div
+                      className="fixed inset-0 z-30"
+                      onClick={() => setIsUserDropdownOpen(false)}
+                    />
+                    
+                    {/* Dropdown Content */}
+                    <div className="absolute right-0 top-full mt-2 w-64 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-40 backdrop-blur-xl">
+                      {/* User Info */}
+                      <div className="p-4 border-b border-slate-700/50">
+                        <p className="text-white font-medium mb-1">{user?.name || user?.email}</p>
+                        <p className="text-sm text-slate-400 mb-3">{user?.email}</p>
+                        <div className="flex items-center gap-2">
+                          {user?.status === "pending" && (
+                            <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
+                              Pending
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Menu Items */}
+                      {user?.role === "admin" && (
+                        <>
+                          <button
+                            onClick={() => {
+                              handleNavigation("/users");
+                              setIsUserDropdownOpen(false);
+                            }}
+                            className="w-full text-left px-4 py-3 text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors flex items-center gap-2 border-b border-slate-700/50 font-medium"
+                          >
+                            <Users className="h-4 w-4" />
+                            User Management
+                          </button>
+                        </>
+                      )}
+
+                      {/* Logout Button */}
+                      <button
+                        onClick={() => {
+                          handleLogout();
+                          setIsUserDropdownOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-3 text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors flex items-center gap-2 font-medium"
+                      >
+                        <LogOut className="h-4 w-4" />
+                        Logout
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>

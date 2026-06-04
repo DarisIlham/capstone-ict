@@ -119,9 +119,26 @@ export function addDateRange(must, start, end) {
 }
 
 export function normalizePagination(query = {}, options = {}) {
-  const maxLimit = Math.max(parseInt(options.maxLimit || "100", 10), 1);
+  // If `options.maxLimit` is provided and > 0, it acts as an upper cap.
+  // If `options.maxLimit` is provided and <= 0, treat it as "no cap" (unlimited).
+  const rawMax = options.hasOwnProperty("maxLimit") ? Number(options.maxLimit) : 100;
+  const hasProvidedMax = options.hasOwnProperty("maxLimit");
+  const maxLimit = Number.isFinite(rawMax) ? rawMax : 100;
+
   const page = Math.max(parseInt(query.page || "1", 10), 1);
-  const limit = Math.min(Math.max(parseInt(query.limit || "20", 10), 1), maxLimit);
+  let limit = Math.max(parseInt(query.limit || "20", 10), 1);
+
+  if (hasProvidedMax) {
+    if (maxLimit > 0) {
+      limit = Math.min(limit, Math.max(parseInt(String(maxLimit || "0"), 10), 1));
+    } else {
+      // maxLimit <= 0 => no cap; leave `limit` as requested
+    }
+  } else {
+    // No maxLimit provided -> keep legacy default cap of 100
+    limit = Math.min(limit, 100);
+  }
+
   const from = (page - 1) * limit;
 
   return { page, limit, from };
