@@ -24,8 +24,10 @@ export function getLatest() {
   return fetchJson(`${BASE}/predictions/latest`);
 }
 
-export function getStats() {
-  return fetchJson(`${BASE}/predictions/stats`);
+export function getStats(params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  const url = qs ? `${BASE}/predictions/stats?${qs}` : `${BASE}/predictions/stats`;
+  return fetchJson(url);
 }
 
 export function getTimeline(minutes = 60) {
