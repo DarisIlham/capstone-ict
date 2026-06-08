@@ -5,7 +5,7 @@ import PrivateRoute from "./components/PrivateRoute";
 import LoginPage from "./pages/LoginPage.jsx";
 import MainDashboard from "./pages/MainDashboard.jsx";
 import MlDashboard from "./pages/MlDashboard.jsx";
-import FimEvents from "./pages/FimEvents.jsx";
+import FimEvents from "./pages/FimEvents";
 import AttackDashboard from "./pages/AttackDashboard.jsx";
 import FileSecurityScanner from "./pages/FileSecurityScanner.jsx";
 import UserManagement from "./pages/UserManagement.jsx";
