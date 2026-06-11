@@ -703,6 +703,7 @@ export default function MlDashboard() {
                       <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Timestamp</th>
                       <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Label</th>
                       <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Source IP</th>
+                      <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Host Name</th>
                       <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Destination IP</th>
                       <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Service</th>
                       <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Confidence</th>
@@ -721,6 +722,9 @@ export default function MlDashboard() {
                         </td>
                         <td className="px-2 md:px-4 py-1.5 md:py-3">
                           <PredictionBadge label={p.predictedLabel} />
+                        </td>
+                        <td className="px-2 md:px-4 py-1.5 md:py-3 text-emerald-400 font-mono text-xs">
+                          {p.sourceIp || '-'}
                         </td>
                         <td className="px-2 md:px-4 py-1.5 md:py-3 text-emerald-400 font-mono text-xs">
                           {p.sourceIp || '-'}
