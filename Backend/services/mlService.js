@@ -15,9 +15,78 @@ import {
   normalizePagination
 } from "../utils/esHelpers.js";
 
+const ML_PREDICTIONS_PIT_KEEP_ALIVE = "2m";
+const ML_PREDICTIONS_CURSOR_SORT = [
+  { "@timestamp": { order: "desc", unmapped_type: "date" } },
+  { _shard_doc: "desc" }
+];
+
 // Fungsi internal (tidak perlu dieksport jika hanya dipakai di dalam file ini)
 function buildMlMustClauses() {
   return [exactMatchClause("log_type", "webids_prediction")];
+}
+
+function encodeCursor(payload) {
+  return Buffer.from(JSON.stringify(payload), "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function decodeCursor(cursor) {
+  if (!cursor) return null;
+
+  try {
+    const padded = String(cursor).replace(/-/g, "+").replace(/_/g, "/");
+    const json = Buffer.from(padded.padEnd(Math.ceil(padded.length / 4) * 4, "="), "base64").toString("utf8");
+    const parsed = JSON.parse(json);
+
+    if (parsed && typeof parsed === "object" && parsed.pitId && Array.isArray(parsed.sort)) {
+      return {
+        pitId: parsed.pitId,
+        sort: parsed.sort,
+        offset: Math.max(Number(parsed.offset || 0), 0)
+      };
+    }
+  } catch {
+    // Fall through to the explicit API error below.
+  }
+
+  const error = new Error("Invalid ML pagination cursor");
+  error.statusCode = 400;
+  throw error;
+}
+
+function shouldUseCursorPagination(query = {}) {
+  return Boolean(
+    query.cursor ||
+    query.cursorMode === true ||
+    query.cursorMode === "true" ||
+    query.searchAfter === true ||
+    query.searchAfter === "true"
+  );
+}
+
+async function openPredictionsPit() {
+  const response = unwrapEsResponse(
+    await es.openPointInTime({
+      index: elastic.index,
+      keep_alive: ML_PREDICTIONS_PIT_KEEP_ALIVE
+    })
+  );
+
+  return response?.id;
+}
+
+async function closePredictionsPit(pitId) {
+  if (!pitId) return;
+
+  try {
+    await es.closePointInTime({ id: pitId });
+  } catch (error) {
+    console.warn("Failed to close ML predictions PIT:", error.message);
+  }
 }
 
 function formatPrediction(hit) {
@@ -42,7 +111,7 @@ function formatPrediction(hit) {
 }
 
 // 2. Gunakan 'export' di depan setiap fungsi utama
-export async function listPredictions(query) {
+export async function listPredictions(query = {}) {
   // Use maxLimit: 0 to indicate "no cap" so callers can request larger result windows.
   const { page, limit, from } = normalizePagination(query, { maxLimit: 0 });
   const { label, sourceIp, destinationIp, service, start, end } = query;
@@ -61,6 +130,75 @@ export async function listPredictions(query) {
 
   addDateRange(must, start, end);
 
+  const esQuery = {
+    bool: { must }
+  };
+
+  if (shouldUseCursorPagination(query)) {
+    const cursorState = decodeCursor(query.cursor);
+    let pitId = cursorState?.pitId || null;
+
+    if (!pitId) {
+      pitId = await openPredictionsPit();
+    }
+
+    if (!pitId) {
+      const error = new Error("Unable to open ML predictions pagination cursor");
+      error.statusCode = 500;
+      throw error;
+    }
+
+    try {
+      const searchBody = {
+        size: limit,
+        track_total_hits: true,
+        pit: {
+          id: pitId,
+          keep_alive: ML_PREDICTIONS_PIT_KEEP_ALIVE
+        },
+        sort: ML_PREDICTIONS_CURSOR_SORT,
+        query: esQuery
+      };
+
+      if (cursorState?.sort) {
+        searchBody.search_after = cursorState.sort;
+      }
+
+      const response = unwrapEsResponse(await es.search(searchBody));
+      const hits = getHits(response);
+      const total = getTotalHits(response);
+      const offsetBefore = cursorState?.offset || 0;
+      const loaded = offsetBefore + hits.length;
+      const nextPitId = response?.pit_id || pitId;
+      const lastHit = hits[hits.length - 1];
+      const hasMore = hits.length > 0 && loaded < total && Array.isArray(lastHit?.sort);
+      const nextCursor = hasMore
+        ? encodeCursor({ pitId: nextPitId, sort: lastHit.sort, offset: loaded })
+        : null;
+
+      if (!hasMore) {
+        await closePredictionsPit(nextPitId);
+      }
+
+      return {
+        pagination: {
+          mode: "cursor",
+          page: Math.floor(offsetBefore / limit) + 1,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          loaded,
+          hasMore,
+          nextCursor
+        },
+        data: hits.map(formatPrediction)
+      };
+    } catch (error) {
+      await closePredictionsPit(pitId);
+      throw error;
+    }
+  }
+
   const response = unwrapEsResponse(
     await es.search({
       index: elastic.index,
@@ -68,9 +206,7 @@ export async function listPredictions(query) {
       size: limit,
       track_total_hits: true,
       sort: [{ "@timestamp": { order: "desc" } }],
-      query: {
-        bool: { must }
-      }
+      query: esQuery
     })
   );
 
@@ -105,7 +241,11 @@ export async function getLatestPrediction() {
   return hit ? formatPrediction(hit) : null;
 }
 
-export async function getPredictionStats() {
+export async function getPredictionStats(query = {}) {
+  const { start, end } = query;
+  const must = buildMlMustClauses();
+  addDateRange(must, start, end);
+
   const response = unwrapEsResponse(
     await es.search({
       index: elastic.index,
@@ -113,7 +253,7 @@ export async function getPredictionStats() {
       track_total_hits: true,
       query: {
         bool: {
-          must: buildMlMustClauses()
+          must
         }
       },
       aggs: {

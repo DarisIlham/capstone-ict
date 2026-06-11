@@ -12,7 +12,6 @@ import { ConfidenceBadge, PredictionBadge } from '../components/MlDashboard/Badg
 import {
   PAGE_SIZE_OPTIONS,
   PREDICTIONS_FETCH_BATCH_SIZE,
-  MAX_PREDICTIONS_RESULT_WINDOW,
   DEFAULT_TIME_RANGE,
   RANGE_TO_MINUTES,
   COLORS,
@@ -38,6 +37,61 @@ const StatCard = ({ label, value, unit = '', className = '', valueClassName = 't
     {unit && <div className="text-xs text-slate-500 mt-1">{unit}</div>}
   </div>
 );
+
+async function fetchPredictionBatches({ start, end }) {
+  const requestBase = { start, end, limit: PREDICTIONS_FETCH_BATCH_SIZE };
+  const firstResponse = await mlApi.getPredictions({ ...requestBase, cursorMode: true });
+  let data = Array.isArray(firstResponse?.data) ? firstResponse.data : [];
+  let pagination = firstResponse?.pagination || {};
+  let total = Number(pagination.total ?? data.length);
+  let nextCursor = pagination.nextCursor;
+  let batchNumber = 1;
+  const seenCursors = new Set();
+
+  while (nextCursor) {
+    if (seenCursors.has(nextCursor)) {
+      return {
+        data,
+        pagination: { ...pagination, total, loaded: data.length, nextCursor: null, hasMore: false },
+        failedPages: [batchNumber + 1],
+        cursorLoopDetected: true,
+      };
+    }
+
+    seenCursors.add(nextCursor);
+    batchNumber += 1;
+
+    try {
+      const response = await mlApi.getPredictions({ ...requestBase, cursor: nextCursor });
+      const batch = Array.isArray(response?.data) ? response.data : [];
+      data = data.concat(batch);
+      pagination = response?.pagination || pagination;
+      total = Number(pagination.total ?? total ?? data.length);
+      nextCursor = pagination.nextCursor;
+
+      if (!batch.length && nextCursor) {
+        return {
+          data,
+          pagination: { ...pagination, total, loaded: data.length, nextCursor: null, hasMore: false },
+          failedPages: [batchNumber],
+        };
+      }
+    } catch (error) {
+      return {
+        data,
+        pagination: { ...pagination, total, loaded: data.length, nextCursor, hasMore: Boolean(nextCursor) },
+        failedPages: [batchNumber],
+        error,
+      };
+    }
+  }
+
+  return {
+    data,
+    pagination: { ...pagination, total, loaded: data.length, fetchedPages: batchNumber, hasMore: false },
+    failedPages: [],
+  };
+}
 
 export default function MlDashboard() {
   const [loading, setLoading] = useState(true);
@@ -75,7 +129,7 @@ export default function MlDashboard() {
       const minutes = RANGE_TO_MINUTES[timeRange] || RANGE_TO_MINUTES['24h'];
       const { start, end } = getRangeWindow(timeRange);
       const [predictionsResult, timelineResult, statsResult] = await Promise.allSettled([
-        mlApi.getPredictions({ start, end, page: 1, limit: PREDICTIONS_FETCH_BATCH_SIZE }),
+        fetchPredictionBatches({ start, end }),
         mlApi.getTimeline(minutes),
         mlApi.getStats({ start, end }),
       ]);
@@ -93,50 +147,21 @@ export default function MlDashboard() {
       if (predictionsResult.status !== 'fulfilled') {
         notices.push('Predictions list gagal dimuat dari endpoint utama.');
       } else {
-        const firstPagePagination = predictionsResult.value?.pagination || {};
-        const totalPages = Math.max(
-          Number(firstPagePagination.totalPages || Math.ceil(responseTotalPredictions / PREDICTIONS_FETCH_BATCH_SIZE) || 1),
-          1,
-        );
-        const maxFetchablePages = Math.max(
-          1,
-          Math.floor(MAX_PREDICTIONS_RESULT_WINDOW / PREDICTIONS_FETCH_BATCH_SIZE),
-        );
-        const pagesToFetch = Math.min(totalPages, maxFetchablePages);
+        const failedPages = predictionsResult.value?.failedPages || [];
+        const loadedPredictions = Number(predictionsResult.value?.pagination?.loaded ?? preds.length);
 
-        if (responseTotalPredictions > MAX_PREDICTIONS_RESULT_WINDOW || totalPages > maxFetchablePages) {
-          notices.push(
-            `Tabel memuat maksimal ${MAX_PREDICTIONS_RESULT_WINDOW.toLocaleString('en-US')} prediksi terbaru untuk range ini karena batas pagination backend.`
-          );
+        if (failedPages.length > 0) {
+          notices.push(`Sebagian data predictions gagal dimuat pada batch ${failedPages.join(', ')}.`);
         }
 
-        if (pagesToFetch > 1) {
-          const remainingPageResults = await Promise.allSettled(
-            Array.from({ length: pagesToFetch - 1 }, (_, index) =>
-              mlApi.getPredictions({
-                start,
-                end,
-                page: index + 2,
-                limit: PREDICTIONS_FETCH_BATCH_SIZE,
-              })
-            )
+        if (predictionsResult.value?.cursorLoopDetected) {
+          notices.push('Pagination cursor ML berhenti karena cursor berulang terdeteksi.');
+        }
+
+        if (responseTotalPredictions > loadedPredictions) {
+          notices.push(
+            `Tabel memuat ${loadedPredictions.toLocaleString('en-US')} dari ${responseTotalPredictions.toLocaleString('en-US')} prediksi untuk range ini.`
           );
-
-          const failedPages = [];
-          for (let i = 0; i < remainingPageResults.length; i += 1) {
-            const result = remainingPageResults[i];
-            const pageNumber = i + 2;
-
-            if (result.status === 'fulfilled' && Array.isArray(result.value?.data)) {
-              preds = preds.concat(result.value.data);
-            } else {
-              failedPages.push(pageNumber);
-            }
-          }
-
-          if (failedPages.length > 0) {
-            notices.push(`Sebagian data predictions gagal dimuat pada page ${failedPages.join(', ')}.`);
-          }
         }
       }
 
@@ -460,7 +485,7 @@ export default function MlDashboard() {
 
           {/* Timeline Wave Chart + Top Source IPs */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch">
-            <div className="bg-slate-900/40 border border-slate-700/40 rounded-lg p-4 md:p-6 flex flex-col h-full overflow-visible">
+            <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4 flex flex-col h-full overflow-visible">
               <div className="flex justify-between items-center mb-4 md:mb-6 gap-2">
                 <div className="text-xs md:text-sm font-semibold text-slate-200">
                   ML Predictions Timeline
@@ -475,7 +500,7 @@ export default function MlDashboard() {
                 </div>
               </div>
 
-              <div className="flex-1 rounded-lg border border-slate-700/30 bg-slate-950/20 p-2 md:p-4 overflow-visible">
+              <div className="flex-1 rounded-lg border border-slate-800/30 bg-slate-900/20 p-2 md:p-4 overflow-visible">
                 <div className="min-w-[620px] md:min-w-0 overflow-visible">
                   {waveData.length === 0 ? (
                     <div className="h-48 flex items-center justify-center text-slate-500">
@@ -493,7 +518,7 @@ export default function MlDashboard() {
               </div>
             </div>
 
-            <div className="bg-slate-900/40 border border-slate-700/40 rounded-lg p-4 md:p-6 h-full">
+            <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4 h-full">
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
                   <div className="text-xs md:text-sm font-semibold text-slate-200">

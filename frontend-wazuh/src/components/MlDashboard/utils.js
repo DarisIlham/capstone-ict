@@ -16,7 +16,6 @@ export const RANGE_TO_MINUTES = {
 
 export const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 export const PREDICTIONS_FETCH_BATCH_SIZE = 1000;
-export const MAX_PREDICTIONS_RESULT_WINDOW = 10000;
 
 export const COLORS = ['#10b981', '#ef4444', '#f97316', '#3b82f6', '#a78bfa', '#ec4899', '#14b8a6', '#8b5cf6'];
 export const WORD_COLORS = ['#f472b6', '#38bdf8', '#4ade80', '#a78bfa', '#fb923c', '#34d399', '#f87171', '#facc15', '#60a5fa', '#e879f9'];

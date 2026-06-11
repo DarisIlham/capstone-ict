@@ -11,11 +11,14 @@ async function fetchJson(path, options = {}) {
 }
 
 const BASE = '/api/ml';
+const DEFAULT_PREDICTIONS_LIMIT = 1000;
 
 export function getPredictions(params = {}) {
-  // Set default limit to 10000 to fetch all predictions (not just 20)
-  const fullParams = { limit: 10000, ...params };
-  const qs = new URLSearchParams(fullParams).toString();
+  // Keep a generous legacy default, while allowing callers to override it for cursor batches.
+  const fullParams = { limit: DEFAULT_PREDICTIONS_LIMIT, ...params };
+  const qs = new URLSearchParams(
+    Object.entries(fullParams).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  ).toString();
   const url = qs ? `${BASE}/predictions?${qs}` : `${BASE}/predictions`;
   return fetchJson(url);
 }

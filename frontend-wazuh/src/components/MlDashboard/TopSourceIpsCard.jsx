@@ -15,7 +15,7 @@ export default function TopSourceIpsCard({ sourceIps }) {
         const fillWidth = Math.max(10, Math.round((ip.count / peakCount) * 100));
 
         return (
-          <div key={ip.label} className="rounded-xl border border-slate-700/50 bg-slate-900/40 px-3 py-3">
+          <div key={ip.label} className="rounded-xl border border-slate-800/40 bg-slate-800/30 px-3 py-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
                 <span
@@ -25,15 +25,15 @@ export default function TopSourceIpsCard({ sourceIps }) {
                   {idx + 1}
                 </span>
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-foreground">{ip.label}</div>
-                  <div className="text-[11px] text-muted-foreground">
+                  <div className="truncate text-sm font-semibold text-white">{ip.label}</div>
+                  <div className="text-[11px] text-slate-400">
                     Last seen {formatDetailedTimestamp(ip.lastSeen)}
                   </div>
                 </div>
               </div>
               <div className="shrink-0 text-right">
                 <div className="text-sm font-black" style={{ color: accent }}>{ip.count}</div>
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">events</div>
+                <div className="text-[11px] uppercase tracking-wide text-slate-400">events</div>
               </div>
             </div>
             <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-panel-muted-strong">

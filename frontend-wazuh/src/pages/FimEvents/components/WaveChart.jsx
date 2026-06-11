@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { clamp, formatBucketLabel } from "../utils";
+import { clamp, formatBucketLabel, formatDetailedTimestamp } from "../utils";
 
 const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey, compact = false, activePointKey = null, onPointSelect = null }) => {
   const [selectedPoint, setSelectedPoint] = useState(null);

@@ -1,10 +1,10 @@
 import React from "react";
 
 const confidenceClasses = {
-  danger: "border border-red-500/30 bg-red-500/12 text-red-700 dark:text-red-300",
-  warning: "border border-orange-500/30 bg-orange-500/12 text-orange-700 dark:text-orange-300",
-  medium: "border border-amber-500/30 bg-amber-500/12 text-amber-700 dark:text-amber-300",
-  success: "border border-emerald-500/30 bg-emerald-500/12 text-emerald-700 dark:text-emerald-300",
+  danger: "border border-rose-400 text-rose-400 bg-slate-900/70",
+  warning: "border border-orange-300 text-orange-300 bg-slate-900/70",
+  medium: "border border-amber-300 text-amber-300 bg-slate-900/70",
+  success: "border border-emerald-400 text-emerald-400 bg-slate-900/70",
 };
 
 export const ConfidenceBadge = ({ score }) => {
@@ -27,14 +27,22 @@ export const ConfidenceBadge = ({ score }) => {
           ? confidenceClasses.warning
           : confidenceClasses.danger;
 
-  return <span className={`app-badge ${tone}`}>{percent}%</span>;
+  return (
+    <span className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-semibold ${tone}`}>
+      {percent}%
+    </span>
+  );
 };
 
 export const PredictionBadge = ({ label }) => {
   const isBenign = String(label).toLowerCase().includes("benign");
   const tone = isBenign ? confidenceClasses.success : confidenceClasses.danger;
 
-  return <span className={`app-badge ${tone}`}>{label || "unknown"}</span>;
+  return (
+    <span className={`inline-flex items-center px-4 py-1 rounded-full text-sm font-semibold ${tone}`}>
+      {label || "unknown"}
+    </span>
+  );
 };
 
 export default PredictionBadge;
