@@ -128,6 +128,152 @@ function buildSuspiciousCommandShouldClauses() {
   ];
 }
 
+const COMMAND_KEYWORDS = [
+  "rm",
+  "curl",
+  "wget",
+  "nc",
+  "chmod",
+  "bash",
+  "sh",
+  "sudo",
+  "dd",
+  "cat",
+  "/etc/shadow",
+  "/etc/passwd",
+  "base64",
+  "eval",
+  "|",
+  "&",
+  ";"
+];
+
+const AGENT_LABEL_SCRIPT = `
+if (doc.containsKey('agent.name.keyword') && doc['agent.name.keyword'].size() != 0) {
+  return doc['agent.name.keyword'].value;
+}
+if (doc.containsKey('host.name.keyword') && doc['host.name.keyword'].size() != 0) {
+  return doc['host.name.keyword'].value;
+}
+return '-';
+`;
+
+function commandWildcardClause(value) {
+  return {
+    wildcard: {
+      "linux.command.keyword": {
+        value,
+        case_insensitive: true
+      }
+    }
+  };
+}
+
+function boolShouldClause(clauses) {
+  return {
+    bool: {
+      should: clauses,
+      minimum_should_match: 1
+    }
+  };
+}
+
+function commandNameShouldClause(names) {
+  return boolShouldClause(names.map((name) => exactMatchClause("linux.command_name", name)));
+}
+
+function buildRiskIndicatorFilters() {
+  return {
+    network_fetch: commandNameShouldClause(["curl", "wget"]),
+    remote_shell_tool: commandNameShouldClause(["nc", "netcat", "ncat", "socat"]),
+    shell_inline_exec: boolShouldClause([
+      commandWildcardClause("*bash -c*"),
+      commandWildcardClause("*sh -c*"),
+      commandWildcardClause("*zsh -c*")
+    ]),
+    python_inline_exec: boolShouldClause([
+      commandWildcardClause("*python -c*"),
+      commandWildcardClause("*python3 -c*")
+    ]),
+    perl_inline_exec: commandWildcardClause("*perl -e*"),
+    php_inline_exec: commandWildcardClause("*php -r*"),
+    base64_decode: commandWildcardClause("*base64 -d*"),
+    permission_change_777: commandWildcardClause("*chmod 777*"),
+    destructive_delete: commandWildcardClause("*rm -rf*"),
+    history_tampering: boolShouldClause([
+      commandWildcardClause("*history -c*"),
+      commandWildcardClause("*unset HISTFILE*")
+    ])
+  };
+}
+
+function buildCommandKeywordFilters() {
+  return Object.fromEntries(
+    COMMAND_KEYWORDS.map((keyword) => [
+      keyword,
+      boolShouldClause([
+        exactMatchClause("linux.command_name", keyword),
+        commandWildcardClause(`*${keyword}*`)
+      ])
+    ])
+  );
+}
+
+function buildLinuxCommandQueryParts(query = {}) {
+  const {
+    user,
+    agentName,
+    commandName,
+    session,
+    hostName,
+    contains,
+    suspicious,
+    start,
+    end
+  } = query;
+
+  const must = buildLinuxCommandMustClauses();
+  const mustNot = [];
+
+  const userFilter = buildOptionalExactFilter("linux.user", user);
+  const agentNameFilter = buildOptionalExactFilter("agent.name", agentName);
+  const commandNameFilter = buildOptionalExactFilter("linux.command_name", commandName);
+  const sessionFilter = buildOptionalExactFilter("linux.session", session);
+  const hostNameFilter = buildOptionalExactFilter("host.name", hostName);
+  const containsFilter = buildContainsClause("linux.command", contains);
+
+  if (userFilter) must.push(userFilter);
+  if (agentNameFilter) {
+    must.push(agentNameFilter);
+  } else if (hostNameFilter) {
+    must.push(hostNameFilter);
+  }
+  if (commandNameFilter) must.push(commandNameFilter);
+  if (sessionFilter) must.push(sessionFilter);
+  if (containsFilter) must.push(containsFilter);
+
+  addDateRange(must, start, end);
+
+  const suspiciousShould = buildSuspiciousCommandShouldClauses();
+  const parsedSuspicious = parseBoolean(suspicious);
+  let should = [];
+  let minimumShouldMatch = 0;
+
+  if (parsedSuspicious === true) {
+    should = suspiciousShould;
+    minimumShouldMatch = 1;
+  } else if (parsedSuspicious === false) {
+    mustNot.push({
+      bool: {
+        should: suspiciousShould,
+        minimum_should_match: 1
+      }
+    });
+  }
+
+  return { must, mustNot, should, minimumShouldMatch };
+}
+
 function classifyLinuxCommand(command, commandName) {
   const cmd = String(command || "").trim();
   const name = String(commandName || "").trim().toLowerCase();
@@ -209,57 +355,7 @@ function formatLinuxCommand(hit) {
 // 2. Tambahkan kata kunci 'export' di setiap fungsi utama
 export async function listLinuxCommands(query) {
   const { page, limit, from } = normalizePagination(query);
-  const {
-    user,
-    agentName,
-    commandName,
-    session,
-    hostName,
-    contains,
-    suspicious,
-    start,
-    end
-  } = query;
-
-  const must = buildLinuxCommandMustClauses();
-  const mustNot = [];
-
-  const userFilter = buildOptionalExactFilter("linux.user", user);
-  const agentNameFilter = buildOptionalExactFilter("agent.name", agentName);
-  const commandNameFilter = buildOptionalExactFilter("linux.command_name", commandName);
-  const sessionFilter = buildOptionalExactFilter("linux.session", session);
-  const hostNameFilter = buildOptionalExactFilter("host.name", hostName);
-  const containsFilter = buildContainsClause("linux.command", contains);
-
-  if (userFilter) must.push(userFilter);
-  if (agentNameFilter) {
-    must.push(agentNameFilter);
-  } else if (hostNameFilter) {
-    must.push(hostNameFilter);
-  }
-  if (commandNameFilter) must.push(commandNameFilter);
-  if (sessionFilter) must.push(sessionFilter);
-  if (containsFilter) must.push(containsFilter);
-
-  addDateRange(must, start, end);
-
-  const suspiciousShould = buildSuspiciousCommandShouldClauses();
-  const parsedSuspicious = parseBoolean(suspicious);
-
-  let should = [];
-  let minimumShouldMatch = 0;
-
-  if (parsedSuspicious === true) {
-    should = suspiciousShould;
-    minimumShouldMatch = 1;
-  } else if (parsedSuspicious === false) {
-    mustNot.push({
-      bool: {
-        should: suspiciousShould,
-        minimum_should_match: 1
-      }
-    });
-  }
+  const { must, mustNot, should, minimumShouldMatch } = buildLinuxCommandQueryParts(query);
 
   const response = unwrapEsResponse(
     await es.search({
@@ -383,7 +479,9 @@ export async function listSuspiciousLinuxCommands(query) {
   };
 }
 
-export async function getLinuxCommandStats() {
+export async function getLinuxCommandStats(query = {}) {
+  const { must, mustNot, should, minimumShouldMatch } = buildLinuxCommandQueryParts(query);
+
   const response = unwrapEsResponse(
     await es.search({
       index: elastic.index,
@@ -391,7 +489,10 @@ export async function getLinuxCommandStats() {
       track_total_hits: true,
       query: {
         bool: {
-          must: buildLinuxCommandMustClauses()
+          must,
+          must_not: mustNot,
+          should,
+          minimum_should_match: minimumShouldMatch
         }
       },
       aggs: {
@@ -405,10 +506,34 @@ export async function getLinuxCommandStats() {
             field: "linux.user.keyword"
           }
         },
+        total_agents: {
+          cardinality: {
+            script: {
+              lang: "painless",
+              source: AGENT_LABEL_SCRIPT
+            }
+          }
+        },
         by_user: {
           terms: {
             field: "linux.user.keyword",
             size: 20
+          }
+        },
+        by_agent: {
+          terms: {
+            script: {
+              lang: "painless",
+              source: AGENT_LABEL_SCRIPT
+            },
+            size: 20
+          },
+          aggs: {
+            last_seen: {
+              max: {
+                field: "@timestamp"
+              }
+            }
           }
         },
         by_command_name: {
@@ -430,20 +555,58 @@ export async function getLinuxCommandStats() {
               minimum_should_match: 1
             }
           }
+        },
+        suspicious_analytics: {
+          filter: {
+            bool: {
+              should: buildSuspiciousCommandShouldClauses(),
+              minimum_should_match: 1
+            }
+          },
+          aggs: {
+            top_commands: {
+              terms: {
+                field: "linux.command.keyword",
+                size: 10
+              }
+            },
+            risk_indicators: {
+              filters: {
+                filters: buildRiskIndicatorFilters()
+              }
+            }
+          }
+        },
+        command_keywords: {
+          filters: {
+            filters: buildCommandKeywordFilters()
+          }
         }
       }
     })
   );
 
+  const suspiciousAnalytics = response.aggregations?.suspicious_analytics || {};
+  const riskBuckets = suspiciousAnalytics.risk_indicators?.buckets || {};
+  const keywordBuckets = response.aggregations?.command_keywords?.buckets || {};
+
   return {
     totalCommands: getTotalHits(response),
     totalSessions: response.aggregations?.total_sessions?.value ?? 0,
     totalUsers: response.aggregations?.total_users?.value ?? 0,
+    totalAgents: response.aggregations?.total_agents?.value ?? 0,
     suspiciousCommands: response.aggregations?.suspicious_count?.doc_count ?? 0,
     users: (response.aggregations?.by_user?.buckets || []).map((bucket) => ({
       user: bucket.key,
       count: bucket.doc_count
     })),
+    agents: (response.aggregations?.by_agent?.buckets || [])
+      .filter((bucket) => bucket.key && bucket.key !== "-")
+      .map((bucket) => ({
+        agentName: bucket.key,
+        count: bucket.doc_count,
+        lastSeen: bucket.last_seen?.value_as_string || null
+      })),
     commandNames: (response.aggregations?.by_command_name?.buckets || []).map((bucket) => ({
       commandName: bucket.key,
       count: bucket.doc_count
@@ -451,35 +614,47 @@ export async function getLinuxCommandStats() {
     topCommands: (response.aggregations?.top_commands?.buckets || []).map((bucket) => ({
       command: bucket.key,
       count: bucket.doc_count
-    }))
+    })),
+    topDangerousCommands: (suspiciousAnalytics.top_commands?.buckets || []).map((bucket) => ({
+      command: bucket.key,
+      count: bucket.doc_count
+    })),
+    riskIndicators: Object.entries(riskBuckets)
+      .map(([indicator, bucket]) => ({
+        indicator,
+        count: bucket.doc_count || 0
+      }))
+      .filter((item) => item.count > 0)
+      .sort((a, b) => b.count - a.count),
+    commandKeywords: Object.entries(keywordBuckets)
+      .map(([keyword, bucket]) => ({
+        keyword,
+        count: bucket.doc_count || 0
+      }))
+      .filter((item) => item.count > 0)
+      .sort((a, b) => b.count - a.count)
   };
 }
 
 export async function getLinuxCommandTimeline(query) {
   const minutes = Math.max(parseInt(query.minutes || "60", 10), 1);
-  const { user } = query;
-
-  const must = [
-    ...buildLinuxCommandMustClauses(),
-    {
-      range: {
-        "@timestamp": {
-          gte: `now-${minutes}m`,
-          lte: "now"
-        }
-      }
-    }
-  ];
-
-  const userFilter = buildOptionalExactFilter("linux.user", user);
-  if (userFilter) must.push(userFilter);
+  const { must, mustNot, should, minimumShouldMatch } = buildLinuxCommandQueryParts({
+    ...query,
+    start: query.start || `now-${minutes}m`,
+    end: query.end || "now"
+  });
 
   const response = unwrapEsResponse(
     await es.search({
       index: elastic.index,
       size: 0,
       query: {
-        bool: { must }
+        bool: {
+          must,
+          must_not: mustNot,
+          should,
+          minimum_should_match: minimumShouldMatch
+        }
       },
       aggs: {
         per_minute: {

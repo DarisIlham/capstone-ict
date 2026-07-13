@@ -68,6 +68,28 @@ function shouldUseCursorPagination(query = {}) {
   );
 }
 
+function getFirstField(source, paths) {
+  for (const path of paths) {
+    const value = getField(source, path);
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function resolvePredictionHostname(source) {
+  return getFirstField(source, [
+    "agent.hostname",
+    "host.hostname",
+    "host.name",
+    "agent_hostname",
+    "agent.name",
+    "hostname"
+  ]);
+}
+
 async function openPredictionsPit() {
   const response = unwrapEsResponse(
     await es.openPointInTime({
@@ -99,6 +121,7 @@ function formatPrediction(hit) {
     kind: getField(src, "event.kind"),
     zeekUid: getField(src, "zeek.uid"),
     sourceIp: getField(src, "source.ip"),
+    hostname: resolvePredictionHostname(src),
     destinationIp: getField(src, "destination.ip"),
     service: getField(src, "network.service"),
     trafficDirection: getField(src, "webids.traffic_direction"),

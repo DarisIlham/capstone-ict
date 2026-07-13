@@ -40,7 +40,7 @@ export const listSuspiciousLinuxCommands = asyncHandler(async (req, res) => {
 });
 
 export const getLinuxCommandStats = asyncHandler(async (req, res) => {
-  const data = await linuxCommandService.getLinuxCommandStats();
+  const data = await linuxCommandService.getLinuxCommandStats(req.query);
 
   res.json({
     success: true,
