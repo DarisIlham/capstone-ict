@@ -33,7 +33,8 @@ const FimEventsPage = ({ agentId = "all" }) => {
     typeof window !== "undefined" ? window.innerWidth : 1280
   );
 
-  const topAgentsPanelRef = useRef(null);
+  const topAgentsContentRef = useRef(null);
+  const timelineHeaderRef = useRef(null);
   const logsTableRef = useRef(null);
 
   useEffect(() => {
@@ -46,32 +47,35 @@ const FimEventsPage = ({ agentId = "all" }) => {
   const isTablet = viewportWidth < 1024;
   const donutSize = isMobile ? 148 : isTablet ? 190 : 280;
   const donutStroke = isMobile ? 16 : isTablet ? 18 : 24;
-  const [timelineChartHeight, setTimelineChartHeight] = useState(250);
+  const [timelineChartHeight, setTimelineChartHeight] = useState(300);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
 
     const updateTimelineHeight = () => {
       if (isMobile) {
-        setTimelineChartHeight(110);
+        setTimelineChartHeight(220);
         return;
       }
 
-      const panelHeight = topAgentsPanelRef.current?.getBoundingClientRect().height;
-      if (!panelHeight) return;
+      const topAgentsHeight = topAgentsContentRef.current?.getBoundingClientRect().height;
+      const timelineHeaderHeight = timelineHeaderRef.current?.getBoundingClientRect().height || 0;
+      if (!topAgentsHeight) return;
 
-      const nextHeight = Math.max(180, Math.min(Math.round(panelHeight - 104), 420));
+      const headerGap = viewportWidth >= 768 ? 24 : 16;
+      const nextHeight = Math.max(240, Math.min(Math.round(topAgentsHeight - timelineHeaderHeight - headerGap), 460));
       setTimelineChartHeight(nextHeight);
     };
 
     updateTimelineHeight();
 
-    if (typeof ResizeObserver === "undefined" || !topAgentsPanelRef.current) {
+    if (typeof ResizeObserver === "undefined") {
       return undefined;
     }
 
     const observer = new ResizeObserver(updateTimelineHeight);
-    observer.observe(topAgentsPanelRef.current);
+    if (topAgentsContentRef.current) observer.observe(topAgentsContentRef.current);
+    if (timelineHeaderRef.current) observer.observe(timelineHeaderRef.current);
     return () => observer.disconnect();
   }, [isMobile, viewportWidth]);
 
@@ -179,7 +183,7 @@ const FimEventsPage = ({ agentId = "all" }) => {
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch">
             <div className="bg-slate-800/30 border border-slate-800/50 rounded-lg p-4 md:p-6 flex flex-col h-full">
-              <div className="flex justify-between items-center mb-4 md:mb-6 gap-2">
+              <div ref={timelineHeaderRef} className="flex justify-between items-center mb-4 md:mb-6 gap-2">
                 <div className="text-xs md:text-sm font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
                   <Activity className="h-3 md:h-4 w-3 md:w-4 text-sky-400" />
                   Timeline
@@ -189,7 +193,7 @@ const FimEventsPage = ({ agentId = "all" }) => {
                   <div className="text-[11px] text-slate-600">Updated {formatLiveTimestamp(lastUpdated)}</div>
                 </div>
               </div>
-              <div className="overflow-x-auto flex-1">
+              <div className="overflow-x-auto overflow-y-visible flex-1">
                 <div className={isMobile ? "min-w-[620px]" : "min-w-0"}>
                   <WaveChart
                     data={derived.series}
@@ -203,34 +207,40 @@ const FimEventsPage = ({ agentId = "all" }) => {
                 </div>
               </div>
             </div>
-            <div ref={topAgentsPanelRef} className="bg-slate-800/30 border border-slate-800/50 rounded-lg p-4 md:p-6 h-full">
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-xs md:text-sm font-semibold text-slate-300">Top 5 Agents</div>
-                  <div className="mt-1 text-[11px] text-slate-500">Most active agents from FIM events</div>
+            <div className="bg-slate-800/30 border border-slate-800/50 rounded-lg p-4 md:p-6 h-full">
+              <div ref={topAgentsContentRef}>
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs md:text-sm font-semibold text-slate-300">Top 5 Agents</div>
+                    <div className="mt-1 text-[11px] text-slate-500">Most active agents from FIM events</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-slate-500">Unique agents</div>
+                    <div className="text-sm font-black text-emerald-300">{derived.uniqueAgents}</div>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-xs text-slate-500">Unique agents</div>
-                  <div className="text-sm font-black text-emerald-300">{derived.uniqueAgents}</div>
-                </div>
+                <TopAgentsCard agents={derived.topAgents} />
               </div>
-              <TopAgentsCard agents={derived.topAgents} />
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4 shadow-lg flex flex-col sm:flex-row items-center gap-3 md:gap-4 w-full xl:w-auto">
-              <div className="flex flex-col sm:flex-row items-center gap-3 md:gap-4 w-full xl:w-auto">
-                <Donut items={derived.eventItems} size={donutSize} stroke={donutStroke} centerLabelTop={derived.total} centerLabelBottom="events" compact={isMobile} />
-                <div className="w-full sm:w-40 text-xs"><Legend items={derived.eventItems} /></div>
-              </div>
-              <div className="flex flex-col sm:flex-row items-center gap-3 md:gap-4 w-full xl:w-auto">
-                <Donut items={derived.severityItems} size={donutSize} stroke={donutStroke} centerLabelTop={derived.total} centerLabelBottom="severity" compact={isMobile} />
-                <div className="w-full sm:w-40 text-xs"><Legend items={derived.severityItems} /></div>
-              </div>
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4 shadow-lg flex flex-row items-center justify-center gap-36 w-full min-h-[280px]">
+           <div className="flex flex-col items-center gap-6 w-auto">
+            <Donut items={derived.eventItems} size={donutSize} stroke={donutStroke} centerLabelTop={derived.total} centerLabelBottom="events" compact={isMobile} />
+            <div className="w-full flex justify-center">
+              <Legend items={derived.eventItems} />
             </div>
+          </div>
+          <div className="flex flex-col items-center gap-6 w-auto">
+            <Donut items={derived.severityItems} size={donutSize} stroke={donutStroke} centerLabelTop={derived.total} centerLabelBottom="severity" compact={isMobile} />
+            <div className="w-full flex justify-center">
+              <Legend items={derived.severityItems} />
+            </div>
+          </div>
+          </div>
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4 shadow-lg flex flex-col gap-2 items-center justify-center">
-              <div className="w-full text-xs md:text-sm font-semibold text-slate-300">Payload Pattern Cloud</div>
+              <div className="w-full text-xs md:text-sm font-semibold text-slate-300">Diff Pattern Cloud</div>
               <div className="command-keywords-distribution-box w-full overflow-x-auto bg-slate-950 border border-slate-800 rounded-lg p-2 md:p-4">
                 <div className={isMobile ? "min-w-[520px]" : "min-w-0"}>
                   <PayloadWordCloud words={derived.payloadWords} compact={isMobile} />
@@ -261,7 +271,7 @@ const FimEventsPage = ({ agentId = "all" }) => {
             <table className="w-full text-xs md:text-sm text-left whitespace-nowrap">
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-800/70">
-                  {['↓ time', 'agent', 'user', 'path', 'event', 'payload', 'severity'].map((h) => (
+                  {['↓ time', 'agent', 'user', 'path', 'event', 'diff', 'severity'].map((h) => (
                     <th key={h} className="px-2 md:px-4 py-2 md:py-3 text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">{h}</th>
                   ))}
                 </tr>

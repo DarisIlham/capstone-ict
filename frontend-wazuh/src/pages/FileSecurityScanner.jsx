@@ -15,6 +15,12 @@ import {
   ShieldCheck,
   Network,
 } from "lucide-react";
+import {
+  FILE_SEVERITY_ORDER,
+  inferFileSeverity,
+  inferFindingSeverity,
+  normalizeFileSeverity,
+} from "../utils/fileSeverity";
 
 const API_ROOT = `${API_BASE_URL}/api`;
 const DEFAULT_PAGE_SIZE = 20;
@@ -55,7 +61,7 @@ const formatDetailedTimestamp = (timestamp) =>
     second: "2-digit",
   });
 
-const severityOrder = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, INFO: 0 };
+const severityOrder = FILE_SEVERITY_ORDER;
 const severityColors = {
   CRITICAL: "text-red-400 bg-red-500/20",
   HIGH: "text-orange-400 bg-orange-500/20",
@@ -92,8 +98,7 @@ function formatLiveTimestamp(isoString) {
 }
 
 function normalizeSeverity(value, fallback = "HIGH") {
-  const sev = String(value || fallback).toUpperCase();
-  return severityOrder[sev] !== undefined ? sev : fallback;
+  return normalizeFileSeverity(value, fallback);
 }
 
 function getNestedValue(source, path) {
@@ -165,11 +170,11 @@ function resolveAgentName(source) {
   return agentId ? `Agent ${agentId}` : "Unknown agent";
 }
 
-function normalizeFinding(finding, index) {
+function normalizeFinding(finding, index, item = {}) {
   if (typeof finding === "string") {
     return {
       name: finding,
-      severity: "HIGH",
+      severity: inferFindingSeverity({ indicator: finding, sample: finding }, item),
       desc: finding,
       type: "content_indicator",
     };
@@ -181,22 +186,28 @@ function normalizeFinding(finding, index) {
 
   return {
     name,
-    severity: normalizeSeverity(raw.severity || raw.risk || raw.level, "HIGH"),
+    severity: normalizeSeverity(
+      raw.severity || raw.risk || raw.level || raw.ruleLevel || raw.rule_level,
+      inferFindingSeverity(raw, item)
+    ),
     desc: typeof desc === "object" ? JSON.stringify(desc) : String(desc),
     type: raw.type || raw.category || raw.source || "content_indicator",
   };
 }
 
 function normalizeFileScan(item) {
-  const findings = Array.isArray(item.findings) ? item.findings.map(normalizeFinding) : [];
+  const findings = Array.isArray(item.findings)
+    ? item.findings.map((finding, index) => normalizeFinding(finding, index, item))
+    : [];
   const findingsCount = Number(item.findingsCount ?? findings.length ?? 0);
+  const inferredFileSeverity = inferFileSeverity(item, findings);
   const safeFindings = findings.length
     ? findings
     : findingsCount > 0
       ? [
         {
           name: "Suspicious indicator detected",
-          severity: "HIGH",
+          severity: inferredFileSeverity,
           desc: `${findingsCount} finding(s) reported by scanner`,
           type: "scanner_result",
         },
@@ -222,6 +233,7 @@ function normalizeFileScan(item) {
     sha256: item.sha256 || "-",
     md5: item.md5 || "-",
     findingsCount,
+    severity: inferredFileSeverity,
     matchedSourcesCount: item.matchedSourcesCount ?? 0,
     matchedSources: Array.isArray(item.matchedSources) ? item.matchedSources : [],
     findings: safeFindings,
@@ -284,6 +296,23 @@ const RangeFilter = ({ rangeKey, onRangeChange }) => (
   </div>
 );
 
+function getTooltipPosition(point, chartWidth, chartHeight) {
+  const rawLeft = (point.x / chartWidth) * 100;
+  const nearLeft = rawLeft < 16;
+  const nearRight = rawLeft > 84;
+  const placeBelow = point.y < 78;
+  const left = clamp(rawLeft, 3, 97);
+  const top = placeBelow
+    ? clamp(((point.y + 18) / chartHeight) * 100, 3, 88)
+    : clamp(((point.y - 18) / chartHeight) * 100, 10, 97);
+
+  return {
+    left: `${left}%`,
+    top: `${top}%`,
+    transform: `translate(${nearLeft ? "0" : nearRight ? "-100%" : "-50%"}, ${placeBelow ? "0" : "-100%"})`,
+  };
+}
+
 const WaveChart = ({
   data,
   color = "#ef4444",
@@ -295,16 +324,45 @@ const WaveChart = ({
   onPointSelect = null,
 }) => {
   const [selectedPoint, setSelectedPoint] = useState(null);
-  const width = 800;
-  const padding = { l: 28, r: 10, t: 8, b: 24 };
+  const chartRef = useRef(null);
+  const baseWidth = compact ? 620 : 800;
+  const [chartWidth, setChartWidth] = useState(baseWidth);
+  const width = chartWidth;
+  const chartHeight = Math.max(compact ? 220 : 240, height);
+  const padding = { l: 58, r: 24, t: 20, b: 56 };
   const innerW = width - padding.l - padding.r;
-  const innerH = height - padding.t - padding.b;
+  const innerH = chartHeight - padding.t - padding.b;
+
+  useEffect(() => {
+    const node = chartRef.current;
+    if (!node) return undefined;
+
+    const updateWidth = () => {
+      const rect = node.getBoundingClientRect();
+      const nextWidth = Math.max(compact ? 620 : 320, Math.round(rect.width || baseWidth));
+      setChartWidth((current) => (current === nextWidth ? current : nextWidth));
+      setSelectedPoint((current) => (current ? null : current));
+    };
+
+    updateWidth();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateWidth);
+      return () => window.removeEventListener("resize", updateWidth);
+    }
+
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [baseWidth, compact]);
 
   if (!data || data.length === 0) {
     return (
-      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="block">
-        <text x={width / 2} y={height / 2} textAnchor="middle" fontSize="12" fill="#64748b">No data</text>
-      </svg>
+      <div ref={chartRef} className="relative w-full overflow-visible" style={{ height: chartHeight }}>
+        <svg width="100%" height="100%" viewBox={`0 0 ${width} ${chartHeight}`} className="block">
+          <text x={width / 2} y={chartHeight / 2} textAnchor="middle" fontSize="12" fill="#64748b">No data</text>
+        </svg>
+      </div>
     );
   }
 
@@ -339,19 +397,47 @@ const WaveChart = ({
 
   const tickCount = clamp(Math.floor(innerW / (compact ? 260 : 160)), compact ? 2 : 3, compact ? 4 : 7);
   const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
+  const tooltipPosition = selectedPoint ? getTooltipPosition(selectedPoint, width, chartHeight) : null;
 
   return (
-    <div className="relative" onMouseLeave={() => setSelectedPoint(null)}>
-      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="block">
+    <div
+      ref={chartRef}
+      className="relative w-full overflow-visible"
+      style={{ height: chartHeight }}
+      onMouseLeave={() => setSelectedPoint(null)}
+    >
+      <svg width="100%" height="100%" viewBox={`0 0 ${width} ${chartHeight}`} className="block overflow-visible">
         {gridLines.map((grid) => (
           <g key={`grid-${grid.ratio}`}>
             <line x1={padding.l} y1={grid.y} x2={padding.l + innerW} y2={grid.y} stroke="#334155" strokeDasharray="2,2" opacity="0.5" />
-            <text x={padding.l - 5} y={grid.y + 3} textAnchor="end" fontSize="8" fill="#64748b">{grid.value}</text>
+            <text x={padding.l - 7} y={grid.y + 3} textAnchor="end" fontSize="9" fill="#64748b" fontWeight="600">{grid.value}</text>
           </g>
         ))}
-
         <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="#334155" />
         <line x1={padding.l} y1={padding.t + innerH} x2={padding.l + innerW} y2={padding.t + innerH} stroke="#334155" />
+
+        <text
+          x={padding.l + innerW / 2}
+          y={chartHeight - 12}
+          textAnchor="middle"
+          fontSize="11"
+          fill="#64748b"
+          fontWeight="700"
+        >
+          Time Bucket
+        </text>
+        <text
+          x={-(padding.t + innerH / 2)}
+          y="15"
+          transform="rotate(-90)"
+          textAnchor="middle"
+          fontSize="11"
+          fill="#64748b"
+          fontWeight="700"
+        >
+          Detections
+        </text>
+
         <path d={pathD} stroke={color} strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
         <defs>
           <linearGradient id="waveGradientFileScanner" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -359,7 +445,7 @@ const WaveChart = ({
             <stop offset="100%" stopColor={color} stopOpacity="0" />
           </linearGradient>
         </defs>
-        <path d={pathD + ` L ${padding.l + (data.length - 1) * pointSpacing} ${padding.t + innerH} L ${padding.l} ${padding.t + innerH} Z`} fill="url(#waveGradientFileScanner)" />
+        <path d={`${pathD} L ${padding.l + (data.length - 1) * pointSpacing} ${padding.t + innerH} L ${padding.l} ${padding.t + innerH} Z`} fill="url(#waveGradientFileScanner)" />
 
         {data.map((d, i) => {
           const x = padding.l + i * pointSpacing;
@@ -377,6 +463,7 @@ const WaveChart = ({
             end: new Date(Number(d.t) + bucketMsForPoint - 1).toISOString(),
             bucketMs: bucketMsForPoint,
           };
+
           const isHovered = selectedPoint?.index === i;
           const isActive =
             activePointKey !== null && typeof activePointKey !== "undefined"
@@ -386,15 +473,15 @@ const WaveChart = ({
 
           return (
             <g key={`point-${pointKey}`}>
-              {isActive && (
+              {isHighlighted && (
                 <circle
                   cx={x}
                   cy={y}
-                  r="7.5"
-                  fill="transparent"
-                  stroke={activeColor}
+                  r="8"
+                  fill="#0f172a"
+                  stroke={isActive ? activeColor : color}
                   strokeWidth="1.5"
-                  opacity="0.85"
+                  opacity="0.95"
                   className="pointer-events-none"
                 />
               )}
@@ -432,6 +519,7 @@ const WaveChart = ({
             </g>
           );
         })}
+
         {data.map((d, i) => {
           if (i % tickEvery !== 0) return null;
           const x = padding.l + i * pointSpacing;
@@ -440,7 +528,7 @@ const WaveChart = ({
               <line x1={x} y1={padding.t + innerH} x2={x} y2={padding.t + innerH + 3} stroke="#334155" />
               <text
                 x={x}
-                y={padding.t + innerH + 14}
+                y={padding.t + innerH + 17}
                 textAnchor={i === 0 ? "start" : i >= data.length - tickEvery ? "end" : "middle"}
                 fontSize="8"
                 fill="#64748b"
@@ -455,11 +543,7 @@ const WaveChart = ({
       {selectedPoint && (
         <div
           className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-slate-700 bg-slate-900/95 px-3 py-2 text-xs shadow-lg"
-          style={{
-            left: `${Math.min(Math.max((selectedPoint.x / width) * 100, 10), 82)}%`,
-            top: `${Math.max(((selectedPoint.y - 40) / height) * 100, 6)}%`,
-            transform: "translate(-50%, -100%)",
-          }}
+          style={tooltipPosition}
         >
           <div className="font-semibold text-white">{selectedPoint.value} detections</div>
           <div className="mt-1 text-slate-400">{formatDetailedTimestamp(selectedPoint.time)}</div>
@@ -839,7 +923,9 @@ const FileSecurityScanner = () => {
       );
     }
     if (filterSeverity !== "all") {
-      result = result.filter((file) => file.findings.some((finding) => finding.severity === filterSeverity));
+      result = result.filter(
+        (file) => file.severity === filterSeverity || file.findings.some((finding) => finding.severity === filterSeverity)
+      );
     }
     return result;
   }, [files, searchQuery, filterSeverity]);
@@ -871,7 +957,10 @@ const FileSecurityScanner = () => {
 
     const severityMap = new Map();
     files.forEach((file) => {
-      const maxSeverity = file.findings.reduce((max, finding) => (severityOrder[finding.severity] > severityOrder[max] ? finding.severity : max), "LOW");
+      const maxSeverity = normalizeSeverity(
+        file.severity,
+        file.findings.reduce((max, finding) => (severityOrder[finding.severity] > severityOrder[max] ? finding.severity : max), "LOW")
+      );
       severityMap.set(maxSeverity, (severityMap.get(maxSeverity) || 0) + 1);
     });
     const severities = Array.from(severityMap.entries())
@@ -1228,7 +1317,7 @@ const FileSecurityScanner = () => {
                   <thead>
                     <tr className="border-b border-slate-800 bg-slate-800/50">
                       <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">File</th>
-                      <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Agent</th>
+                      <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Hostname</th>
                       <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Type</th>
                       <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Scanner</th>
                       <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">File Path</th>
@@ -1244,10 +1333,13 @@ const FileSecurityScanner = () => {
                     ) : filteredFiles.length === 0 ? (
                       <EmptyState message="No suspicious file scan data found on this page." />
                     ) : (
-                      filteredFiles.map((file, idx) => {
-                        const maxSeverity = file.findings.reduce(
-                          (max, finding) => (severityOrder[finding.severity] > severityOrder[max.severity] ? finding : max),
-                          file.findings[0]
+                        filteredFiles.map((file, idx) => {
+                        const maxSeverity = normalizeSeverity(
+                          file.severity,
+                          file.findings.reduce(
+                            (max, finding) => (severityOrder[finding.severity] > severityOrder[max] ? finding.severity : max),
+                            "LOW"
+                          )
                         );
 
                         return (
@@ -1273,7 +1365,7 @@ const FileSecurityScanner = () => {
                             <td className="px-2 md:px-4 py-1.5 md:py-3 max-w-[300px]">
                               <div className="font-mono text-xs text-amber-300 truncate" title={file.filePath}>{file.filePath || "-"}</div>
                             </td>
-                            <td className="px-2 md:px-4 py-1.5 md:py-3"><RiskIndicator severity={maxSeverity?.severity || "HIGH"} /></td>
+                            <td className="px-2 md:px-4 py-1.5 md:py-3"><RiskIndicator severity={maxSeverity} /></td>
                             <td className="px-2 md:px-4 py-1.5 md:py-3 text-xs"><span className="text-slate-300 font-mono">{file.findingsCount} found</span></td>
                             <td className="px-2 md:px-4 py-1.5 md:py-3 text-xs text-slate-400">
                               {file.timestamp ? new Date(file.timestamp).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}

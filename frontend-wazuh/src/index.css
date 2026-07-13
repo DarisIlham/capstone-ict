@@ -5,6 +5,9 @@
   --chart-label-strong: #ffffff;
   --chart-label: #94a3b8;
   --chart-grid: #334155;
+  --chart-axis: #475569;
+  --chart-point-stroke: #0f172a;
+  --chart-point-bg: rgba(15, 23, 42, 0.92);
 }
 
 :root[data-theme="dark"] body {
@@ -101,6 +104,9 @@
   --chart-label-strong: #0f172a;
   --chart-label: #475569;
   --chart-grid: #cbd5e1;
+  --chart-axis: #94a3b8;
+  --chart-point-stroke: #ffffff;
+  --chart-point-bg: rgba(255, 255, 255, 0.92);
 }
 
 :root[data-theme="light"] body {

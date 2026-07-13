@@ -38,6 +38,15 @@ const StatCard = ({ label, value, unit = '', className = '', valueClassName = 't
   </div>
 );
 
+const getPredictionHostname = (prediction = {}) =>
+  prediction.hostname ||
+  prediction.agentHostname ||
+  prediction.agent_hostname ||
+  prediction.agent?.hostname ||
+  prediction.host?.hostname ||
+  prediction.host?.name ||
+  '-';
+
 async function fetchPredictionBatches({ start, end }) {
   const requestBase = { start, end, limit: PREDICTIONS_FETCH_BATCH_SIZE };
   const firstResponse = await mlApi.getPredictions({ ...requestBase, cursorMode: true });
@@ -228,6 +237,7 @@ export default function MlDashboard() {
             predictedLabel: labels[i % labels.length],
             confidence: Number((0.6 + Math.random() * 0.4).toFixed(2)),
             sourceIp: ips[i % ips.length],
+            hostname: `ml-agent-${(i % 5) + 1}`,
             destinationIp: ips[(i + 1) % ips.length],
             service: services[i % services.length],
             zeekUid: `uid-mock-${i}`,
@@ -500,10 +510,10 @@ export default function MlDashboard() {
                 </div>
               </div>
 
-              <div className="flex-1 rounded-lg border border-slate-800/30 bg-slate-900/20 p-2 md:p-4 overflow-visible">
-                <div className="min-w-[620px] md:min-w-0 overflow-visible">
+              <div className="flex min-h-[320px] flex-1 rounded-lg border border-slate-800/30 bg-slate-900/20 p-2 md:p-4 overflow-visible xl:min-h-0">
+                <div className="flex min-h-0 w-full flex-1 overflow-visible">
                   {waveData.length === 0 ? (
-                    <div className="h-48 flex items-center justify-center text-slate-500">
+                    <div className="flex h-full min-h-[280px] w-full items-center justify-center text-slate-500">
                       No timeline data
                     </div>
                   ) : (
@@ -554,7 +564,7 @@ export default function MlDashboard() {
                 <div className="h-40 flex items-center justify-center text-slate-500">No data</div>
               ) : (
                 <div className="flex flex-col items-center gap-4 justify-center w-full">
-                  <Donut items={distribution} size={140} centerLabelTop={filtered.length} centerLabelBottom="predictions" />
+                  <Donut items={distribution} size={140} centerLabelTop={filtered.length} centerLabelBottom="predictions" centerFontTop={14} centerFontBottom={10} />
                   <div className="w-full flex justify-center">
                     <Legend items={distribution} />
                   </div>
@@ -702,8 +712,8 @@ export default function MlDashboard() {
                     <tr className="border-b border-slate-800 bg-slate-800/70">
                       <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Timestamp</th>
                       <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Label</th>
+                      <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Hostname</th>
                       <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Source IP</th>
-                      <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Host Name</th>
                       <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Destination IP</th>
                       <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Service</th>
                       <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Confidence</th>
@@ -724,7 +734,7 @@ export default function MlDashboard() {
                           <PredictionBadge label={p.predictedLabel} />
                         </td>
                         <td className="px-2 md:px-4 py-1.5 md:py-3 text-emerald-400 font-mono text-xs">
-                          {p.sourceIp || '-'}
+                          {getPredictionHostname(p)}
                         </td>
                         <td className="px-2 md:px-4 py-1.5 md:py-3 text-emerald-400 font-mono text-xs">
                           {p.sourceIp || '-'}

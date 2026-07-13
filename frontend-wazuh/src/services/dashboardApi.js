@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "../config/Api";
+import { inferFileSeverity } from "../utils/fileSeverity";
 
 const API_ROOT = `${API_BASE_URL}/api`;
 
@@ -29,14 +30,6 @@ const RISK_COLORS = {
   High: "#f97316",
   Medium: "#eab308",
   Low: "#84cc16",
-};
-
-const FILE_SEVERITY_ORDER = {
-  CRITICAL: 4,
-  HIGH: 3,
-  MEDIUM: 2,
-  LOW: 1,
-  INFO: 0,
 };
 
 function toCount(value) {
@@ -148,26 +141,8 @@ function getSeriesSummary(series) {
   };
 }
 
-function normalizeFileSeverity(value) {
-  const severity = String(value || "").toUpperCase();
-  return FILE_SEVERITY_ORDER[severity] !== undefined ? severity : "HIGH";
-}
-
 function getMaxFileSeverity(item) {
-  const findings = safeArray(item?.findings);
-
-  if (!findings.length) {
-    return toCount(item?.findingsCount) > 0 ? "HIGH" : "LOW";
-  }
-
-  return findings.reduce((currentMax, finding) => {
-    const nextSeverity = normalizeFileSeverity(
-      finding?.severity || finding?.risk || finding?.level
-    );
-    return FILE_SEVERITY_ORDER[nextSeverity] > FILE_SEVERITY_ORDER[currentMax]
-      ? nextSeverity
-      : currentMax;
-  }, "LOW");
+  return inferFileSeverity(item);
 }
 
 function getFimSeverity(level) {

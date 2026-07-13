@@ -1,5 +1,5 @@
 import React from 'react';
-import { TOP_SOURCE_IPS_COLORS, formatDetailedTimestamp, withAlpha } from './utils';
+import { TOP_SOURCE_IPS_COLORS, formatDetailedTimestamp } from './utils';
 
 export default function TopSourceIpsCard({ sourceIps }) {
   if (!sourceIps || sourceIps.length === 0) {

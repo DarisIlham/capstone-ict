@@ -40,7 +40,7 @@ const Navbar = () => {
     { label: "Main Dashboard", href: "/", icon: LayoutDashboard },
     { label: "Machine Learning", href: "/ml-dashboard", icon: BrainCircuit },
     { label: "File Integrity Monitoring", href: "/fim-events", icon: ShieldAlert },
-    { label: "Host Monitoring", href: "/attack-dashboard", icon: Activity },
+    { label: "Command Monitoring", href: "/attack-dashboard", icon: Activity },
     { label: "File Security Scanner", href: "/file-security", icon: FileSearch },
     { label: "Web Defacement", href: "/web-defacement", icon: Globe },
   ];

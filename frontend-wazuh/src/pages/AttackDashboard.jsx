@@ -16,11 +16,11 @@ const RangeFilter = ({ rangeKey, onRangeChange }) => (
   <div className="flex items-center gap-1 md:gap-2">
     <span className="hidden sm:inline text-xs text-slate-500">Range</span>
     <div className="flex bg-slate-800 rounded p-0.5 border border-slate-700 gap-0.5">
-      {["1h", "24h", "7d", "30d"].map((k) => (
+      {['1h', '24h', '7d', '30d'].map((k) => (
         <button
           key={k}
           onClick={() => onRangeChange(k)}
-          className={`px-1.5 md:px-2.5 py-0.5 md:py-1 text-xs rounded-sm ${rangeKey === k ? "bg-sky-600 text-white" : "text-slate-400"}`}
+          className={`px-1.5 md:px-2.5 py-0.5 md:py-1 text-xs rounded-sm ${rangeKey === k ? 'bg-sky-600 text-white' : 'text-slate-400'}`}
         >
           {k}
         </button>
@@ -30,23 +30,23 @@ const RangeFilter = ({ rangeKey, onRangeChange }) => (
 );
 
 const SUSPICIOUS_HIGHLIGHT_KEYWORDS = [
-  "rm",
-  "curl",
-  "wget",
-  "nc",
-  "chmod",
-  "bash",
-  "sh",
-  "sudo",
-  "dd",
-  "cat",
-  "/etc/shadow",
-  "/etc/passwd",
-  "base64",
-  "eval",
-  "|",
-  "&",
-  ";",
+  'rm',
+  'curl',
+  'wget',
+  'nc',
+  'chmod',
+  'bash',
+  'sh',
+  'sudo',
+  'dd',
+  'cat',
+  '/etc/shadow',
+  '/etc/passwd',
+  'base64',
+  'eval',
+  '|',
+  '&',
+  ';',
 ];
 
 // ========================================
@@ -85,23 +85,69 @@ const formatBucketLabel = (timestamp, rangeKey) => {
 
 const clamp = (n, a, b) => Math.min(Math.max(n, a), b);
 
+function getTooltipPosition(point, chartWidth, chartHeight) {
+  const rawLeft = (point.x / chartWidth) * 100;
+  const nearLeft = rawLeft < 16;
+  const nearRight = rawLeft > 84;
+  const placeBelow = point.y < 78;
+  const left = clamp(rawLeft, 3, 97);
+  const top = placeBelow
+    ? clamp(((point.y + 18) / chartHeight) * 100, 3, 88)
+    : clamp(((point.y - 18) / chartHeight) * 100, 10, 97);
+
+  return {
+    left: `${left}%`,
+    top: `${top}%`,
+    transform: `translate(${nearLeft ? "0" : nearRight ? "-100%" : "-50%"}, ${placeBelow ? "0" : "-100%"})`,
+  };
+}
+
 const WaveChart = ({ data, rangeKey = "24h", height = 80, compact = false, activePointKey = null, onPointSelect }) => {
   const [hoveredPoint, setHoveredPoint] = useState(null);
-  const width = 800;
-  const padding = { l: 28, r: 10, t: 8, b: 24 };
+  const chartRef = useRef(null);
+  const baseWidth = compact ? 620 : 800;
+  const [chartWidth, setChartWidth] = useState(baseWidth);
+  const width = chartWidth;
+  const chartHeight = Math.max(compact ? 220 : 240, height);
+  const padding = { l: 58, r: 24, t: 20, b: 56 };
   const innerW = width - padding.l - padding.r;
-  const innerH = height - padding.t - padding.b;
+  const innerH = chartHeight - padding.t - padding.b;
+
+  useEffect(() => {
+    const node = chartRef.current;
+    if (!node) return undefined;
+
+    const updateWidth = () => {
+      const rect = node.getBoundingClientRect();
+      const nextWidth = Math.max(compact ? 620 : 320, Math.round(rect.width || baseWidth));
+      setChartWidth((current) => (current === nextWidth ? current : nextWidth));
+      setHoveredPoint((current) => (current ? null : current));
+    };
+
+    updateWidth();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateWidth);
+      return () => window.removeEventListener("resize", updateWidth);
+    }
+
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [baseWidth, compact]);
 
   if (!data || data.length === 0) {
     return (
-      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="block">
-        <text x={width / 2} y={height / 2} textAnchor="middle" fontSize="12" fill="#64748b">No data</text>
-      </svg>
+      <div ref={chartRef} className="relative w-full overflow-visible" style={{ height: chartHeight }}>
+        <svg width="100%" height="100%" viewBox={`0 0 ${width} ${chartHeight}`} className="block overflow-visible">
+          <text x={width / 2} y={chartHeight / 2} textAnchor="middle" fontSize="12" fill="#64748b">No data</text>
+        </svg>
+      </div>
     );
   }
 
   const maxV = Math.max(1, ...data.map((d) => d.v));
-  const pointSpacing = data.length ? innerW / (data.length - 1) : innerW;
+  const pointSpacing = data.length > 1 ? innerW / (data.length - 1) : 0;
   const defaultBucketMs = rangeKey === "1h" ? 300000 : rangeKey === "24h" ? 3600000 : rangeKey === "7d" ? 21600000 : 86400000;
 
   const gridSteps = 5;
@@ -129,18 +175,45 @@ const WaveChart = ({ data, rangeKey = "24h", height = 80, compact = false, activ
 
   const tickCount = clamp(Math.floor(innerW / (compact ? 260 : 160)), compact ? 2 : 3, compact ? 4 : 7);
   const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
+  const tooltipPosition = hoveredPoint ? getTooltipPosition(hoveredPoint, width, chartHeight) : null;
 
   return (
-    <div className="relative" onMouseLeave={() => setHoveredPoint(null)}>
-      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="block">
+    <div
+      ref={chartRef}
+      className="relative w-full overflow-visible"
+      style={{ height: chartHeight }}
+      onMouseLeave={() => setHoveredPoint(null)}
+    >
+      <svg width="100%" height="100%" viewBox={`0 0 ${width} ${chartHeight}`} className="block overflow-visible">
         {gridLines.map((gl) => (
           <g key={`grid-${gl.ratio}`}>
             <line x1={padding.l} y1={gl.y} x2={padding.l + innerW} y2={gl.y} stroke="#334155" strokeDasharray="2,2" opacity="0.5" />
-            <text x={padding.l - 5} y={gl.y + 3} textAnchor="end" fontSize="8" fill="#64748b">{gl.value}</text>
+            <text x={padding.l - 7} y={gl.y + 3} textAnchor="end" fontSize="9" fill="#64748b" fontWeight="600">{gl.value}</text>
           </g>
         ))}
         <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="#334155" />
         <line x1={padding.l} y1={padding.t + innerH} x2={padding.l + innerW} y2={padding.t + innerH} stroke="#334155" />
+        <text
+          x={padding.l + innerW / 2}
+          y={chartHeight - 12}
+          textAnchor="middle"
+          fontSize="11"
+          fill="#64748b"
+          fontWeight="700"
+        >
+          Time Bucket
+        </text>
+        <text
+          x={-(padding.t + innerH / 2)}
+          y="15"
+          transform="rotate(-90)"
+          textAnchor="middle"
+          fontSize="11"
+          fill="#64748b"
+          fontWeight="700"
+        >
+          Command Count
+        </text>
         <path d={pathD} stroke="#f97316" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
         <defs>
           <linearGradient id="cmdWaveGradient" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -164,15 +237,15 @@ const WaveChart = ({ data, rangeKey = "24h", height = 80, compact = false, activ
             time: d.t,
             start: d.start || d.t,
             end: d.end || d.t,
-            bucketMs: d.bucketMs,
+            bucketMs: bucketMsForPoint,
           };
           const isHovered = hoveredPoint?.key === pointKey;
           const isActive = activePointKey === pointKey;
           const isHighlighted = isHovered || isActive;
           return (
             <g key={pointKey}>
-              {isActive && (
-                <circle cx={x} cy={y} r="7.5" fill="transparent" stroke="#fdba74" strokeWidth="1.5" opacity="0.85" className="pointer-events-none" />
+              {isHighlighted && (
+                <circle cx={x} cy={y} r="8" fill="#0f172a" stroke={isActive ? "#fb923c" : "#f97316"} strokeWidth="1.5" opacity="0.95" className="pointer-events-none" />
               )}
               <circle cx={x} cy={y} r={isHighlighted ? "7" : "10"} fill="transparent" className="cursor-pointer" role="button" tabIndex={0} aria-label={`Show audit log entries for ${formatDetailedTimestamp(pointData.start)}`} onClick={() => onPointSelect?.(pointData)} onMouseEnter={() => setHoveredPoint(pointData)} onMouseLeave={() => setHoveredPoint(null)} onFocus={() => setHoveredPoint(pointData)} onBlur={() => setHoveredPoint(null)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onPointSelect?.(pointData); } }} />
               <circle cx={x} cy={y} r={isHighlighted ? "5" : "3.5"} fill={isActive ? "#fb923c" : "#f97316"} stroke="#0f172a" strokeWidth="1.5" opacity="0.95" className="pointer-events-none" />
@@ -185,13 +258,14 @@ const WaveChart = ({ data, rangeKey = "24h", height = 80, compact = false, activ
           const label = formatBucketLabel(d.t, rangeKey);
           return (
             <g key={`label-${i}`}>
-              <text x={x} y={padding.t + innerH + 14} textAnchor={i === 0 ? "start" : i >= data.length - tickEvery ? "end" : "middle"} fontSize="8" fill="#64748b">{label}</text>
+              <line x1={x} y1={padding.t + innerH} x2={x} y2={padding.t + innerH + 3} stroke="#334155" />
+              <text x={x} y={padding.t + innerH + 17} textAnchor={i === 0 ? "start" : i >= data.length - tickEvery ? "end" : "middle"} fontSize="8" fill="#64748b">{label}</text>
             </g>
           );
         })}
       </svg>
       {hoveredPoint && (
-        <div className="pointer-events-none absolute z-50 min-w-[120px] max-w-[220px] rounded-lg border border-slate-700 bg-slate-900/95 px-3 py-2 text-xs shadow-lg" style={{ left: `${Math.min(Math.max((hoveredPoint.x / width) * 100, 12), 88)}%`, top: `${Math.max(((hoveredPoint.y - 60) / height) * 100, -15)}%`, transform: "translate(-50%, -100%)" }}>
+        <div className="pointer-events-none absolute z-50 min-w-[120px] max-w-[220px] rounded-lg border border-slate-700 bg-slate-900/95 px-3 py-2 text-xs shadow-lg" style={tooltipPosition}>
           <div className="font-semibold text-white">{hoveredPoint.value} commands</div>
           <div className="mt-1 text-slate-400">{formatDetailedTimestamp(hoveredPoint.start || hoveredPoint.time)}</div>
         </div>
@@ -200,10 +274,15 @@ const WaveChart = ({ data, rangeKey = "24h", height = 80, compact = false, activ
   );
 };
 
-const Donut = ({ items, size = 120, stroke = 12, centerLabelTop, centerLabelBottom }) => {
+const Donut = ({ items, size = 120, stroke = 12, centerLabelTop, centerLabelBottom, centerFontTop, centerFontBottom, compact = false }) => {
   const total = items.reduce((a, b) => a + b.value, 0) || 1;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
+
+  const fontTop = centerFontTop ?? (compact ? 10 : Math.max(11, Math.round(size * 0.09)));
+  const fontBottom = centerFontBottom ?? (compact ? 7 : Math.max(8, Math.round(size * 0.06)));
+  const topY = compact ? -1 : -Math.round(fontTop / 2);
+  const bottomY = compact ? 10 : Math.round(fontBottom * 1.1);
 
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
@@ -231,10 +310,10 @@ const Donut = ({ items, size = 120, stroke = 12, centerLabelTop, centerLabelBott
             </circle>
           );
         })}
-        <text y={-3} textAnchor="middle" fontSize="11" fill="#f1f5f9" fontWeight="700">
+        <text y={topY} textAnchor="middle" fontSize={fontTop} fill="#f1f5f9" fontWeight="700">
           {centerLabelTop}
         </text>
-        <text y={10} textAnchor="middle" fontSize="8" fill="#64748b">
+        <text y={bottomY} textAnchor="middle" fontSize={fontBottom} fill="#64748b">
           {centerLabelBottom}
         </text>
       </g>
@@ -245,7 +324,7 @@ const Donut = ({ items, size = 120, stroke = 12, centerLabelTop, centerLabelBott
 const Legend = ({ items }) => (
   <div className="flex flex-wrap gap-3 w-full justify-center">
     {items.map((it) => (
-      <div key={it.label} className="flex items-center gap-1.5 text-xs text-slate-400">
+      <div key={it.label} className="flex items-center gap-1.5 text-base text-slate-400">
         <span className="inline-block w-2 h-2 rounded-sm shrink-0" style={{ background: it.color }} />
         <span>{it.label}</span>
         <span className="text-slate-500 font-mono">{it.value}</span>
@@ -266,22 +345,22 @@ const CompactBarChart = ({ items, emptyLabel = "No data available" }) => {
   const maxValue = Math.max(...items.map((d) => d.value), 1);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4 md:space-y-6">
       {items.map((item, i) => (
-        <div key={item.label} className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-2">
+        <div key={item.label} className="flex flex-col gap-2 md:gap-3">
+          <div className="flex items-center gap-3 md:gap-4">
             <div className="w-6">
-              <span className="text-xs font-bold text-slate-400">#{i + 1}</span>
+              <span className="text-sm md:text-base font-bold text-slate-400">#{i + 1}</span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-mono text-slate-300 truncate" title={item.label}>
+              <p className="text-sm md:text-sm font-mono text-slate-300 truncate" title={item.label}>
                 {item.label}
               </p>
             </div>
-            <span className="text-xs font-bold text-slate-300">{item.value}x</span>
+            <span className="text-sm md:text-sm font-bold text-slate-300">{item.value}x</span>
           </div>
-          <div className="flex items-center gap-2 ml-6">
-            <div className="flex-1 bg-slate-800/50 rounded-full h-4 overflow-hidden border border-slate-700/30">
+          <div className="flex items-center gap-2 ml-6 md:ml-8">
+            <div className="flex-1 bg-slate-800/50 rounded-full h-5 md:h-6 overflow-hidden border border-slate-700/30">
               <div
                 className="h-full rounded-full transition-all"
                 style={{
@@ -434,11 +513,17 @@ const PaginationControls = ({
 // ========================================
 // Command Highlighter
 // ========================================
-const CommandHighlighter = ({ command }) => {
-  const parts = String(command || "").split(/(\s+)/);
+const CommandHighlighter = ({ command, compact = false }) => {
+  const raw = String(command || "");
+  const maxLen = compact ? 240 : Infinity; // allow more chars in the wider command column
+  const display = raw.length > maxLen ? `${raw.slice(0, maxLen - 1)}…` : raw;
+  const parts = display.split(/(\s+)/);
 
   return (
-    <code className="text-xs font-mono">
+    <code
+      className={`text-xs font-mono ${compact ? "block truncate max-w-[240ch]" : "inline"}`}
+      title={raw}
+    >
       {parts.map((part, idx) => {
         const isSuspicious = SUSPICIOUS_HIGHLIGHT_KEYWORDS.some((kw) =>
           part.toLowerCase().includes(kw.toLowerCase())
@@ -461,7 +546,7 @@ const CommandHighlighter = ({ command }) => {
 // ========================================
 const WORD_COLORS = ["#f472b6", "#38bdf8", "#4ade80", "#a78bfa", "#fb923c", "#34d399", "#f87171", "#facc15", "#60a5fa", "#e879f9"];
 
-const PayloadWordCloud = ({ words }) => {
+const PayloadWordCloud = ({ words, fitHeight = false }) => {
   if (!words || words.length === 0) return <div className="flex items-center justify-center h-full text-slate-600 text-xs">No command data</div>;
   const W = 620, H = 240;
   const maxCount = words[0].count;
@@ -494,7 +579,7 @@ const PayloadWordCloud = ({ words }) => {
     }
   }
   return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="command-word-cloud block w-full" style={{ minHeight: 140 }}>
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} className={`command-word-cloud block w-full ${fitHeight ? "h-full" : ""}`} style={{ minHeight: fitHeight ? 0 : 140 }}>
       <defs><radialGradient id="wcGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#0f172a" stopOpacity="0" /><stop offset="100%" stopColor="#020617" stopOpacity="0.6" /></radialGradient></defs>
       <rect className="command-word-cloud-bg" width={W} height={H} fill="url(#wcGlow)" rx={8} />
       {placed.map((w) => (
@@ -534,6 +619,50 @@ async function fetchJson(url) {
   }
 
   return response.json();
+}
+
+function getCommandDashboardTimeRange(rangeKey, selectedTimelinePoint = null, nowDate = new Date()) {
+  if (selectedTimelinePoint?.start && selectedTimelinePoint?.end) {
+    return {
+      start: selectedTimelinePoint.start,
+      end: selectedTimelinePoint.end,
+    };
+  }
+
+  const minutes = RANGE_TO_MINUTES[rangeKey] || RANGE_TO_MINUTES["24h"];
+  const endDate = nowDate;
+  const startDate = new Date(endDate.getTime() - minutes * 60 * 1000);
+
+  return {
+    start: startDate.toISOString(),
+    end: endDate.toISOString(),
+  };
+}
+
+function applyCommandDashboardFilters(
+  params,
+  { searchUser, searchCommand, suspiciousOnly, timeRange },
+  { forceSuspicious = false } = {}
+) {
+  if (searchUser.trim()) {
+    params.set("user", searchUser.trim());
+  }
+
+  if (searchCommand.trim()) {
+    params.set("contains", searchCommand.trim());
+  }
+
+  if (forceSuspicious || suspiciousOnly) {
+    params.set("suspicious", "true");
+  }
+
+  if (timeRange?.start) {
+    params.set("start", timeRange.start);
+  }
+
+  if (timeRange?.end) {
+    params.set("end", timeRange.end);
+  }
 }
 
 function normalizeLinuxCommand(item) {
@@ -679,15 +808,20 @@ const HostMonitoring = () => {
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth : 1280
   );
-  const [timelineChartHeight, setTimelineChartHeight] = useState(250);
+  const [timelineChartHeight, setTimelineChartHeight] = useState(300);
+  const [commandKeywordsPanelHeight, setCommandKeywordsPanelHeight] = useState(null);
 
   const logsTableRef = useRef(null);
+  const topAgentsContentRef = useRef(null);
+  const timelineHeaderRef = useRef(null);
+  const dangerousCommandsContentRef = useRef(null);
 
   const loadDashboardData = useCallback(async () => {
     const params = new URLSearchParams({
       page: String(page),
       limit: String(pageSize),
     });
+    const statsParams = new URLSearchParams();
     const analyticsParams = new URLSearchParams({
       page: "1",
       limit: String(ANALYTICS_LIMIT),
@@ -697,23 +831,31 @@ const HostMonitoring = () => {
       limit: String(ANALYTICS_LIMIT),
     });
 
-    if (searchUser.trim()) {
-      params.set("user", searchUser.trim());
-      analyticsParams.set("user", searchUser.trim());
-      dangerousParams.set("user", searchUser.trim());
-    }
-    if (searchCommand.trim()) {
-      params.set("contains", searchCommand.trim());
-      analyticsParams.set("contains", searchCommand.trim());
-      dangerousParams.set("contains", searchCommand.trim());
-    }
-    if (suspiciousOnly) params.set("suspicious", "true");
-    if (selectedTimelinePoint?.start && selectedTimelinePoint?.end) {
-      params.set("start", selectedTimelinePoint.start);
-      params.set("end", selectedTimelinePoint.end);
-    }
-
     const minutes = RANGE_TO_MINUTES[rangeKey] || RANGE_TO_MINUTES["24h"];
+    const requestNow = new Date();
+    const tableTimeRange = getCommandDashboardTimeRange(rangeKey, selectedTimelinePoint, requestNow);
+    const timelineTimeRange = getCommandDashboardTimeRange(rangeKey, null, requestNow);
+    const commonFilters = {
+      searchUser,
+      searchCommand,
+      suspiciousOnly,
+      timeRange: tableTimeRange,
+    };
+    const timelineFilters = {
+      searchUser,
+      searchCommand,
+      suspiciousOnly,
+      timeRange: timelineTimeRange,
+    };
+    const timelineParams = new URLSearchParams({
+      minutes: String(minutes),
+    });
+
+    applyCommandDashboardFilters(params, commonFilters);
+    applyCommandDashboardFilters(statsParams, commonFilters);
+    applyCommandDashboardFilters(analyticsParams, commonFilters);
+    applyCommandDashboardFilters(dangerousParams, commonFilters, { forceSuspicious: true });
+    applyCommandDashboardFilters(timelineParams, timelineFilters);
 
     try {
       setError("");
@@ -721,8 +863,8 @@ const HostMonitoring = () => {
 
       const [listResponse, statsResponse, timelineResponse, analyticsResponse, dangerousResponse] = await Promise.all([
         fetchJson(`${API_BASE_URL}/linux-commands?${params.toString()}`),
-        fetchJson(`${API_BASE_URL}/linux-commands/stats`),
-        fetchJson(`${API_BASE_URL}/linux-commands/timeline?minutes=${minutes}`),
+        fetchJson(`${API_BASE_URL}/linux-commands/stats?${statsParams.toString()}`),
+        fetchJson(`${API_BASE_URL}/linux-commands/timeline?${timelineParams.toString()}`),
         fetchJson(`${API_BASE_URL}/linux-commands?${analyticsParams.toString()}`),
         fetchJson(`${API_BASE_URL}/linux-commands?${dangerousParams.toString()}`),
       ]);
@@ -790,64 +932,97 @@ const HostMonitoring = () => {
   }, [backendStats, logs, pagination]);
 
   const analytics = useMemo(() => {
+    const sourceLogs = analyticsLogs.length ? analyticsLogs : logs;
     const suspiciousSourceLogs = dangerousLogs.length
       ? dangerousLogs
-      : (analyticsLogs.length ? analyticsLogs : logs).filter((log) => log.command.risk === "suspicious");
-    const uniqueAgents = new Set(
-      logs
+      : sourceLogs.filter((log) => log.command.risk === "suspicious");
+    const backendAgentTotal = Number(backendStats?.totalAgents ?? backendStats?.uniqueAgents);
+    const uniqueAgents = Number.isFinite(backendAgentTotal) && backendAgentTotal > 0
+      ? backendAgentTotal
+      : new Set(
+        sourceLogs
         .map((log) => log.agentName)
         .filter((agentName) => agentName && agentName !== "-")
-    ).size;
+      ).size;
 
-    const topUsers = (backendStats?.users?.length ? backendStats.users : countBy(logs, (log) => log.user))
+    const topUsersSource = backendStats?.users?.length
+      ? backendStats.users
+      : countBy(sourceLogs, (log) => log.user);
+    const topUsers = topUsersSource
       .slice(0, 5)
       .map((it, i) => ({
         label: it.user || it.label,
-        value: it.count || it.value,
+        value: Number(it.count ?? it.value ?? 0),
         color: CHART_COLORS[i % CHART_COLORS.length],
       }));
 
-    // Top agents should be derived from the same agent label shown in the table.
-    const agentMap = new Map();
-    for (const log of logs) {
-      const agentName = log.agentName;
-      if (!agentName || agentName === "-") continue;
-      const existing = agentMap.get(agentName) || { label: agentName, value: 0, lastSeen: 0 };
-      existing.value += 1;
-      const logTime = new Date(log.timestamp).getTime();
-      if (Number.isFinite(logTime)) {
-        existing.lastSeen = Math.max(existing.lastSeen, logTime);
+    let topAgents = [];
+    if (backendStats?.agents?.length) {
+      topAgents = backendStats.agents
+        .slice(0, 5)
+        .map((it, i) => ({
+          label: it.agentName || it.label,
+          value: Number(it.count ?? it.value ?? 0),
+          lastSeen: it.lastSeen || new Date().toISOString(),
+          color: CHART_COLORS[i % CHART_COLORS.length],
+        }));
+    } else {
+      // Top agents should be derived from the same agent label shown in the table.
+      const agentMap = new Map();
+      for (const log of sourceLogs) {
+        const agentName = log.agentName;
+        if (!agentName || agentName === "-") continue;
+        const existing = agentMap.get(agentName) || { label: agentName, value: 0, lastSeen: 0 };
+        existing.value += 1;
+        const logTime = new Date(log.timestamp).getTime();
+        if (Number.isFinite(logTime)) {
+          existing.lastSeen = Math.max(existing.lastSeen, logTime);
+        }
+        agentMap.set(agentName, existing);
       }
-      agentMap.set(agentName, existing);
+      topAgents = Array.from(agentMap.values())
+        .sort((a, b) => b.value - a.value || b.lastSeen - a.lastSeen)
+        .slice(0, 5)
+        .map((it, i) => ({
+          label: it.label,
+          value: it.value,
+          lastSeen: it.lastSeen ? new Date(it.lastSeen).toISOString() : new Date().toISOString(),
+          color: CHART_COLORS[i % CHART_COLORS.length],
+        }));
     }
-    const topAgents = Array.from(agentMap.values())
-      .sort((a, b) => b.value - a.value || b.lastSeen - a.lastSeen)
-      .slice(0, 5)
-      .map((it, i) => ({
-        label: it.label,
-        value: it.value,
-        lastSeen: it.lastSeen ? new Date(it.lastSeen).toISOString() : new Date().toISOString(),
-        color: CHART_COLORS[i % CHART_COLORS.length],
-      }));
 
-    const suspiciousCommands = suspiciousSourceLogs
-      .filter((l) => l.command.risk === "suspicious")
-      .map((l) => l.command.cmd);
-
-    const topSuspicious = countBy(suspiciousCommands, (cmd) => cmd)
+    const topSuspiciousSource = backendStats?.topDangerousCommands?.length
+      ? backendStats.topDangerousCommands.map((it) => ({
+        label: it.command || it.label,
+        value: Number(it.count ?? it.value ?? 0),
+      }))
+      : countBy(
+        suspiciousSourceLogs
+          .filter((l) => l.command.risk === "suspicious")
+          .map((l) => l.command.cmd),
+        (cmd) => cmd
+      );
+    const topSuspicious = topSuspiciousSource
       .slice(0, 5)
       .map((it, i) => ({
         ...it,
         color: ["#ef4444", "#f97316", "#eab308", "#a78bfa", "#f87171"][i % 5],
       }));
 
-    const riskIndicators = countBy(
-      suspiciousSourceLogs.flatMap((log) => log.command.indicator),
-      (indicator) => indicator
-    ).map((it, i) => ({
-      ...it,
-      color: CHART_COLORS[i % CHART_COLORS.length],
-    }));
+    const riskIndicatorSource = backendStats?.riskIndicators?.length
+      ? backendStats.riskIndicators.map((it) => ({
+        label: it.indicator || it.label,
+        value: Number(it.count ?? it.value ?? 0),
+      }))
+      : countBy(
+        suspiciousSourceLogs.flatMap((log) => log.command.indicator),
+        (indicator) => indicator
+      );
+    const riskIndicators = riskIndicatorSource
+      .map((it, i) => ({
+        ...it,
+        color: CHART_COLORS[i % CHART_COLORS.length],
+      }));
 
     return { topUsers, topAgents, topSuspicious, riskIndicators, uniqueAgents };
   }, [analyticsLogs, backendStats, dangerousLogs, logs]);
@@ -863,10 +1038,19 @@ const HostMonitoring = () => {
     return Array.from(merged.values());
   }, [analyticsLogs, dangerousLogs, logs]);
 
-  const commandPayloadWords = useMemo(
-    () => extractHighlightedCommandKeywords(wordCloudSourceLogs),
-    [wordCloudSourceLogs]
-  );
+  const commandPayloadWords = useMemo(() => {
+    if (backendStats?.commandKeywords?.length) {
+      return backendStats.commandKeywords
+        .map((it) => ({
+          text: it.keyword || it.text || it.label,
+          count: Number(it.count ?? it.value ?? 0),
+        }))
+        .filter((it) => it.text && it.count > 0)
+        .slice(0, 40);
+    }
+
+    return extractHighlightedCommandKeywords(wordCloudSourceLogs);
+  }, [backendStats, wordCloudSourceLogs]);
 
   const filteredLogs = useMemo(() => {
     let result = logs;
@@ -904,9 +1088,6 @@ const HostMonitoring = () => {
       .filter((l) => l.sessionId === selectedSession)
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   }, [selectedSession, logs]);
-  const avgPerSession = stats.uniqueSessions
-    ? (stats.totalCommands / stats.uniqueSessions).toFixed(1)
-    : "0.0";
 
   const handleTimelinePointSelect = useCallback((point) => {
     setPage(1);
@@ -927,7 +1108,7 @@ const HostMonitoring = () => {
       if (logsTableRef.current && typeof logsTableRef.current.scrollIntoView === "function") {
         try {
           logsTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-        } catch (e) {
+        } catch {
           // ignore scroll errors
         }
       }
@@ -941,6 +1122,73 @@ const HostMonitoring = () => {
   }, []);
 
   const isMobile = viewportWidth < 768;
+  const isCommandPanelsSideBySide = viewportWidth >= 1024;
+  const isTablet = viewportWidth < 1024;
+  const donutSize = isMobile ? 148 : isTablet ? 190 : 280;
+  const donutStroke = isMobile ? 16 : isTablet ? 18 : 24;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const updateTimelineHeight = () => {
+      if (isMobile) {
+        setTimelineChartHeight(220);
+        return;
+      }
+
+      const topAgentsHeight = topAgentsContentRef.current?.getBoundingClientRect().height;
+      const timelineHeaderHeight = timelineHeaderRef.current?.getBoundingClientRect().height || 0;
+      if (!topAgentsHeight) return;
+
+      const headerGap = viewportWidth >= 768 ? 24 : 16;
+      const chartFramePadding = viewportWidth >= 768 ? 32 : 16;
+      const nextHeight = Math.max(
+        240,
+        Math.min(Math.round(topAgentsHeight - timelineHeaderHeight - headerGap - chartFramePadding), 460)
+      );
+      setTimelineChartHeight(nextHeight);
+    };
+
+    updateTimelineHeight();
+
+    if (typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(updateTimelineHeight);
+    if (topAgentsContentRef.current) observer.observe(topAgentsContentRef.current);
+    if (timelineHeaderRef.current) observer.observe(timelineHeaderRef.current);
+    return () => observer.disconnect();
+  }, [isMobile, viewportWidth]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const updateCommandKeywordsHeight = () => {
+      if (!isCommandPanelsSideBySide) {
+        setCommandKeywordsPanelHeight(null);
+        return;
+      }
+
+      const contentHeight = dangerousCommandsContentRef.current?.getBoundingClientRect().height;
+      if (!contentHeight) return;
+
+      const nextHeight = Math.round(contentHeight);
+      setCommandKeywordsPanelHeight((currentHeight) =>
+        currentHeight === nextHeight ? currentHeight : nextHeight
+      );
+    };
+
+    updateCommandKeywordsHeight();
+
+    if (typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(updateCommandKeywordsHeight);
+    if (dangerousCommandsContentRef.current) observer.observe(dangerousCommandsContentRef.current);
+    return () => observer.disconnect();
+  }, [analytics.topSuspicious.length, isCommandPanelsSideBySide]);
 
   const goToPage = useCallback(
     async (nextPage) => {
@@ -953,7 +1201,7 @@ const HostMonitoring = () => {
         if (logsTableRef.current && typeof logsTableRef.current.scrollIntoView === "function") {
           try {
             logsTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-          } catch (e) {
+          } catch {
             // ignore scroll errors
           }
         }
@@ -972,7 +1220,7 @@ const HostMonitoring = () => {
             <div>
               <h1 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
                 <Terminal className="h-5 md:h-6 w-5 md:w-6 text-orange-400" />
-                Host Monitoring
+                Command Monitoring
               </h1>
               <p className="text-xs md:text-sm text-slate-400 mt-1">
                 Real-time Linux command auditing and user activity tracking
@@ -1005,7 +1253,7 @@ const HostMonitoring = () => {
                       if (logsTableRef.current && typeof logsTableRef.current.scrollIntoView === "function") {
                         try {
                           logsTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-                        } catch (e) {
+                        } catch {
                           // ignore
                         }
                       }
@@ -1051,10 +1299,10 @@ const HostMonitoring = () => {
                 {loading ? "..." : stats.suspiciousCount}
               </div>
             </div>
-            <div className="bg-orange-500/10 border border-orange-500/30 rounded p-2 md:p-3">
-              <div className="text-[8px] md:text-[10px] text-orange-400 uppercase font-semibold">Sessions</div>
-              <div className="text-lg md:text-2xl font-black text-orange-300 mt-0.5 md:mt-1">
-                {loading ? "..." : stats.uniqueSessions}
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded p-2 md:p-3">
+              <div className="text-[8px] md:text-[10px] text-emerald-400 uppercase font-semibold">Safe Commands</div>
+              <div className="text-lg md:text-2xl font-black text-emerald-300 mt-0.5 md:mt-1">
+                {loading ? "..." : Math.max(stats.totalCommands - stats.suspiciousCount, 0)}
               </div>
             </div>
             <div className="bg-sky-500/10 border border-sky-500/30 rounded p-2 md:p-3">
@@ -1067,7 +1315,7 @@ const HostMonitoring = () => {
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch">
             <div className="bg-slate-800/30 border border-slate-800/50 rounded-lg p-4 md:p-6 flex flex-col h-full overflow-visible">
-              <div className="flex justify-between items-center mb-4 md:mb-6 gap-2">
+              <div ref={timelineHeaderRef} className="flex justify-between items-center mb-4 md:mb-6 gap-2">
                 <div className="text-xs md:text-sm font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
                   <Activity className="h-3 md:h-4 w-3 md:w-4 text-orange-400" />
                   Command Timeline
@@ -1077,7 +1325,7 @@ const HostMonitoring = () => {
                   <div className="text-[11px] text-slate-600">Updated {formatLiveTimestamp(lastUpdated)}</div>
                 </div>
               </div>
-              <div className="flex-1 rounded-lg border border-slate-800/40 p-2 md:p-4 overflow-visible">
+              <div className="flex-1 rounded-lg border border-slate-800/40 p-2 md:p-4 overflow-x-auto overflow-y-visible">
                 <div className={isMobile ? "min-w-[620px]" : "min-w-0"}>
                   <WaveChart
                     data={timelineData}
@@ -1092,110 +1340,90 @@ const HostMonitoring = () => {
             </div>
 
             <div className="bg-slate-800/30 border border-slate-800/50 rounded-lg p-4 md:p-6 h-full">
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-xs md:text-sm font-semibold text-slate-300">Top 5 Agents</div>
-                  <div className="mt-1 text-[11px] text-slate-500">Most active agents from host monitoring events</div>
+              <div ref={topAgentsContentRef}>
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs md:text-sm font-semibold text-slate-300">Top 5 Agents</div>
+                    <div className="mt-1 text-[11px] text-slate-500">Most active agents from command monitoring events</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-slate-500">Unique agents</div>
+                    <div className="text-sm font-black text-emerald-300">{analytics.uniqueAgents}</div>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-xs text-slate-500">Unique agents</div>
-                  <div className="text-sm font-black text-emerald-300">{analytics.uniqueAgents}</div>
-                </div>
+                <TopAgentsCard agents={analytics.topAgents} />
               </div>
-              <TopAgentsCard agents={analytics.topAgents} />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-            <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4 flex flex-col justify-center items-center">
-              <div className="text-xs md:text-sm font-semibold text-slate-300 mb-4 w-full">Active Users</div>
-              {analytics.topUsers.length > 0 ? (
-                <div className="flex flex-col items-center gap-4 justify-center w-full">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+            <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4 flex flex-col">
+              <div className="text-xs md:text-sm font-semibold text-slate-300 mb-4">Active Users</div>
+              <div className="flex-1 flex items-center justify-center">
+                <div className="flex flex-col items-center gap-6 w-full">
                   <Donut
                     items={analytics.topUsers}
-                    size={120}
+                    size={donutSize}
+                    stroke={donutStroke}
                     centerLabelTop={stats.uniqueUsers}
                     centerLabelBottom="users"
+                    compact={isMobile}
                   />
-                  <div className="w-full flex justify-center">
+                  <div className="w-full text-base">
                     <Legend items={analytics.topUsers} />
                   </div>
                 </div>
-              ) : (
-                <div className="flex min-h-40 items-center justify-center text-sm text-slate-500">
-                  No active user data found
-                </div>
-              )}
-            </div>
-
-            <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4 flex flex-col justify-center items-center">
-              <div className="text-xs md:text-sm font-semibold text-slate-300 mb-4 w-full">Risk Indicators</div>
-              {analytics.riskIndicators.length > 0 ? (
-                <div className="flex flex-col items-center gap-4 justify-center w-full">
-                  <Donut
-                    items={analytics.riskIndicators.slice(0, 5)}
-                    size={120}
-                    centerLabelTop={analytics.riskIndicators.reduce((sum, r) => sum + r.value, 0)}
-                    centerLabelBottom="risks"
-                  />
-                  <div className="w-full flex justify-center">
-                    <Legend items={analytics.riskIndicators.slice(0, 5)} />
-                  </div>
-                </div>
-              ) : (
-                <div className="flex min-h-40 items-center justify-center text-sm text-slate-500">
-                  No risk indicator data found
-                </div>
-              )}
+              </div>
             </div>
 
             <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4">
-              <div className="text-xs md:text-sm font-semibold text-slate-300 mb-3">Command Summary</div>
-              <div className="space-y-2 text-xs text-slate-400">
-                <div className="flex justify-between">
-                  <span>Safe Commands</span>
-                  <span className="font-bold text-emerald-400">
-                    {Math.max(stats.totalCommands - stats.suspiciousCount, 0)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Suspicious Commands</span>
-                  <span className="font-bold text-red-400">{stats.suspiciousCount}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Avg per Session</span>
-                  <span className="font-bold text-sky-400">{avgPerSession}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Loaded Rows</span>
-                  <span className="font-bold text-orange-400">{logs.length}</span>
-                </div>
+              <div className="text-xs md:text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" />
+                Top 5 Dangerous Commands Executed
+              </div>
+              <div ref={dangerousCommandsContentRef} className="bg-slate-800/30 rounded-lg p-4 border border-slate-800/50 min-h-[220px] md:min-h-[300px]">
+                <CompactBarChart items={analytics.topSuspicious} emptyLabel="No suspicious command data found" />
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4">
-              <div className="text-xs md:text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4" />
-                Top 5 Dangerous Commands Executed
-              </div>
-              <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-800/50">
-                <CompactBarChart
-                  items={analytics.topSuspicious}
-                  emptyLabel="No suspicious command data found"
-                />
-              </div>
+          <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4 shadow-lg w-full flex flex-col">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-xs md:text-sm font-semibold text-slate-300">Risk Indicators</div>
             </div>
 
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4">
+            <div className="flex-1 flex items-center justify-center">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-32 md:gap-40 w-full xl:w-auto">
+
+              {/* Donut 2 - Risk Indicators */}
+              <div className="flex flex-col items-center gap-6 w-full sm:w-auto">
+                <Donut
+                  items={analytics.riskIndicators.slice(0, 5)}
+                  size={donutSize}
+                  stroke={donutStroke}
+                  centerLabelTop={analytics.riskIndicators.reduce((sum, r) => sum + r.value, 0)}
+                  centerLabelBottom="risks"
+                  compact={isMobile}
+                />
+                <div className="w-full text-base">
+                  <Legend items={analytics.riskIndicators.slice(0, 5)} />
+                </div>
+              </div>
+            </div>
+          </div>
+          </div>
+            <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4">
               <div className="text-xs md:text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
                 <Terminal className="h-4 w-4" />
                 Command Keywords Distribution
               </div>
-              <div className="command-keywords-distribution-box w-full overflow-x-auto bg-slate-800/30 rounded-lg p-4 border border-slate-800/50">
-                <div className="min-w-[520px] md:min-w-0">
-                  <PayloadWordCloud words={commandPayloadWords} />
+              <div
+                className="command-keywords-distribution-box w-full overflow-x-auto overflow-y-hidden bg-slate-950 border border-slate-800 rounded-lg p-2 md:p-4"
+                style={commandKeywordsPanelHeight ? { height: commandKeywordsPanelHeight } : undefined}
+              >
+                <div className="h-full min-w-[520px] md:min-w-0">
+                  <PayloadWordCloud words={commandPayloadWords} fitHeight={Boolean(commandKeywordsPanelHeight)} />
                 </div>
               </div>
             </div>
@@ -1276,7 +1504,7 @@ const HostMonitoring = () => {
             <table className="w-full text-xs md:text-sm text-left whitespace-nowrap">
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-800/70">
-                  {["waktu", "user", "agent", "session id", "command", "status"].map((header) => (
+                  {["waktu", "user", "hostname", "session id", "command", "status"].map((header) => (
                     <th
                       key={header}
                       className="px-2 md:px-4 py-2 md:py-3 text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase"
@@ -1318,10 +1546,10 @@ const HostMonitoring = () => {
                           {log.sessionId}
                         </button>
                       </td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-3 min-w-96">
-                        <CommandHighlighter command={log.command.cmd} />
+                      <td style={{ width: '60%' }} className="pl-2 md:pl-3 pr-6 md:pr-15 py-1.5 md:py-3 min-w-0">
+                        <CommandHighlighter command={log.command.cmd} compact />
                       </td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-3">
+                      <td className="pl-0 md:pl-1 pr-2 md:pr-3 py-1.5 md:py-3">
                         {log.command.risk === "suspicious" ? (
                           <span className="px-2 py-1 rounded-full text-xs font-bold bg-red-500/20 text-red-300">
                             Suspicious
@@ -1359,7 +1587,7 @@ const HostMonitoring = () => {
                 if (logsTableRef.current && typeof logsTableRef.current.scrollIntoView === "function") {
                   try {
                     logsTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-                  } catch (e) {
+                  } catch {
                     // ignore
                   }
                 }
