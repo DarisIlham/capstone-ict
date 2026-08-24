@@ -315,17 +315,21 @@ const COLORS = ['#10b981', '#ef4444', '#f97316', '#3b82f6', '#a78bfa', '#ec4899'
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const PREDICTIONS_FETCH_BATCH_SIZE = 1000;
 const TIME_RANGE_OPTIONS = [
-  { label: '1h', value: '1h', description: '1 hour' },
-  { label: '24h', value: '24h', description: '24 hours' },
-  { label: '7d', value: '7d', description: '7 days' },
-  { label: '30d', value: '30d', description: '30 days' },
+  { label: '1 jam', value: '1h', description: '1 hour' },
+  { label: '1 hari', value: '1d', description: '1 day' },
+  { label: '1 minggu', value: '1w', description: '1 week' },
+  { label: '1 bulan', value: '1m', description: '1 month' },
+  { label: '1 tahun', value: '1y', description: '1 year' },
+  { label: '5 tahun', value: '5y', description: '5 years' },
 ];
-const DEFAULT_TIME_RANGE = '30d';
+const DEFAULT_TIME_RANGE = '1m';
 const RANGE_TO_MINUTES = {
   '1h': 60,
-  '24h': 1440,
-  '7d': 10080,
-  '30d': 43200,
+  '1d': 1440,
+  '1w': 10080,
+  '1m': 43200,
+  '1y': 525600,
+  '5y': 2628000,
 };
 
 const formatTime = (isoString) => {
@@ -391,15 +395,21 @@ const getRangeWindow = (rangeKey) => {
     case '1h':
       start.setHours(start.getHours() - 1);
       break;
-    case '24h':
-      start.setHours(start.getHours() - 24);
+    case '1d':
+      start.setDate(start.getDate() - 1);
       break;
-    case '7d':
+    case '1w':
       start.setDate(start.getDate() - 7);
       break;
-    case '30d':
+    case '1y':
+      start.setFullYear(start.getFullYear() - 1);
+      break;
+    case '5y':
+      start.setFullYear(start.getFullYear() - 5);
+      break;
+    case '1m':
     default:
-      start.setDate(start.getDate() - 30);
+      start.setMonth(start.getMonth() - 1);
       break;
   }
 
@@ -420,15 +430,7 @@ const formatBucketLabel = (timestamp, rangeKey) => {
     });
   }
 
-  if (rangeKey === '24h') {
-    return date.toLocaleString('en-US', {
-      month: 'short',
-      day: '2-digit',
-      hour: '2-digit',
-    });
-  }
-
-  if (rangeKey === '7d') {
+  if (rangeKey === '1d' || rangeKey === '1w') {
     return date.toLocaleString('en-US', {
       month: 'short',
       day: '2-digit',
@@ -446,7 +448,8 @@ const getTimelineBucketMs = (minutes) => {
   if (minutes <= 60) return 5 * 60 * 1000;
   if (minutes <= 1440) return 30 * 60 * 1000;
   if (minutes <= 10080) return 3 * 60 * 60 * 1000;
-  return 24 * 60 * 60 * 1000;
+  if (minutes <= 525600) return 24 * 60 * 60 * 1000;
+  return 7 * 24 * 60 * 60 * 1000;
 };
 
 const createTimelineBucketPoint = (bucketStartMs, value, bucketMs) => {
@@ -872,7 +875,7 @@ export default function MlDashboard() {
     setError(null);
     setDataNotice('');
     try {
-      const minutes = RANGE_TO_MINUTES[timeRange] || RANGE_TO_MINUTES['24h'];
+      const minutes = RANGE_TO_MINUTES[timeRange] || RANGE_TO_MINUTES[DEFAULT_TIME_RANGE];
       const { start, end } = getRangeWindow(timeRange);
       const [predictionsResult, timelineResult] = await Promise.allSettled([
         mlApi.getPredictions({ start, end, page: 1, limit: PREDICTIONS_FETCH_BATCH_SIZE }),
@@ -1017,7 +1020,7 @@ export default function MlDashboard() {
       setPredictions(mockPreds);
       setTotalPredictionsCount(mockPreds.length);
       setStats(genMockStats());
-      setTimeline(genMockTimeline(RANGE_TO_MINUTES[timeRange] || RANGE_TO_MINUTES['24h']));
+      setTimeline(genMockTimeline(RANGE_TO_MINUTES[timeRange] || RANGE_TO_MINUTES[DEFAULT_TIME_RANGE]));
       setLastUpdated(new Date().toISOString());
     } finally {
       setLoading(false);

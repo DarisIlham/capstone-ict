@@ -28,8 +28,10 @@ export function getStats() {
   return fetchJson(`${BASE}/predictions/stats`);
 }
 
-export function getTimeline(minutes = 60) {
-  const url = `${BASE}/predictions/timeline?minutes=${encodeURIComponent(minutes)}`;
+export function getTimeline(minutes = 60, end) {
+  const params = new URLSearchParams({ minutes: String(minutes) });
+  if (end) params.set('end', end);
+  const url = `${BASE}/predictions/timeline?${params.toString()}`;
   return fetchJson(url);
 }
 
