@@ -1,27 +1,13 @@
 import { API_BASE_URL } from "../config/Api";
+import {
+  buildTimelineSeries,
+  createDefaultDateRange,
+  getDateRangeMinutes,
+  getIsoDateRange,
+  getRangeKeyForDateRange,
+} from "../utils/dateRange";
 
 const API_ROOT = `${API_BASE_URL}/api`;
-
-const RANGE_TO_MINUTES = {
-  "1h": 60,
-  "24h": 24 * 60,
-  "7d": 7 * 24 * 60,
-  "30d": 30 * 24 * 60,
-};
-
-const RANGE_TO_MS = {
-  "1h": 60 * 60 * 1000,
-  "24h": 24 * 60 * 60 * 1000,
-  "7d": 7 * 24 * 60 * 60 * 1000,
-  "30d": 30 * 24 * 60 * 60 * 1000,
-};
-
-const RANGE_STEP_MS = {
-  "1h": 5 * 60 * 1000,
-  "24h": 60 * 60 * 1000,
-  "7d": 6 * 60 * 60 * 1000,
-  "30d": 24 * 60 * 60 * 1000,
-};
 
 const BAR_COLORS = ["#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e", "#10b981"];
 const RISK_COLORS = {
@@ -81,58 +67,8 @@ async function fetchJson(url) {
   return payload;
 }
 
-function getRangeWindow(rangeKey) {
-  const end = new Date();
-  const start = new Date(end);
-
-  switch (rangeKey) {
-    case "1h":
-      start.setHours(start.getHours() - 1);
-      break;
-    case "24h":
-      start.setHours(start.getHours() - 24);
-      break;
-    case "7d":
-      start.setDate(start.getDate() - 7);
-      break;
-    case "30d":
-    default:
-      start.setDate(start.getDate() - 30);
-      break;
-  }
-
-  return {
-    start: start.toISOString(),
-    end: end.toISOString(),
-  };
-}
-
-function bucketSeries(items, getTimestamp, getValue, rangeKey) {
-  const rangeMs = RANGE_TO_MS[rangeKey] || RANGE_TO_MS["24h"];
-  const stepMs = RANGE_STEP_MS[rangeKey] || RANGE_STEP_MS["24h"];
-  const now = Date.now();
-  const startMs = now - rangeMs;
-  const bucketStart = (ms) => Math.floor(ms / stepMs) * stepMs;
-
-  const buckets = new Map();
-  safeArray(items).forEach((item) => {
-    const rawTimestamp = getTimestamp(item);
-    const ts = new Date(rawTimestamp).getTime();
-
-    if (!Number.isFinite(ts) || ts < startMs || ts > now) {
-      return;
-    }
-
-    const key = bucketStart(ts);
-    buckets.set(key, (buckets.get(key) || 0) + Math.max(0, toCount(getValue(item))));
-  });
-
-  const series = [];
-  for (let t = bucketStart(startMs); t <= bucketStart(now); t += stepMs) {
-    series.push({ t, v: buckets.get(t) || 0 });
-  }
-
-  return series;
+function bucketSeries(items, getTimestamp, getValue, dateRange) {
+  return buildTimelineSeries(items, getTimestamp, getValue, dateRange);
 }
 
 function getSeriesSummary(series) {
@@ -365,8 +301,8 @@ function buildThreatTypes({
   ];
 }
 
-function createEmptyDashboardData(rangeKey = "24h") {
-  const emptySeries = bucketSeries([], () => Date.now(), () => 0, rangeKey);
+function createEmptyDashboardData(dateRange = createDefaultDateRange()) {
+  const emptySeries = bucketSeries([], () => Date.now(), () => 0, dateRange);
 
   return {
     stats: {
@@ -407,9 +343,14 @@ function createEmptyDashboardData(rangeKey = "24h") {
   };
 }
 
-async function fetchMlTimeline(minutes) {
+async function fetchMlTimeline(minutes, dateRange) {
+  const params = new URLSearchParams({
+    minutes: String(minutes),
+    ...getIsoDateRange(dateRange),
+  });
+
   try {
-    return await fetchJson(`${API_ROOT}/ml/predictions/timeline?minutes=${minutes}`);
+    return await fetchJson(`${API_ROOT}/ml/predictions/timeline?${params.toString()}`);
   } catch (error) {
     const fallback = await fetchJson(
       `${API_ROOT}/ml/predictions/timeline-mock?minutes=${minutes}`
@@ -436,9 +377,16 @@ function buildWarningMessage(key, error) {
   return `${sourceNames[key] || key}: ${error?.message || "request failed"}`;
 }
 
-export async function getMainDashboardData(rangeKey = "24h") {
-  const minutes = RANGE_TO_MINUTES[rangeKey] || RANGE_TO_MINUTES["24h"];
-  const { start, end } = getRangeWindow(rangeKey);
+export async function getMainDashboardData(dateRange = createDefaultDateRange()) {
+  const minutes = getDateRangeMinutes(dateRange);
+  const rangeKey = getRangeKeyForDateRange(dateRange);
+  const { start, end } = getIsoDateRange(dateRange);
+  const rangeParams = new URLSearchParams({ start, end });
+  const timelineParams = new URLSearchParams({
+    minutes: String(minutes),
+    start,
+    end,
+  });
   const fimParams = new URLSearchParams({
     page: "1",
     size: "1000",
@@ -459,18 +407,18 @@ export async function getMainDashboardData(rangeKey = "24h") {
   });
 
   const requestEntries = [
-    ["attackStats", fetchJson(`${API_ROOT}/linux-commands/stats`)],
+    ["attackStats", fetchJson(`${API_ROOT}/linux-commands/stats?${rangeParams.toString()}`)],
     ["attackLogs", fetchJson(`${API_ROOT}/linux-commands?${attackListParams.toString()}`)],
-    ["attackTimeline", fetchJson(`${API_ROOT}/linux-commands/timeline?minutes=${minutes}`)],
-    ["fileStats", fetchJson(`${API_ROOT}/file-scans/stats`)],
-    ["fileTimeline", fetchJson(`${API_ROOT}/file-scans/timeline?minutes=${minutes}`)],
+    ["attackTimeline", fetchJson(`${API_ROOT}/linux-commands/timeline?${timelineParams.toString()}`)],
+    ["fileStats", fetchJson(`${API_ROOT}/file-scans/stats?${rangeParams.toString()}`)],
+    ["fileTimeline", fetchJson(`${API_ROOT}/file-scans/timeline?${timelineParams.toString()}`)],
     [
       "fileSuspicious",
       fetchJson(`${API_ROOT}/file-scans/suspicious?${fileSuspiciousParams.toString()}`),
     ],
     ["fimEvents", fetchJson(`${API_ROOT}/events?${fimParams.toString()}`)],
-    ["mlStats", fetchJson(`${API_ROOT}/ml/predictions/stats`)],
-    ["mlTimeline", fetchMlTimeline(minutes)],
+    ["mlStats", fetchJson(`${API_ROOT}/ml/predictions/stats?${rangeParams.toString()}`)],
+    ["mlTimeline", fetchMlTimeline(minutes, dateRange)],
   ];
 
   const settled = await Promise.allSettled(requestEntries.map(([, request]) => request));

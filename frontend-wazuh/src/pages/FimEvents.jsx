@@ -452,13 +452,52 @@ const PayloadWordCloud = ({ words, compact = false }) => {
 };
 
 // ── Main Component ────────────────────────────────────────────────────────────
+const TIME_RANGE_OPTIONS = [
+  { label: "1D", value: "1d" },
+  { label: "1W", value: "1w" },
+  { label: "1M", value: "1m" },
+  { label: "1Y", value: "1y" },
+  { label: "5Y", value: "5y" },
+];
+
+const getRangeWindow = (key) => {
+  const end = new Date();
+  const start = new Date(end);
+
+  switch (String(key || "").trim()) {
+    case "1d":
+      start.setDate(start.getDate() - 1);
+      break;
+    case "1w":
+      start.setDate(start.getDate() - 7);
+      break;
+    case "1m":
+      start.setMonth(start.getMonth() - 1);
+      break;
+    case "1y":
+      start.setFullYear(start.getFullYear() - 1);
+      break;
+    case "5y":
+      start.setFullYear(start.getFullYear() - 5);
+      break;
+    default:
+      start.setDate(start.getDate() - 1);
+      break;
+  }
+
+  return {
+    start: start.toISOString(),
+    end: end.toISOString(),
+  };
+};
+
 const FimEvents = ({ agentId = "all" }) => {
   const [events, setEvents] = useState([]);
   const [aggregatedEvents, setAggregatedEvents] = useState([]);
   const [_domainData, setDomainData] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [rangeKey, setRangeKey] = useState("30d");
+const [rangeKey, setRangeKey] = useState("1y");
   const [lastUpdated, setLastUpdated] = useState(null);
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth : 1280
@@ -506,38 +545,12 @@ const FimEvents = ({ agentId = "all" }) => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, []);
 
-  const getRangeWindow = (key) => {
-    const end = new Date();
-    const start = new Date(end);
-
-    switch (key) {
-      case "1h":
-        start.setHours(start.getHours() - 1);
-        break;
-      case "24h":
-        start.setHours(start.getHours() - 24);
-        break;
-      case "7d":
-        start.setDate(start.getDate() - 7);
-        break;
-      case "30d":
-      default:
-        start.setDate(start.getDate() - 30);
-        break;
-    }
-
-    return {
-      start: start.toISOString(),
-      end: end.toISOString(),
-    };
-  };
-
-  const fetchEvents = useCallback(async (page = 1, rk, startOverride = null, endOverride = null) => {
+const fetchEvents = useCallback(async (page = 1, rk, startOverride = null, endOverride = null) => {
     try {
       setLoading(true);
       setError(null);
 
-      const effectiveRange = rk || rangeKey;
+      const effectiveRangeKey = rk || rangeKey;
       let start;
       let end;
 
@@ -548,7 +561,7 @@ const FimEvents = ({ agentId = "all" }) => {
         start = selectedTimelinePoint.start;
         end = selectedTimelinePoint.end;
       } else {
-        const rangeWindow = getRangeWindow(effectiveRange);
+        const rangeWindow = getRangeWindow(effectiveRangeKey);
         start = rangeWindow.start;
         end = rangeWindow.end;
       }
@@ -583,12 +596,12 @@ const FimEvents = ({ agentId = "all" }) => {
     } finally {
       setLoading(false);
     }
-  }, [agentId, pageSize, rangeKey, selectedTimelinePoint]);
+}, [agentId, pageSize, rangeKey, selectedTimelinePoint]);
 
   const fetchAggregated = useCallback(async (size = 1000, rk) => {
     try {
-      const effectiveRange = rk || rangeKey;
-      const { start, end } = getRangeWindow(effectiveRange);
+      const effectiveRangeKey = rk || rangeKey;
+      const { start, end } = getRangeWindow(effectiveRangeKey);
 
       const baseEndpoint =
         agentId === "all"
@@ -606,7 +619,7 @@ const FimEvents = ({ agentId = "all" }) => {
       if (!r.success) throw new Error(r.message || "Gagal mengambil data (aggregated)");
       setAggregatedEvents(Array.isArray(r.data) ? r.data : []);
       return r;
-    } catch (err) {
+} catch (err) {
       console.error("❌ Fetch Aggregated Error:", err.message);
       return null;
     }
@@ -614,8 +627,8 @@ const FimEvents = ({ agentId = "all" }) => {
 
   const fetchDomains = useCallback(async (rk) => {
     try {
-      const effectiveRange = rk || rangeKey;
-      const { start, end } = getRangeWindow(effectiveRange);
+      const effectiveRangeKey = rk || rangeKey;
+      const { start, end } = getRangeWindow(effectiveRangeKey);
 
       const baseEndpoint =
         agentId === "all"
@@ -624,7 +637,6 @@ const FimEvents = ({ agentId = "all" }) => {
 
       const endpoint =
         `${baseEndpoint}?size=1000` +
-        `&range=${encodeURIComponent(effectiveRange)}` +
         `&start=${encodeURIComponent(start)}` +
         `&end=${encodeURIComponent(end)}`;
 
@@ -636,7 +648,7 @@ const FimEvents = ({ agentId = "all" }) => {
 
       setDomainData(Array.isArray(result.data) ? result.data : []);
       return result;
-    } catch (err) {
+} catch (err) {
       console.error("Domain fetch error:", err.message);
       setDomainData([]);
       return null;
@@ -794,7 +806,7 @@ const FimEvents = ({ agentId = "all" }) => {
     async (point) => {
       if (!point) return;
       const pointKey = String(point.key ?? point.t ?? point.start ?? point);
-      const bucketMs = point.bucketMs || (rangeKey === "1h" ? 300000 : rangeKey === "24h" ? 3600000 : rangeKey === "7d" ? 21600000 : 86400000);
+      const bucketMs = point.bucketMs || (rangeKey === "1d" ? 3600000 : rangeKey === "1w" ? 21600000 : 86400000);
       const startIso = point.start || new Date(Number(point.t)).toISOString();
       const endIso = point.end || new Date(Number(point.t) + bucketMs - 1).toISOString();
 
@@ -863,7 +875,13 @@ const FimEvents = ({ agentId = "all" }) => {
   };
 
   const derived = useMemo(() => {
-    const rangeMsMap = { "1h": 3600000, "24h": 86400000, "7d": 604800000, "30d": 2592000000 };
+    const rangeMsMap = {
+      "1d": 86400000,
+      "1w": 604800000,
+      "1m": 2592000000,
+      "1y": 31536000000,
+      "5y": 157680000000,
+    };
     const rangeMs = rangeMsMap[rangeKey] ?? 86400000;
     const startMs = now - rangeMs;
 
@@ -874,7 +892,7 @@ const FimEvents = ({ agentId = "all" }) => {
       .filter((e) => Number.isFinite(e._ms) && e._ms >= startMs && e._ms <= now)
       .sort((a, b) => b._ms - a._ms);
 
-    let stepMs = rangeKey === "1h" ? 300000 : rangeKey === "24h" ? 3600000 : rangeKey === "7d" ? 21600000 : 86400000;
+    let stepMs = rangeKey === "1d" ? 3600000 : rangeKey === "1w" ? 21600000 : 86400000;
     const bucketStart = (ms) => Math.floor(ms / stepMs) * stepMs;
     const buckets = new Map();
     for (const e of filtered) {
@@ -1013,18 +1031,18 @@ const FimEvents = ({ agentId = "all" }) => {
             <div className="flex items-center gap-1 md:gap-2">
               <span className="text-xs text-slate-500 hidden sm:inline">Range</span>
               <div className="flex bg-slate-800 rounded p-0.5 border border-slate-700 gap-0.5">
-               {["1h", "24h", "7d", "30d"].map((k) => (
+               {TIME_RANGE_OPTIONS.map(({ label, value }) => (
                 <button
-                  key={k}
+                  key={value}
                   onClick={() => {
-                    if (rangeKey !== k) {
-                      setRangeKey(k);
+                    if (rangeKey !== value) {
+                      setRangeKey(value);
                       setCurrentPage(1);
                     }
                   }}
-                  className={`px-1.5 md:px-2.5 py-0.5 md:py-1 text-xs rounded-sm ${rangeKey === k ? "bg-sky-600 text-white" : "text-slate-400"}`}
+                  className={`px-1.5 md:px-2.5 py-0.5 md:py-1 text-xs rounded-sm ${rangeKey === value ? "bg-sky-600 text-white" : "text-slate-400"}`}
                 >
-                  {k}
+                  {label}
                 </button>
               ))}
               </div>
