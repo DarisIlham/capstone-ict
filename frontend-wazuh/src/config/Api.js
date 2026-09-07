@@ -3,12 +3,13 @@ import axios from "axios";
 const HOST = import.meta.env.VITE_HOST;
 const API_PORT = import.meta.env.VITE_API_PORT;
 const SOCKET_PORT = import.meta.env.VITE_SOCKET_PORT;
+
 const APP_BASE_PATH =
   import.meta.env.BASE_URL && import.meta.env.BASE_URL !== "/"
     ? import.meta.env.BASE_URL.replace(/\/$/, "")
     : "";
 
-export const API_BASE_URL = "http://127.0.0.1:5000";
+export const API_BASE_URL = `${window.location.origin}${APP_BASE_PATH}`;
 export const SOCKET_URL = `http://${HOST}:${SOCKET_PORT}`;
 export const LOGIN_PATH = `${APP_BASE_PATH}/login`;
 

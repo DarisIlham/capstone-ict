@@ -687,8 +687,8 @@ const PayloadWordCloud = ({ words }) => {
   );
 };
 
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
+const API_BASE_URL =
+  `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
 
 const RANGE_TO_MINUTES = {
   "1h": 60,

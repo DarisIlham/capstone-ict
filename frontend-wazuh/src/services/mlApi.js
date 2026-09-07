@@ -1,3 +1,5 @@
+import { API_BASE_URL } from "../config/Api";
+
 // Simple ml API wrapper for frontend
 async function fetchJson(path, options = {}) {
   const res = await fetch(path, { credentials: 'same-origin', ...options });
@@ -10,7 +12,7 @@ async function fetchJson(path, options = {}) {
   return res.json();
 }
 
-const BASE = '/api/ml';
+const BASE = `${API_BASE_URL}/api/ml`;
 
 export function getPredictions(params = {}) {
   // Set default limit to 10000 to fetch all predictions (not just 20)
