@@ -1,13 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import Navbar from '../components/Navbar';
-import { BrainCircuit, RefreshCw } from "lucide-react";
-import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip as ReTooltip,
-} from 'recharts';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { BrainCircuit, BarChart3, LineChart, Globe, CalendarRange, ChevronDown, Search, X } from "lucide-react";
 import mlApi from '../services/mlApi';
+import DateRangeFilter from "../components/DateRangeFilter";
+import RangeFilter from "../components/RangeFilter";
+import {
+  createDefaultDateRange,
+  normalizeDateRange,
+  getIsoDateRange,
+  getDateRangeMinutes,
+  toDateTimeLocalValue,
+} from "../utils/dateRange";
 
 // ========================================
 // SVG Chart Components
@@ -66,7 +69,7 @@ const HorizontalBarChart = ({ data }) => {
               <rect x={barStartX} y={y + 2} width={barMaxWidth} height={barHeight} fill="#0f172a" rx="8" opacity="0.3" />
               
               {/* Background bar container */}
-              <rect x={barStartX} y={y} width={barMaxWidth} height={barHeight} fill="#1e293b" rx="8" strokeWidth="0.5" stroke="#334155" />
+              <rect x={barStartX} y={y} width={barMaxWidth} height={barHeight} fill="var(--soc-border)" rx="8" strokeWidth="0.5" stroke="var(--soc-border)" />
               
               {/* Solid bar with smooth edges */}
               <rect 
@@ -133,7 +136,7 @@ const HorizontalBarChart = ({ data }) => {
               </text>
               
               {/* Rank - dengan styling yang lebih baik */}
-              <circle cx={rankX} cy={y + 14} r="10" fill="#1e293b" stroke="#334155" strokeWidth="1.2" />
+              <circle cx={rankX} cy={y + 14} r="10" fill="var(--soc-border)" stroke="var(--soc-border)" strokeWidth="1.2" />
               <text 
                 x={rankX} y={y + 18} 
                 textAnchor="middle" 
@@ -148,7 +151,7 @@ const HorizontalBarChart = ({ data }) => {
         })}
         
         {/* Separator line */}
-        <line x1="0" y1={chartHeight - 8} x2="1100" y2={chartHeight - 8} stroke="#334155" strokeWidth="0.5" opacity="0.5" />
+        <line x1="0" y1={chartHeight - 8} x2="1100" y2={chartHeight - 8} stroke="var(--soc-border)" strokeWidth="0.5" opacity="0.5" />
       </svg>
     </div>
   );
@@ -166,6 +169,7 @@ const withAlpha = (hex, alpha) => {
 };
 
 const TOP_SOURCE_IPS_COLORS = ["#34d399", "#38bdf8", "#fbbf24", "#f97316", "#a78bfa"];
+const TOP_DEST_IPS_COLORS = ["#a78bfa", "#818cf8", "#60a5fa", "#22d3ee", "#f472b6"];
 
 const getValidDate = (value) => {
   if (!value) return null;
@@ -188,7 +192,7 @@ const formatDetailedTimestamp = (timestamp) => {
   });
 };
 
-const TopSourceIpsCard = ({ sourceIps }) => {
+const TopSourceIpsCard = ({ sourceIps, colors = TOP_SOURCE_IPS_COLORS }) => {
   if (!sourceIps || sourceIps.length === 0) {
     return <div className="flex h-full items-center justify-center text-xs text-slate-600">No source IP data</div>;
   }
@@ -196,38 +200,31 @@ const TopSourceIpsCard = ({ sourceIps }) => {
   const peakCount = Math.max(...sourceIps.map((ip) => ip.count), 1);
 
   return (
-    <div className="flex flex-col gap-2.5">
+    <div className="space-y-3">
       {sourceIps.map((ip, idx) => {
-        const accent = TOP_SOURCE_IPS_COLORS[idx % TOP_SOURCE_IPS_COLORS.length];
-        const fillWidth = Math.max(10, Math.round((ip.count / peakCount) * 100));
-
+        const accent = colors[idx % colors.length];
         return (
-          <div key={ip.label} className="rounded-xl border border-slate-700/60 p-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
-                <span
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black"
-                  style={{ backgroundColor: `${accent}1f`, color: accent }}
-                >
-                  {idx + 1}
-                </span>
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-slate-100">{ip.label}</div>
-                  <div className="text-[11px] text-slate-500">
-                    Last seen {formatDetailedTimestamp(ip.lastSeen)}
-                  </div>
-                </div>
-              </div>
-              <div className="shrink-0 text-right">
-                <div className="text-sm font-black" style={{ color: accent }}>{ip.count}</div>
-                <div className="text-[11px] uppercase tracking-wide text-slate-500">events</div>
-              </div>
+          <div key={ip.label} className="flex flex-col">
+            <div className="flex items-center gap-1.5">
+              <span className="w-5 text-[13px] font-bold text-slate-500 shrink-0">{idx + 1}.</span>
+              <span className="flex-1 min-w-0 text-[13px] font-mono text-slate-300 truncate" title={ip.label}>
+                {ip.label}
+              </span>
+              <span className="text-[13px] font-bold text-slate-400 tabular-nums shrink-0 ml-1">
+                {new Intl.NumberFormat("en-US").format(ip.count)}
+              </span>
             </div>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800">
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="w-5 shrink-0" />
               <div
-                className="h-full rounded-full"
-                style={{ width: `${fillWidth}%`, background: accent }}
-              />
+                className="flex-1 bg-[var(--soc-bg)] rounded h-4 overflow-hidden"
+                title={ip.lastSeen ? `Last seen ${formatDetailedTimestamp(ip.lastSeen)}` : `${ip.label}: ${ip.count} events`}
+              >
+                <div
+                  className="h-full rounded transition-all"
+                  style={{ width: `${Math.max((ip.count / peakCount) * 100, 3)}%`, backgroundColor: accent }}
+                />
+              </div>
             </div>
           </div>
         );
@@ -315,21 +312,17 @@ const COLORS = ['#10b981', '#ef4444', '#f97316', '#3b82f6', '#a78bfa', '#ec4899'
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const PREDICTIONS_FETCH_BATCH_SIZE = 1000;
 const TIME_RANGE_OPTIONS = [
-  { label: '1 jam', value: '1h', description: '1 hour' },
-  { label: '1 hari', value: '1d', description: '1 day' },
-  { label: '1 minggu', value: '1w', description: '1 week' },
-  { label: '1 bulan', value: '1m', description: '1 month' },
-  { label: '1 tahun', value: '1y', description: '1 year' },
-  { label: '5 tahun', value: '5y', description: '5 years' },
+  { label: '1h', value: '1h', description: '1 hour' },
+  { label: '24h', value: '24h', description: '24 hours' },
+  { label: '7d', value: '7d', description: '7 days' },
+  { label: '30d', value: '30d', description: '30 days' },
 ];
-const DEFAULT_TIME_RANGE = '1m';
+const DEFAULT_TIME_RANGE = '24h';
 const RANGE_TO_MINUTES = {
   '1h': 60,
-  '1d': 1440,
-  '1w': 10080,
-  '1m': 43200,
-  '1y': 525600,
-  '5y': 2628000,
+  '24h': 1440,
+  '7d': 10080,
+  '30d': 43200,
 };
 
 const formatTime = (isoString) => {
@@ -343,13 +336,6 @@ const formatTime = (isoString) => {
     minute: '2-digit',
     second: '2-digit',
   }).replace(',', '').replace('AM', '').replace('PM', '').trim();
-};
-
-const formatConfidenceValue = (score) => {
-  if (score === undefined || score === null || score === '') return '-';
-  const value = typeof score === 'number' ? score : parseFloat(score);
-  if (Number.isNaN(value)) return '-';
-  return value.toFixed(2);
 };
 
 const formatLiveTimestamp = (isoString) => {
@@ -368,24 +354,6 @@ const formatLiveTimestamp = (isoString) => {
 const getTimelineRangeDescription = (value) =>
   TIME_RANGE_OPTIONS.find((option) => option.value === String(value))?.description || String(value);
 
-const RangeFilter = ({ rangeKey, onRangeChange }) => (
-  <div className="flex items-center gap-1 md:gap-2">
-    <span className="hidden sm:inline text-xs text-slate-500">Range</span>
-    <div className="flex bg-slate-800 rounded p-0.5 border border-slate-700 gap-0.5">
-      {TIME_RANGE_OPTIONS.map((option) => (
-        <button
-          key={option.value}
-          onClick={() => onRangeChange(option.value)}
-          className={`px-1.5 md:px-2.5 py-0.5 md:py-1 text-xs rounded-sm ${
-            rangeKey === option.value ? 'bg-sky-600 text-white' : 'text-slate-400'
-          }`}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  </div>
-);
 
 const getRangeWindow = (rangeKey) => {
   const end = new Date();
@@ -395,21 +363,15 @@ const getRangeWindow = (rangeKey) => {
     case '1h':
       start.setHours(start.getHours() - 1);
       break;
-    case '1d':
+    case '24h':
       start.setDate(start.getDate() - 1);
       break;
-    case '1w':
+    case '7d':
       start.setDate(start.getDate() - 7);
       break;
-    case '1y':
-      start.setFullYear(start.getFullYear() - 1);
-      break;
-    case '5y':
-      start.setFullYear(start.getFullYear() - 5);
-      break;
-    case '1m':
+    case '30d':
     default:
-      start.setMonth(start.getMonth() - 1);
+      start.setDate(start.getDate() - 30);
       break;
   }
 
@@ -430,7 +392,7 @@ const formatBucketLabel = (timestamp, rangeKey) => {
     });
   }
 
-  if (rangeKey === '1d' || rangeKey === '1w') {
+  if (rangeKey === '24h' || rangeKey === '7d') {
     return date.toLocaleString('en-US', {
       month: 'short',
       day: '2-digit',
@@ -480,12 +442,13 @@ const formatTimelineBucketLabel = (point, rangeKey) => {
   return `${formatDetailedTimestamp(point.start)} - ${formatDetailedTimestamp(point.end)}`;
 };
 
-const buildTimelineFromPredictions = (predictions, minutes) => {
+const buildTimelineFromPredictions = (predictions, minutes, start, end) => {
   const safeMinutes = Math.max(parseInt(minutes || '60', 10), 1);
   const rangeMs = safeMinutes * 60 * 1000;
   const stepMs = getTimelineBucketMs(safeMinutes);
   const now = Date.now();
-  const startMs = now - rangeMs;
+  const startMs = start ? getTimestampMs(start) : now - rangeMs;
+  const endMs = end ? getTimestampMs(end) : now;
   const bucketStart = (ts) => Math.floor(ts / stepMs) * stepMs;
 
   const filteredPredictions = predictions
@@ -493,7 +456,7 @@ const buildTimelineFromPredictions = (predictions, minutes) => {
       ...item,
       _ts: getTimestampMs(item.timestamp),
     }))
-    .filter((item) => Number.isFinite(item._ts) && item._ts >= startMs && item._ts <= now);
+    .filter((item) => Number.isFinite(item._ts) && Number.isFinite(startMs) && Number.isFinite(endMs) && item._ts >= startMs && item._ts <= endMs);
 
   if (!filteredPredictions.length) {
     return [];
@@ -577,53 +540,146 @@ const getConfidenceMeaning = (label, score) => {
   return `Low confidence in ${subject}`;
 };
 
-const Donut = ({ items, size = 120, stroke = 12, centerLabelTop, centerLabelBottom }) => {
-  const total = items.reduce((a, b) => a + b.value, 0) || 1;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
+const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items" }) => {
+  const [selected, setSelected] = useState(null);
+  const rootRef = useRef(null);
+  const [size, setSize] = useState({ width: 1000, height: 210 });
+  const padding = { l: 56, r: 56, t: 12, b: 42 };
+
+  useEffect(() => {
+    const node = rootRef.current;
+    if (!node) return undefined;
+
+    const updateSize = () => {
+      const rect = node.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setSize({ width: rect.width, height: rect.height });
+      }
+    };
+
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const width = size.width;
+  const height = size.height;
+  if (!items || items.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-6 text-center">
+        <p className="text-sm font-medium text-[var(--soc-text-secondary)]">No data available</p>
+        <p className="mt-0.5 text-xs text-[var(--soc-text-muted)]">No data for the selected time range.</p>
+      </div>
+    );
+  }
+
+  const sorted = [...items].sort((a, b) => b.value - a.value);
+  const total = sorted.reduce((s, it) => s + it.value, 0) || 1;
+  const maxV = Math.max(1, ...sorted.map((d) => d.value));
+  const innerW = width - padding.l - padding.r;
+  const innerH = height - padding.t - padding.b;
+  const step = sorted.length > 1 ? innerW / (sorted.length - 1) : innerW;
+
+  const gridSteps = 4;
+  const gridLines = [];
+  for (let i = 0; i < gridSteps; i++) {
+    const ratio = i / (gridSteps - 1);
+    const value = Math.round((ratio * maxV * 10) / 10);
+    const y = padding.t + innerH - ratio * innerH;
+    gridLines.push({ value, y });
+  }
+
+  const xFor = (i) => padding.l + i * step;
+  const yFor = (v) => padding.t + innerH - (v / maxV) * innerH;
+
+  const points = sorted.map((it, i) => ({
+    x: xFor(i),
+    y: yFor(it.value),
+    label: it.label,
+    value: it.value,
+    color: it.color || color,
+    index: i,
+  }));
+
+  const segments = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    const controlX = (a.x + b.x) / 2;
+    segments.push({
+      d: `M ${a.x} ${a.y} C ${controlX} ${a.y}, ${controlX} ${b.y}, ${b.x} ${b.y}`,
+      color: b.color,
+      key: `${a.label}-${b.label}`,
+    });
+  }
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <g transform={`translate(${size / 2} ${size / 2})`}>
-        <circle r={r} fill="transparent" stroke="#1e293b" strokeWidth={stroke} />
-        {items.map((it, idx) => {
-          const currentOffset = items.slice(0, idx).reduce((acc, prev) => acc + (prev.value / total) * c, 0);
-          const dash = (it.value / total) * c;
-          const strokeDashoffset = -currentOffset;
-
+    <div className="relative w-full flex flex-col h-full min-h-0" onMouseLeave={() => setSelected(null)}>
+      <div className="flex items-center justify-between mb-1 px-1">
+        <span className="text-[11px] text-slate-600 uppercase font-semibold">Total</span>
+        <span className="text-sm font-bold text-slate-300">
+          {total} <span className="text-xs font-normal text-slate-500">{totalLabel}</span>
+        </span>
+      </div>
+      <div ref={rootRef} className="flex-1 min-h-0 w-full">
+        <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block">
+        {gridLines.map((grid, idx) => (
+          <g key={`grid-${idx}`}>
+            <line x1={padding.l} y1={grid.y} x2={padding.l + innerW} y2={grid.y} stroke="var(--soc-border)" strokeWidth="1" opacity={grid.y === padding.t || grid.y === padding.t + innerH ? "1" : "0.5"} />
+            <text x={padding.l - 6} y={grid.y + 3} textAnchor="end" fontSize="10" fill="var(--soc-text-muted)" fontWeight="600">
+              {grid.value}
+            </text>
+          </g>
+        ))}
+        <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="var(--soc-border)" strokeWidth="1.5" />
+        <line x1={padding.l} y1={padding.t + innerH} x2={padding.l + innerW} y2={padding.t + innerH} stroke="var(--soc-border)" strokeWidth="1.5" />
+        {segments.map((seg) => (
+          <path key={seg.key} d={seg.d} stroke={seg.color} strokeWidth="2.5" fill="none" opacity="0.85" />
+        ))}
+        {points.map((p) => {
+          const isSel = selected?.index === p.index;
           return (
-            <circle
-              key={it.label}
-              r={r}
-              fill="transparent"
-              stroke={it.color}
-              strokeWidth={stroke}
-              strokeDasharray={`${dash} ${c - dash}`}
-              strokeDashoffset={strokeDashoffset}
-              transform="rotate(-90)"
-              strokeLinecap="butt"
-            >
-              <title>{`${it.label}: ${it.value}`}</title>
-            </circle>
+            <g key={`${p.label}-${p.index}`}>
+              <circle cx={p.x} cy={p.y} r={isSel ? "6" : "9"} fill="transparent" className="cursor-pointer"
+                onMouseEnter={() => setSelected(p)}
+                onMouseLeave={() => setSelected(null)}
+                onFocus={() => setSelected(p)}
+                onBlur={() => setSelected(null)}
+                onClick={() => setSelected(isSel ? null : p)}
+              />
+              <circle cx={p.x} cy={p.y} r={isSel ? "5" : "3.5"} fill={p.color} stroke="var(--soc-bg)" strokeWidth="1.5" opacity="0.95" className="pointer-events-none" />
+              <text x={p.x} y={padding.t + innerH + 18} textAnchor="middle" fontSize="9" fill="var(--soc-text-muted)">{p.label}</text>
+            </g>
           );
         })}
-        <text y={-3} textAnchor="middle" fontSize="11" fill="#f1f5f9" fontWeight="700">{centerLabelTop}</text>
-        <text y={10} textAnchor="middle" fontSize="8" fill="#64748b">{centerLabelBottom}</text>
-      </g>
-    </svg>
+      </svg>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 justify-center px-1 mt-1">
+        {points.map((p) => (
+          <div key={`${p.label}-${p.index}`} className="flex items-center gap-1.5 text-[13px] text-slate-400">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color }} />
+            <span className="whitespace-nowrap">{p.label}</span>
+            <span className="text-slate-500 font-mono">{p.value}</span>
+          </div>
+        ))}
+      </div>
+      {selected && (
+        <div
+          className="pointer-events-none absolute z-10 min-w-[110px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-xl"
+          style={{
+            left: `${Math.min(Math.max((selected.x / width) * 100, 10), 84)}%`,
+            top: `${Math.max(((selected.y - 46) / height) * 100, 2)}%`,
+            transform: "translate(-50%, -100%)",
+          }}
+        >
+          <div className="font-semibold text-[var(--soc-text-primary)]">{selected.label}</div>
+          <div className="mt-1 text-[var(--soc-text-muted)]">{selected.value} {totalLabel}</div>
+        </div>
+      )}
+    </div>
   );
 };
-
-const Legend = ({ items }) => (
-  <div className="flex flex-col gap-1.5">
-    {items.map((it) => (
-      <div key={it.label} className="flex items-center gap-1.5 text-xs text-slate-400">
-        <span className="inline-block w-2 h-2 rounded-sm shrink-0" style={{ background: it.color }} />
-        <span className="max-w-[160px] break-all leading-snug" title={it.label}>{it.label}</span>
-      </div>
-    ))}
-  </div>
-);
 
 const WaveChart = ({ data, width = 1000, height = 320, rangeKey, onPointSelect, activePointKey }) => {
   const [selectedPoint, setSelectedPoint] = useState(null);
@@ -677,17 +733,17 @@ const WaveChart = ({ data, width = 1000, height = 320, rangeKey, onPointSelect, 
   const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
 
   return (
-    <div className="relative w-full overflow-visible" onMouseLeave={() => setSelectedPoint(null)}>
-      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="block overflow-visible">
+    <div className="relative h-full w-full overflow-visible" onMouseLeave={() => setSelectedPoint(null)}>
+      <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block w-full h-full overflow-visible">
         {gridLines.map((grid, idx) => (
           <g key={`grid-${idx}`}>
-            <line x1={padding.l} y1={grid.y} x2={padding.l + innerW} y2={grid.y} stroke="#1e293b" strokeWidth="1" opacity={grid.ratio === 0 || grid.ratio === 1 ? "1" : "0.5"} />
+            <line x1={padding.l} y1={grid.y} x2={padding.l + innerW} y2={grid.y} stroke="var(--soc-border)" strokeWidth="1" opacity={grid.ratio === 0 || grid.ratio === 1 ? "1" : "0.5"} />
             <text x={padding.l - 5} y={grid.y + 4} textAnchor="end" fontSize="10" fill="#64748b" fontWeight="600">{grid.value}</text>
           </g>
         ))}
 
-        <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="#334155" strokeWidth="1.5" />
-        <line x1={padding.l} y1={padding.t + innerH} x2={padding.l + innerW} y2={padding.t + innerH} stroke="#334155" strokeWidth="1.5" />
+        <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="var(--soc-border)" strokeWidth="1.5" />
+        <line x1={padding.l} y1={padding.t + innerH} x2={padding.l + innerW} y2={padding.t + innerH} stroke="var(--soc-border)" strokeWidth="1.5" />
 
         <path d={pathD} stroke="#a78bfa" strokeWidth="2.5" fill="none" opacity="0.8" />
 
@@ -771,7 +827,7 @@ const WaveChart = ({ data, width = 1000, height = 320, rangeKey, onPointSelect, 
           const tickKey = d.key || d.start || d.time || d.t || i;
           return (
             <g key={`tick-${tickKey}`}>
-              <line x1={x} y1={padding.t + innerH} x2={x} y2={padding.t + innerH + 4} stroke="#334155" />
+              <line x1={x} y1={padding.t + innerH} x2={x} y2={padding.t + innerH + 4} stroke="var(--soc-border)" />
               <text
                 x={x}
                 y={padding.t + innerH + 16}
@@ -815,7 +871,7 @@ const ConfidenceBadge = ({ score }) => {
   else if (pct >= 40) { bg = 'bg-orange-900/30'; text = 'text-orange-400'; }
   
   return (
-    <span className={`text-xs px-2 py-1 rounded border font-semibold inline-block ${bg} ${text}`}>
+    <span className={`text-[9px] md:text-[10px] px-1.5 py-0.5 rounded border font-semibold inline-block ${bg} ${text}`}>
       {pct}%
     </span>
   );
@@ -824,7 +880,7 @@ const ConfidenceBadge = ({ score }) => {
 const PredictionBadge = ({ label }) => {
   const isBenign = String(label).toLowerCase().includes('benign');
   return (
-    <span className={`text-xs px-2.5 py-1 rounded-full border font-semibold ${
+    <span className={`text-[9px] md:text-[10px] px-1.5 py-0.5 rounded-full border font-semibold ${
       isBenign
         ? 'bg-green-900/30 text-green-400 border-green-700/50'
         : 'bg-red-900/30 text-red-400 border-red-700/50'
@@ -834,15 +890,11 @@ const PredictionBadge = ({ label }) => {
   );
 };
 
-const StatCard = ({ label, value, unit = '', className = '', valueClassName = 'text-sky-400' }) => (
-  <div className={`border rounded p-2 md:p-3 ${className}`}>
-    <div className="text-[10px] text-slate-500 uppercase font-semibold">{label}</div>
-    <div className={`text-lg md:text-2xl font-black mt-0.5 md:mt-1 ${valueClassName}`}>{value}</div>
-    {unit && <div className="text-xs text-slate-500 mt-1">{unit}</div>}
-  </div>
-);
-
 export default function MlDashboard() {
+  const [searchParams] = useSearchParams();
+  const urlStart = searchParams.get("start");
+  const urlEnd = searchParams.get("end");
+  const urlRange = searchParams.get("rangeKey");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [usingMockData, setUsingMockData] = useState(false);
@@ -853,12 +905,30 @@ export default function MlDashboard() {
   const [timeline, setTimeline] = useState([]);
   const [totalPredictionsCount, setTotalPredictionsCount] = useState(0);
 
-  const [filters, setFilters] = useState({ label: '', sourceIp: '', destinationIp: '', service: '' });
-  const [timeRange, setTimeRange] = useState(DEFAULT_TIME_RANGE);
+  const [filters, setFilters] = useState({ label: '' });
+  const [searchQuery, setSearchQuery] = useState("");
+  const [timeRange, setTimeRange] = useState(() =>
+    urlRange && ["1h", "24h", "7d", "30d"].includes(urlRange) ? urlRange : DEFAULT_TIME_RANGE
+  );
+  const [filterMode, setFilterMode] = useState(() => (urlStart && urlEnd ? "custom" : "range"));
+  const [customDateRange, setCustomDateRange] = useState(() => {
+    const base = createDefaultDateRange(1);
+    if (urlStart && urlEnd) {
+      return {
+        start: toDateTimeLocalValue(new Date(urlStart)),
+        end: toDateTimeLocalValue(new Date(urlEnd)),
+      };
+    }
+    return base;
+  });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [lastUpdated, setLastUpdated] = useState(null);
-  const [selectedTimelinePoint, setSelectedTimelinePoint] = useState(null);
+  const [selectedTimelinePoint, setSelectedTimelinePoint] = useState(() =>
+    urlStart && urlEnd
+      ? { key: "custom", start: urlStart, end: urlEnd, time: new Date(urlStart).getTime() }
+      : null
+  );
   const predictionsTableRef = React.useRef(null);
   const scrollPredictionsTableIntoView = React.useCallback(() => {
     if (predictionsTableRef.current?.scrollIntoView) {
@@ -875,11 +945,22 @@ export default function MlDashboard() {
     setError(null);
     setDataNotice('');
     try {
-      const minutes = RANGE_TO_MINUTES[timeRange] || RANGE_TO_MINUTES[DEFAULT_TIME_RANGE];
-      const { start, end } = getRangeWindow(timeRange);
+      let minutes = RANGE_TO_MINUTES[timeRange] || RANGE_TO_MINUTES[DEFAULT_TIME_RANGE];
+      let start;
+      let end;
+      if (filterMode === "custom") {
+        const iso = getIsoDateRange(normalizeDateRange(customDateRange));
+        start = iso.start;
+        end = iso.end;
+        minutes = getDateRangeMinutes(iso);
+      } else {
+        const range = getRangeWindow(timeRange);
+        start = range.start;
+        end = range.end;
+      }
       const [predictionsResult, timelineResult] = await Promise.allSettled([
         mlApi.getPredictions({ start, end, page: 1, limit: PREDICTIONS_FETCH_BATCH_SIZE }),
-        mlApi.getTimeline(minutes),
+        mlApi.getTimeline(minutes, { start, end }),
       ]);
 
       const notices = [];
@@ -939,7 +1020,7 @@ export default function MlDashboard() {
       if (timelineResult.status === 'fulfilled' && Array.isArray(timelineResult.value?.data) && timelineResult.value.data.length) {
         nextTimeline = timelineResult.value.data;
       } else {
-        nextTimeline = buildTimelineFromPredictions(preds, minutes);
+        nextTimeline = buildTimelineFromPredictions(preds, minutes, start, end);
 
         if (nextTimeline.length > 0) {
           if (timelineResult.status === 'fulfilled') {
@@ -1025,7 +1106,7 @@ export default function MlDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [timeRange]);
+  }, [timeRange, filterMode, customDateRange]);
 
   useEffect(() => {
     loadAll();
@@ -1055,9 +1136,13 @@ export default function MlDashboard() {
   const filtered = useMemo(() => {
     let result = predictions.filter((p) => {
       if (filters.label && String(p.predictedLabel) !== String(filters.label)) return false;
-      if (filters.sourceIp && !String(p.sourceIp || '').includes(filters.sourceIp)) return false;
-      if (filters.destinationIp && !String(p.destinationIp || '').includes(filters.destinationIp)) return false;
-      if (filters.service && !String(p.service || '').includes(filters.service)) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const source = String(p.sourceIp || '').toLowerCase();
+        const dest = String(p.destinationIp || '').toLowerCase();
+        const service = String(p.service || '').toLowerCase();
+        if (!source.includes(q) && !dest.includes(q) && !service.includes(q)) return false;
+      }
       return true;
     });
 
@@ -1072,7 +1157,7 @@ export default function MlDashboard() {
     }
 
     return result;
-  }, [predictions, filters, selectedTimelinePoint]);
+  }, [predictions, filters, searchQuery, selectedTimelinePoint]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   useEffect(() => {
@@ -1098,6 +1183,31 @@ export default function MlDashboard() {
     }));
   }, [filtered]);
 
+  const suspiciousCount = useMemo(
+    () =>
+      filtered.filter((p) => {
+        const l = String(p.predictedLabel || '').toLowerCase();
+        return !(l.includes('benign') || l.includes('normal'));
+      }).length,
+    [filtered]
+  );
+  const suspiciousPercentage = filtered.length
+    ? Math.round((suspiciousCount / filtered.length) * 100)
+    : 0;
+
+  const avgConfidence = useMemo(() => {
+    let total = 0;
+    let count = 0;
+    for (const p of filtered) {
+      const c = typeof p.confidence === 'number' ? p.confidence : parseFloat(p.confidence);
+      if (!Number.isNaN(c)) {
+        total += c;
+        count += 1;
+      }
+    }
+    return count ? (total / count) * 100 : 0;
+  }, [filtered]);
+
   const topSourceIps = useMemo(() => {
     const map = new Map();
     for (const p of predictions) { // Use ALL predictions, not filtered
@@ -1112,12 +1222,28 @@ export default function MlDashboard() {
       .slice(0, 5); // Top 5 source IPs
   }, [predictions]);
 
+  const topDestIps = useMemo(() => {
+    const map = new Map();
+    for (const p of predictions) {
+      const ip = p.destinationIp || 'unknown';
+      const existing = map.get(ip) || { label: ip, count: 0, lastSeen: 0 };
+      existing.count += 1;
+      existing.lastSeen = Math.max(existing.lastSeen, getTimestampMs(p.timestamp) || 0);
+      map.set(ip, existing);
+    }
+    return Array.from(map.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5); // Top 5 destination IPs
+  }, [predictions]);
+
   const waveData = useMemo(() => {
     if (!timeline || timeline.length === 0) {
       return [];
     }
 
-    const minutes = RANGE_TO_MINUTES[timeRange] || RANGE_TO_MINUTES[DEFAULT_TIME_RANGE];
+    const minutes = filterMode === "custom"
+      ? getDateRangeMinutes(getIsoDateRange(normalizeDateRange(customDateRange)))
+      : (RANGE_TO_MINUTES[timeRange] || RANGE_TO_MINUTES[DEFAULT_TIME_RANGE]);
     const bucketMs = getTimelineBucketMs(minutes);
     const map = new Map();
 
@@ -1135,12 +1261,7 @@ export default function MlDashboard() {
       .sort(([a], [b]) => a - b)
       .map(([bucketStartMs, count]) => createTimelineBucketPoint(bucketStartMs, count, bucketMs))
       .filter(Boolean);
-  }, [timeline, timeRange]);
-
-  const timelinePredictionsCount = useMemo(
-    () => waveData.reduce((sum, point) => sum + (Number(point?.v) || 0), 0),
-    [waveData]
-  );
+  }, [timeline, timeRange, filterMode, customDateRange]);
 
   const handleTimelinePointSelect = (pointData) => {
     if (selectedTimelinePoint?.key === pointData.key) {
@@ -1161,6 +1282,13 @@ export default function MlDashboard() {
     scrollPredictionsTableIntoView();
   };
 
+  const handleRangeChange = (nextRange) => {
+    setPage(1);
+    setSelectedTimelinePoint(null);
+    setFilterMode("range");
+    setTimeRange(nextRange);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-sky-400 gap-3">
@@ -1172,80 +1300,103 @@ export default function MlDashboard() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center">
-        <Navbar />
-        <div className="mt-20 bg-red-950/60 border border-red-800/60 rounded-xl px-6 py-4 text-red-300 text-sm max-w-md">
-          ⚠ Error: {error}
+      <div className="flex items-center justify-center h-full">
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-6 py-4 text-red-300 text-sm max-w-md">
+          Error: {error}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans">
-      <Navbar />
-
-      <div className="p-2 md:p-4 flex flex-col gap-3 md:gap-4">
-        <div className="bg-slate-900 border border-slate-800 rounded-lg md:rounded-xl p-3 md:p-4 shadow-lg">
+    <div className="p-4 md:p-5 flex flex-col gap-4 w-full">
+        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-3 md:p-4 shadow-lg">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-4">
             <div>
-              <h1 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
-                <BrainCircuit className="h-5 md:h-6 w-5 md:w-6 text-violet-400" />
+              <h1 className="text-base font-bold text-white flex items-center gap-2">
+                <BrainCircuit className="h-5 w-5 text-violet-400" />
                 ML Predictions Dashboard
               </h1>
-              <p className="text-xs md:text-sm text-slate-400 mt-1">
+              <p className="text-xs text-slate-500 mt-0.5">
                 Real-time machine learning traffic prediction and threat classification
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-lg md:rounded-xl p-2 md:p-4 shadow-lg flex flex-col gap-3 md:gap-4">
-          <div className="flex items-center justify-between gap-1 md:gap-2 flex-wrap">
+        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-2 md:p-4 shadow-lg flex flex-col gap-3 md:gap-4">
+          <div className="flex flex-col items-start gap-1 md:flex-row md:items-center md:justify-between md:gap-2">
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => loadAll()}
-                disabled={loading}
-                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs text-slate-200 transition-colors border border-slate-700 inline-flex items-center gap-1.5 disabled:opacity-60"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-                Refresh
-              </button>
-              <label className="flex items-center gap-2 text-xs text-slate-400">
-                <span className="hidden sm:inline">Rows</span>
+              <span className="hidden text-[11px] text-slate-400 whitespace-nowrap sm:block">Rows</span>
+              <div className="relative flex items-center bg-[var(--soc-card)] rounded border border-[var(--soc-border)]">
                 <select
                   value={pageSize}
                   onChange={(e) => {
-                    setPageSize(Number(e.target.value));
                     setPage(1);
+                    setPageSize(Number(e.target.value));
                   }}
-                  className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-200 focus:border-sky-500 focus:outline-none"
+                  className="appearance-none bg-transparent py-1.5 pl-2 pr-5 text-left text-[11px] font-medium leading-tight text-slate-100 focus:outline-none"
                 >
                   {PAGE_SIZE_OPTIONS.map((size) => (
-                    <option key={size} value={size}>{size}</option>
+                    <option key={size} value={size} className="bg-white text-black">{size}</option>
                   ))}
                 </select>
-              </label>
+                <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
+              </div>
             </div>
-            <RangeFilter
-              rangeKey={timeRange}
-              onRangeChange={(nextRange) => {
-                if (timeRange !== nextRange) {
-                  setTimeRange(nextRange);
+
+            <div className="ml-auto flex items-center gap-2">
+              <RangeFilter
+                rangeKey={timeRange}
+                onRangeChange={handleRangeChange}
+                dimmed={filterMode === "custom"}
+                options={TIME_RANGE_OPTIONS}
+              />
+              <DateRangeFilter
+                value={customDateRange}
+                onChange={(range) => {
                   setPage(1);
-                }
-              }}
-            />
+                  setSelectedTimelinePoint(null);
+                  setCustomDateRange(range);
+                  setFilterMode("custom");
+                }}
+                className={filterMode === "range" ? "opacity-50" : ""}
+              />
+              <span className="hidden lg:flex items-center gap-1 text-[11px] text-slate-600">
+                <CalendarRange className="h-3 w-3" />
+                {filterMode === "custom"
+                  ? new Date(getIsoDateRange(normalizeDateRange(customDateRange)).start).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }) +
+                    " - " +
+                    new Date(getIsoDateRange(normalizeDateRange(customDateRange)).end).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+                  : timeRange}
+              </span>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
-            <StatCard label="Predictions" value={totalPredictionsCount || predictions.length} className="bg-slate-800/50 border-slate-700/60" valueClassName="text-sky-400" />
-            <StatCard label="Filtered" value={filtered.length} className="bg-violet-500/10 border-violet-500/30" valueClassName="text-violet-300" />
-            <StatCard label="Labels" value={uniqueOptions.labels.length} className="bg-emerald-500/10 border-emerald-500/30" valueClassName="text-emerald-300" />
-            <StatCard label="Timeline Predictions" value={timelinePredictionsCount} className="bg-amber-500/10 border-amber-500/30" valueClassName="text-amber-300" />
+            <div className="bg-sky-500/10 border border-sky-500/30 rounded p-2 md:p-3">
+              <div className="text-[8px] md:text-[10px] text-sky-400 uppercase font-semibold">Predictions</div>
+              <div className="text-sm md:text-lg font-black text-sky-300 mt-0.5 md:mt-1">{totalPredictionsCount || predictions.length}</div>
+              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">total in range</div>
+            </div>
+            <div className="bg-violet-500/10 border border-violet-500/30 rounded p-2 md:p-3">
+              <div className="text-[8px] md:text-[10px] text-violet-400 uppercase font-semibold">Filtered</div>
+              <div className="text-sm md:text-lg font-black text-violet-300 mt-0.5 md:mt-1">{filtered.length}</div>
+              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">matching current filters</div>
+            </div>
+            <div className="bg-red-500/10 border border-red-500/30 rounded p-2 md:p-3">
+              <div className="text-[8px] md:text-[10px] text-red-400 uppercase font-semibold">Suspicious / Attacks</div>
+              <div className="text-sm md:text-lg font-black text-red-300 mt-0.5 md:mt-1">{suspiciousCount}</div>
+              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">{suspiciousPercentage}% of filtered</div>
+            </div>
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded p-2 md:p-3">
+              <div className="text-[8px] md:text-[10px] text-amber-400 uppercase font-semibold">Avg Confidence</div>
+              <div className="text-sm md:text-lg font-black text-amber-300 mt-0.5 md:mt-1">{avgConfidence.toFixed(0)}%</div>
+              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">overall model confidence</div>
+            </div>
           </div>
           {dataNotice && (
-            <div className={`rounded-lg border px-3 md:px-4 py-3 text-xs md:text-sm ${
+            <div className={`rounded-lg border px-2.5 md:px-3 py-2 text-[10px] md:text-[11px] ${
               usingMockData
                 ? 'border-amber-500/30 bg-amber-500/10 text-amber-100'
                 : 'border-sky-500/20 bg-sky-500/10 text-sky-100'
@@ -1256,16 +1407,22 @@ export default function MlDashboard() {
 
         {/* Timeline Wave Chart + Top Source IPs */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch">
-          <div className="bg-slate-800/30 border border-slate-800/50 rounded-lg p-4 md:p-6 flex flex-col h-full overflow-visible">
+          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-6 flex flex-col h-full overflow-visible">
             <div className="flex justify-between items-center mb-4 md:mb-6 gap-2">
-              <div className="text-xs md:text-sm font-semibold text-slate-300">ML Predictions Timeline</div>
+              <div>
+                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
+                  <BarChart3 className="h-3 md:h-4 w-3 md:w-4 text-violet-400" />
+                  ML Predictions Timeline
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500">Click a point to filter predictions by time bucket</div>
+              </div>
               <div className="text-right">
                 <div className="text-xs text-slate-500">Last {getTimelineRangeDescription(timeRange)}</div>
                 <div className="text-[11px] text-slate-600">Updated {formatLiveTimestamp(lastUpdated)}</div>
               </div>
             </div>
-            <div className="flex-1 rounded-lg border border-slate-800/40 p-2 md:p-4 overflow-visible">
-              <div className="min-w-[620px] md:min-w-0 overflow-visible">
+            <div className="flex-1 min-h-[240px] md:min-h-[280px] min-w-0 p-2 md:p-4 overflow-visible">
+              <div className="min-w-0 h-full overflow-visible">
               {waveData.length === 0 ? (
                 <div className="h-48 flex items-center justify-center text-slate-500">No timeline data</div>
               ) : (
@@ -1280,10 +1437,13 @@ export default function MlDashboard() {
             </div>
           </div>
 
-          <div className="bg-slate-800/30 border border-slate-800/50 rounded-lg p-4 md:p-6 h-full">
+          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-6 h-full">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
-                <div className="text-xs md:text-sm font-semibold text-slate-300">Top 5 Source IPs</div>
+                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
+                  <Globe className="h-3 md:h-4 w-3 md:w-4 text-emerald-400" />
+                  Top 5 Source IPs
+                </div>
                 <div className="mt-1 text-[11px] text-slate-500">Ranked traffic sources within the selected ML range</div>
               </div>
               <div className="text-right">
@@ -1299,67 +1459,47 @@ export default function MlDashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-4">
-          <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4 flex flex-col justify-center items-center">
-            <div className="text-xs md:text-sm font-semibold text-slate-300 mb-4 w-full">Label Distribution</div>
-            {distribution.length === 0 ? (
-              <div className="h-40 flex items-center justify-center text-slate-500">No data</div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
+          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <LineChart className="h-4 w-4 text-sky-400" />
+                <span className="text-xs font-semibold text-slate-300">Label Distribution</span>
+              </div>
+            </div>
+            <div className="flex flex-1 flex-col items-stretch gap-3 py-1 w-full min-h-0">
+              <CategoryLineChart items={distribution} totalLabel="predictions" />
+            </div>
+          </div>
+
+          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
+                  <Globe className="h-3 md:h-4 w-3 md:w-4 text-violet-400" />
+                  Top 5 Destination IPs
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500">Ranked traffic destinations within the selected ML range</div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-slate-500">Unique destinations</div>
+                <div className="text-sm font-black text-violet-300">{uniqueOptions.dests.length}</div>
+              </div>
+            </div>
+            {topDestIps.length === 0 ? (
+              <div className="h-48 flex items-center justify-center text-slate-500">No data</div>
             ) : (
-              <div className="flex flex-col items-center gap-4 justify-center w-full">
-                <Donut items={distribution} size={140} centerLabelTop={filtered.length} centerLabelBottom="predictions" />
-                <div className="w-full flex justify-center">
-                  <Legend items={distribution} />
-                </div>
-              </div>
+              <TopSourceIpsCard sourceIps={topDestIps} colors={TOP_DEST_IPS_COLORS} />
             )}
-          </div>
-
-          <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4 flex flex-col justify-around">
-            <div className="text-xs md:text-sm font-semibold text-slate-300 mb-4">Key Statistics</div>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-slate-400">Total Predictions:</span>
-                <span className="text-lg font-bold text-sky-400">{totalPredictionsCount || predictions.length}</span>
-              </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-slate-400">Average Confidence:</span>
-                  <span className="text-lg font-bold text-emerald-400">
-                    {formatConfidenceValue(stats?.overallAvgConfidence)}
-                  </span>
-                </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-slate-400">Unique IPs:</span>
-                <span className="text-lg font-bold text-violet-400">{uniqueOptions.srcs.length}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-slate-400">Services Detected:</span>
-                <span className="text-lg font-bold text-orange-400">{uniqueOptions.services.length}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4">
-            <div className="text-xs md:text-sm font-semibold text-slate-300 mb-3">Top Labels</div>
-            <div className="space-y-2">
-              {distribution.slice(0, 5).map((item, i) => (
-                <div key={item.name} className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span className="text-slate-400 font-bold w-5 text-right">{i + 1}</span>
-                    <span className="text-sky-300 truncate text-sm font-mono">{item.name}</span>
-                  </div>
-                  <span className="font-bold ml-2" style={{ color: item.color }}>{item.value}</span>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
 
 
 
         {/* Filter & Table Section */}
-        <div className="bg-slate-900 border border-slate-800 rounded-lg md:rounded-xl shadow-lg overflow-hidden">
+        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl shadow-lg overflow-hidden">
           {selectedTimelinePoint && (
-            <div className="p-3 border-b border-slate-800 bg-slate-800/60 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="p-3 border-b border-[var(--soc-border)] bg-slate-800/60 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="text-xs text-orange-300">
                 Timeline filter: {formatTimelineBucketLabel(selectedTimelinePoint, timeRange)}
               </div>
@@ -1375,70 +1515,44 @@ export default function MlDashboard() {
             </div>
           )}
           {/* Filter Bar */}
-          <div className="border-b border-slate-800 bg-slate-800/50 p-3 md:p-4">
-            <div className="mb-4">
-              <div className="text-xs md:text-sm font-semibold text-slate-300">
-                Predictions Table ({filtered.length})
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-3 items-center">
-              <label className="flex items-center gap-2 text-sm">
-                <span className="text-slate-400">Label:</span>
-                <select
-                  value={filters.label}
-                  onChange={(e) => {
-                    setFilters((s) => ({ ...s, label: e.target.value }));
-                    setPage(1);
-                  }}
-                  className="bg-slate-700 border border-slate-600 text-slate-200 text-xs rounded px-2 py-1 focus:outline-none focus:border-sky-500"
+          <div className="border-b border-[var(--soc-border)] p-2 md:p-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div className="relative flex-1 min-w-0">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(event) => {
+                  setSearchQuery(event.target.value);
+                  setPage(1);
+                }}
+                placeholder="Search by source IP, destination IP, or service..."
+                className="w-full rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-8 pr-8 text-[11px] text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500/50"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  aria-label="Clear search"
                 >
-                  <option value="">All</option>
-                  {uniqueOptions.labels.map((l) => (
-                    <option key={l} value={l}>
-                      {l}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="flex items-center gap-2 text-sm">
-                <span className="text-slate-400">Source IP:</span>
-                <input
-                  value={filters.sourceIp}
-                  onChange={(e) => {
-                    setFilters((s) => ({ ...s, sourceIp: e.target.value }));
-                    setPage(1);
-                  }}
-                  placeholder="partial match"
-                  className="bg-slate-700 border border-slate-600 text-slate-200 text-xs rounded px-2 py-1 w-32 focus:outline-none focus:border-sky-500"
-                />
-              </label>
-
-              <label className="flex items-center gap-2 text-sm">
-                <span className="text-slate-400">Dest IP:</span>
-                <input
-                  value={filters.destinationIp}
-                  onChange={(e) => {
-                    setFilters((s) => ({ ...s, destinationIp: e.target.value }));
-                    setPage(1);
-                  }}
-                  placeholder="partial match"
-                  className="bg-slate-700 border border-slate-600 text-slate-200 text-xs rounded px-2 py-1 w-32 focus:outline-none focus:border-sky-500"
-                />
-              </label>
-
-              <label className="flex items-center gap-2 text-sm">
-                <span className="text-slate-400">Service:</span>
-                <input
-                  value={filters.service}
-                  onChange={(e) => {
-                    setFilters((s) => ({ ...s, service: e.target.value }));
-                    setPage(1);
-                  }}
-                  placeholder="e.g. http"
-                  className="bg-slate-700 border border-slate-600 text-slate-200 text-xs rounded px-2 py-1 w-24 focus:outline-none focus:border-sky-500"
-                />
-              </label>
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="relative">
+              <select
+                value={filters.label}
+                onChange={(e) => {
+                  setFilters((s) => ({ ...s, label: e.target.value }));
+                  setPage(1);
+                }}
+                className="appearance-none rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-3 pr-8 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-500/50"
+              >
+                <option value="" className="bg-white text-black">All labels</option>
+                {uniqueOptions.labels.map((l) => (
+                  <option key={l} value={l} className="bg-white text-black">{l}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             </div>
           </div>
 
@@ -1449,16 +1563,16 @@ export default function MlDashboard() {
                 <div className="text-sm">No predictions match current filters.</div>
               </div>
             ) : (
-              <table className="w-full text-xs md:text-sm text-left whitespace-nowrap">
+              <table className="w-full text-[10px] md:text-[11px] text-left whitespace-nowrap">
                 <thead>
                   <tr className="border-b border-slate-800 bg-slate-800/70">
-                    <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Timestamp</th>
-                    <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Label</th>
-                    <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Source IP</th>
-                    <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Destination IP</th>
-                    <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Service</th>
-                    <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Confidence</th>
-                    <th className="px-2 md:px-4 py-2 md:py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Meaning</th>
+                    <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Timestamp</th>
+                    <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Label</th>
+                    <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Source IP</th>
+                    <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Destination IP</th>
+                    <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Service</th>
+                    <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Confidence</th>
+                    <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Meaning</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1469,25 +1583,25 @@ export default function MlDashboard() {
                         idx % 2 !== 0 ? 'bg-slate-900/60' : ''
                       }`}
                     >
-                      <td className="px-2 md:px-4 py-1.5 md:py-3 text-slate-500 text-xs whitespace-nowrap">
+                      <td className="px-2 md:px-4 py-1.5 md:py-2 text-slate-500 text-[10px] md:text-[11px] whitespace-nowrap">
                         {formatTime(p.timestamp)}
                       </td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-3">
+                      <td className="px-2 md:px-4 py-1.5 md:py-2">
                         <PredictionBadge label={p.predictedLabel} />
                       </td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-3 text-emerald-400 font-mono text-xs">
+                      <td className="px-2 md:px-4 py-1.5 md:py-2 text-emerald-400 font-mono text-[10px] md:text-[11px]">
                         {p.sourceIp || '-'}
                       </td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-3 text-violet-400 font-mono text-xs">
+                      <td className="px-2 md:px-4 py-1.5 md:py-2 text-violet-400 font-mono text-[10px] md:text-[11px]">
                         {p.destinationIp || '-'}
                       </td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-3 text-slate-300 text-xs">
+                      <td className="px-2 md:px-4 py-1.5 md:py-2 text-slate-300 text-[10px] md:text-[11px]">
                         {p.service || '-'}
                       </td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-3">
+                      <td className="px-2 md:px-4 py-1.5 md:py-2">
                         <ConfidenceBadge score={p.confidence} />
                       </td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-3 text-xs text-slate-400">
+                      <td className="px-2 md:px-4 py-1.5 md:py-2 text-[10px] md:text-[11px] text-slate-400">
                         {getConfidenceMeaning(p.predictedLabel, p.confidence)}
                       </td>
                     </tr>
@@ -1499,76 +1613,77 @@ export default function MlDashboard() {
 
           {/* Pagination */}
           {filtered.length > 0 && (
-            <div className="p-2 md:p-4 border-t border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-2 md:gap-0 bg-slate-900/50 rounded-b-lg md:rounded-b-xl">
-              <div className="text-xs text-slate-500 font-mono">
-                <span className="hidden md:inline">SHOWING </span>
-                <span className="text-sky-400 font-bold">
-                  {filtered.length === 0 ? 0 : (page - 1) * pageSize + 1}
-                </span>
-                <span className="hidden md:inline">{' - '}</span>
-                <span className="md:hidden">-</span>
-                <span className="text-sky-400 font-bold">
-                  {Math.min(page * pageSize, filtered.length)}
-                </span>
-                <span className="hidden md:inline">{' OF '}</span>
-                <span className="md:hidden"> / </span>
-                <span className="text-sky-400 font-bold">{filtered.length}</span>
-                <span className="hidden md:inline"> PREDICTIONS</span>
-              </div>
+            <div className="border-t border-slate-800 bg-slate-900/50 px-2 md:px-4 py-3">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2 md:gap-0">
+                <div className="text-[10px] md:text-[11px] font-mono text-slate-500">
+                  <span className="hidden md:inline">SHOWING </span>
+                  <span className="font-bold text-sky-400">
+                    {filtered.length === 0 ? 0 : (page - 1) * pageSize + 1}
+                  </span>
+                  <span className="hidden md:inline"> - </span>
+                  <span className="md:hidden">-</span>
+                  <span className="font-bold text-sky-400">
+                    {Math.min(page * pageSize, filtered.length)}
+                  </span>
+                  <span className="hidden md:inline"> OF </span>
+                  <span className="md:hidden"> / </span>
+                  <span className="font-bold text-sky-400">{filtered.length}</span>
+                  <span className="hidden md:inline"> PREDICTIONS</span>
+                </div>
 
-              <div className="flex flex-wrap gap-1 md:gap-2 items-center">
-                <button
-                  disabled={page === 1 || loading}
-                  onClick={() => {
-                    setPage(1);
-                    scrollPredictionsTableIntoView();
-                  }}
-                  className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
-                >
-                  FIRST
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    disabled={page === 1 || loading}
+                    onClick={() => {
+                      setPage(1);
+                      scrollPredictionsTableIntoView();
+                    }}
+                    className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
+                  >
+                    FIRST
+                  </button>
 
-                <button
-                  disabled={page === 1 || loading}
-                  onClick={() => {
-                    setPage((v) => Math.max(1, v - 1));
-                    scrollPredictionsTableIntoView();
-                  }}
-                  className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
-                >
-                  PREV
-                </button>
+                  <button
+                    disabled={page === 1 || loading}
+                    onClick={() => {
+                      setPage((v) => Math.max(1, v - 1));
+                      scrollPredictionsTableIntoView();
+                    }}
+                    className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
+                  >
+                    PREV
+                  </button>
 
-                <span className="text-xs font-black text-slate-400 px-1 md:px-2">
-                  <span className="hidden md:inline">PAGE </span><span className="text-white">{page}</span> / {totalPages}
-                </span>
+                  <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400">
+                    <span className="hidden md:inline">PAGE </span>
+                    <span className="text-white">{page}</span> / {totalPages}
+                  </span>
 
-                <button
-                  disabled={page >= totalPages || loading}
-                  onClick={() => {
-                    setPage((v) => Math.min(totalPages, v + 1));
-                    scrollPredictionsTableIntoView();
-                  }}
-                  className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
-                >
-                  NEXT
-                </button>
+                  <button
+                    disabled={page >= totalPages || loading}
+                    onClick={() => {
+                      setPage((v) => Math.min(totalPages, v + 1));
+                      scrollPredictionsTableIntoView();
+                    }}
+                    className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
+                  >
+                    NEXT
+                  </button>
 
-                <button
-                  disabled={page >= totalPages || loading}
-                  onClick={() => {
-                    setPage(totalPages);
-                    scrollPredictionsTableIntoView();
-                  }}
-                  className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
-                >
-                  LAST
-                </button>
-
+                  <button
+                    disabled={page >= totalPages || loading}
+                    onClick={() => {
+                      setPage(totalPages);
+                      scrollPredictionsTableIntoView();
+                    }}
+                    className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
+                  >
+                    LAST
+                  </button>
+                </div>
               </div>
             </div>
           )}
-        </div>
         </div>
       </div>
     </div>

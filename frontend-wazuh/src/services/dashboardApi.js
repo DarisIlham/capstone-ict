@@ -4,7 +4,6 @@ import {
   createDefaultDateRange,
   getDateRangeMinutes,
   getIsoDateRange,
-  getRangeKeyForDateRange,
 } from "../utils/dateRange";
 
 const API_ROOT = `${API_BASE_URL}/api`;
@@ -170,18 +169,80 @@ function buildTopUsersFromLogs(items) {
     }));
 }
 
-function buildHostData(events) {
-  const hostCounts = new Map();
+function buildTopRanking(items, getKey, slice = 5) {
+  const counts = new Map();
 
-  safeArray(events).forEach((event) => {
-    const host = event?.agentName || "-";
-    hostCounts.set(host, (hostCounts.get(host) || 0) + 1);
+  safeArray(items).forEach((item) => {
+    const key = String(getKey(item) || "").trim();
+    if (!key || key === "-" || key === "Unknown agent") return;
+    counts.set(key, (counts.get(key) || 0) + 1);
   });
 
-  return Array.from(hostCounts.entries())
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 6);
+  return Array.from(counts.entries())
+    .map(([label, value], index) => ({
+      label,
+      value,
+      color: BAR_COLORS[index % BAR_COLORS.length],
+    }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, slice);
+}
+
+function buildFimAgentRanking(events) {
+  return buildTopRanking(events, (e) => e?.agentName || e?.agent_name);
+}
+
+function buildFileAgentRanking(files) {
+  return buildTopRanking(files, (f) => f?.agentName || f?.agent_name);
+}
+
+function buildMlSourceRanking(events) {
+  return buildTopRanking(events, (p) => p?.sourceIp || p?.source_ip || p?.src);
+}
+
+function buildHostAgentRanking(logs) {
+  return buildTopRanking(logs, (l) => l?.agentName || l?.agent_name || (l?.agent && l?.agent.name));
+}
+
+function resolveFimPath(event) {
+  return event?.syscheckPath || (event?.syscheck && event.syscheck.path) || event?.filePath || event?.path;
+}
+
+function resolveAgentName(item) {
+  return item?.agentName || item?.agent_name || (item?.agent && item.agent.name) || "Unknown agent";
+}
+
+function buildMostChangedFiles(events) {
+  const pathMap = new Map();
+  const agentCounts = new Map();
+
+  safeArray(events).forEach((event) => {
+    const path = String(resolveFimPath(event) || "").trim();
+    if (!path || path === "-") return;
+
+    const entry = pathMap.get(path) || { value: 0, agentCounts: new Map() };
+    entry.value += 1;
+
+    const agent = String(resolveAgentName(event) || "").trim();
+    if (agent && agent !== "-" && agent !== "Unknown agent") {
+      entry.agentCounts.set(agent, (entry.agentCounts.get(agent) || 0) + 1);
+    }
+
+    pathMap.set(path, entry);
+  });
+
+  return Array.from(pathMap.entries())
+    .map(([path, entry], index) => {
+      const agent = Array.from(entry.agentCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0];
+      return {
+        label: path,
+        value: entry.value,
+        sub: agent,
+        color: BAR_COLORS[index % BAR_COLORS.length],
+      };
+    })
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5);
 }
 
 function buildFileSeverityCounts(items) {
@@ -315,13 +376,19 @@ function createEmptyDashboardData(dateRange = createDefaultDateRange()) {
       systemHealth: 100,
     },
     userRanking: [],
+    topRankings: {
+      host: [],
+      fimAgents: [],
+      file: [],
+      ml: [],
+    },
     riskDistribution: [
       { label: "Critical", value: 0, color: RISK_COLORS.Critical },
       { label: "High", value: 0, color: RISK_COLORS.High },
       { label: "Medium", value: 0, color: RISK_COLORS.Medium },
       { label: "Low", value: 0, color: RISK_COLORS.Low },
     ],
-    hostData: [],
+    mostChangedFiles: [],
     threatTypes: buildThreatTypes({
       attackSuspicious: 0,
       fileThreats: 0,
@@ -379,7 +446,6 @@ function buildWarningMessage(key, error) {
 
 export async function getMainDashboardData(dateRange = createDefaultDateRange()) {
   const minutes = getDateRangeMinutes(dateRange);
-  const rangeKey = getRangeKeyForDateRange(dateRange);
   const { start, end } = getIsoDateRange(dateRange);
   const rangeParams = new URLSearchParams({ start, end });
   const timelineParams = new URLSearchParams({
@@ -470,25 +536,25 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
     attackTimelineRaw,
     (item) => item?.timestamp,
     (item) => item?.total,
-    rangeKey
+    dateRange
   );
   const fileEvents = bucketSeries(
     fileTimelineRaw,
     (item) => item?.timestamp,
     (item) => item?.suspicious ?? item?.total,
-    rangeKey
+    dateRange
   );
   const fimEvents = bucketSeries(
     fimEventsRaw,
     (item) => item?.timestamp,
     () => 1,
-    rangeKey
+    dateRange
   );
   const mlEvents = bucketSeries(
     mlTimelineRaw,
     (item) => item?.timestamp,
     (item) => item?.total,
-    rangeKey
+    dateRange
   );
 
   const riskDistribution = buildRiskDistribution({
@@ -547,6 +613,15 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
       ? buildTopUsers(attackStats.users)
       : buildTopUsersFromLogs(attackLogs);
 
+  const topRankings = {
+    host: buildHostAgentRanking(attackLogs),
+    fimAgents: buildFimAgentRanking(fimEventsRaw),
+    file: buildFileAgentRanking(suspiciousFiles),
+    ml: buildMlSourceRanking(mlTimelineRaw),
+  };
+
+  const mostChangedFiles = buildMostChangedFiles(fimEventsRaw);
+
   return {
     stats: {
       totalAttacks: toCount(attackStats.totalCommands),
@@ -558,8 +633,9 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
       systemHealth,
     },
     userRanking,
+    topRankings,
     riskDistribution,
-    hostData: buildHostData(fimEventsRaw),
+    mostChangedFiles,
     threatTypes: buildThreatTypes({
       attackSuspicious,
       fileThreats,

@@ -3,6 +3,7 @@ import {
   User,
   Lock,
   Eye,
+  EyeOff,
   LogIn,
   AlertCircle,
   CheckCircle,
@@ -31,8 +32,6 @@ const LoginPage = () => {
     message: "",
     type: "error",
   });
-
-
 
   // Redirect jika sudah login
   useEffect(() => {
@@ -64,7 +63,7 @@ const LoginPage = () => {
     if (!isRecaptchaFilled) {
       setNotification({
         show: true,
-        message: "Silakan verifikasi CAPTCHA terlebih dahulu",
+        message: "Please verify the CAPTCHA first",
         type: "error",
       });
       return;
@@ -73,7 +72,7 @@ const LoginPage = () => {
     if (!email || !password) {
       setNotification({
         show: true,
-        message: "Email dan password harus diisi",
+        message: "Email and password are required",
         type: "error",
       });
       return;
@@ -97,17 +96,17 @@ const LoginPage = () => {
 
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.message || "Gagal masuk");
+        throw new Error(errorData.message || "Sign in failed");
       }
 
       const data = await res.json();
 
-      // Gunakan AuthContext untuk login
+      // Use AuthContext to log in
       login(data.token, data.user);
 
       setNotification({
         show: true,
-        message: "Login berhasil! Mengarahkan ke dashboard...",
+        message: "Login successful! Redirecting to dashboard...",
         type: "success",
       });
 
@@ -117,7 +116,7 @@ const LoginPage = () => {
     } catch (error) {
       setNotification({
         show: true,
-        message: error.message || "Terjadi kesalahan saat login",
+        message: error.message || "An error occurred while signing in",
         type: "error",
       });
       recaptchaRef.current.reset();
@@ -146,35 +145,35 @@ const LoginPage = () => {
       {/* Background decoration */}
       <div className="absolute top-0 left-0 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl"></div>
       <div className="absolute bottom-0 right-0 w-80 h-80 bg-cyan-500/20 rounded-full blur-3xl"></div>
-      <ThemeToggle className="absolute right-4 top-4 z-20" />
+      <ThemeToggle compact className="absolute right-4 top-4 z-20" />
 
-      <div className="max-w-sm w-full relative z-10">
+      <div className="w-fit max-w-sm relative z-10">
         {/* Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center h-20 w-20 mb-4">
-            <img src={logo} alt="Logo" className="h-20 w-20 object-contain" />
+        <div className="text-center mb-4">
+          <div className="inline-flex items-center justify-center h-14 w-14 mb-2">
+            <img src={logo} alt="Logo" className="h-14 w-14 object-contain" />
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">
+          <h1 className="text-lg font-bold text-white mb-0.5">
             Security Dashboard
           </h1>
-          <p className="text-slate-400 text-sm">
-            Sistem Monitoring Security & File Integrity
+          <p className="text-slate-400 text-[11px]">
+            Security Monitoring & File Integrity System
           </p>
         </div>
 
         {/* Notification */}
         {notification.show && (
           <div
-            className={`mb-6 px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-medium transition-all duration-300 ${
+            className={`mb-4 px-3 py-2 rounded-lg flex items-center gap-2.5 text-xs font-medium transition-all duration-300 ${
               notification.type === "success"
                 ? "bg-green-500/20 text-green-300 border border-green-500/30"
                 : "bg-red-500/20 text-red-300 border border-red-500/30"
             }`}
           >
             {notification.type === "success" ? (
-              <CheckCircle className="h-5 w-5 flex-shrink-0" />
+              <CheckCircle className="h-4 w-4 flex-shrink-0" />
             ) : (
-              <AlertCircle className="h-5 w-5 flex-shrink-0" />
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
             )}
             <span>{notification.message}</span>
           </div>
@@ -183,22 +182,22 @@ const LoginPage = () => {
         {/* Login Form */}
         <form
           onSubmit={handleSubmit}
-          className="bg-slate-800/50 backdrop-blur-xl rounded-2xl border border-slate-700/50 p-8 space-y-5 shadow-2xl"
+          className="bg-slate-800/50 backdrop-blur-xl rounded-lg border border-slate-700/50 p-5 space-y-3.5 shadow-2xl"
         >
           {/* Email Field */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Email atau Username
+            <label className="block text-[16px] font-medium text-slate-300 mb-1">
+              Email or Username
             </label>
             <div className="relative">
-              <User className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+              <User className="absolute left-3 top-2 h-3.5 w-3.5 text-slate-400" />
               <input
                 type="email"
                 autoComplete="off"
                 value={email}
                 onChange={handleEmailChange}
                 disabled={isLoading}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all disabled:opacity-50"
+                className="w-full pl-9 pr-3 py-1.5 bg-slate-700/50 border border-slate-600 rounded-md text-xs placeholder:text-[15px] text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all disabled:opacity-50"
                 placeholder="admin@example.com"
               />
             </div>
@@ -206,34 +205,38 @@ const LoginPage = () => {
 
           {/* Password Field */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
+            <label className="block text-[16px] font-medium text-slate-300 mb-1">
               Password
             </label>
             <div className="relative">
-              <Lock className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+              <Lock className="absolute left-3 top-2 h-3.5 w-3.5 text-slate-400" />
               <input
                 type={showPassword ? "text" : "password"}
                 autoComplete="off"
                 value={password}
                 onChange={handlePasswordChange}
                 disabled={isLoading}
-                className="w-full pl-10 pr-10 py-2.5 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all disabled:opacity-50"
-                placeholder="Masukkan password"
+                className="w-full pl-9 pr-9 py-1.5 bg-slate-700/50 border border-slate-600 rounded-md text-xs placeholder:text-[15px] text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all disabled:opacity-50"
+                placeholder="Enter password"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 disabled={isLoading}
-                className="absolute right-3 top-3 text-white hover:text-slate-200"
+                className="absolute right-3 top-2 text-white hover:text-slate-200"
                 aria-label="Toggle password visibility"
               >
-                <Eye className="h-5 w-5" />
+                {showPassword ? (
+                  <Eye className="h-3.5 w-3.5" />
+                ) : (
+                  <EyeOff className="h-3.5 w-3.5" />
+                )}
               </button>
             </div>
           </div>
 
           {/* CAPTCHA */}
-          <div className="bg-slate-700/30 p-3 rounded-lg border border-slate-600/50">
+          <div className="bg-slate-700/30 p-2 rounded-md border border-slate-600/50">
             <ReCAPTCHA
               key={theme}
               ref={recaptchaRef}
@@ -247,7 +250,7 @@ const LoginPage = () => {
           <button
             type="submit"
             disabled={!isRecaptchaFilled || isLoading}
-            className={`w-full flex justify-center items-center gap-2 py-2.5 px-4 rounded-lg font-semibold transition-all duration-200 ${
+            className={`w-full flex justify-center items-center gap-1.5 py-1.5 px-4 rounded-md text-xs font-semibold transition-all duration-200 ${
               isRecaptchaFilled && !isLoading
                 ? "bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white shadow-lg hover:shadow-cyan-500/50"
                 : "bg-slate-600 text-slate-400 cursor-not-allowed opacity-50"
@@ -255,20 +258,20 @@ const LoginPage = () => {
           >
             {isLoading ? (
               <>
-                <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div>
-                <span>Memproses...</span>
+                <div className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></div>
+                <span>Processing...</span>
               </>
             ) : (
               <>
-                <LogIn className="h-5 w-5" />
-                <span>Login Aman</span>
+                <LogIn className="h-3.5 w-3.5" />
+                <span>Sign In</span>
               </>
             )}
           </button>
 
           {/* Security Info */}
-          <div className="text-xs text-slate-400 text-center pt-2 border-t border-slate-700">
-            🔒 Dilindungi dengan enkripsi end-to-end & CAPTCHA verification
+          <div className="text-[10px] text-slate-400 text-center pt-2 border-t border-slate-700">
+            🔒 Protected with end-to-end encryption & CAPTCHA verification
           </div>
         </form>
       </div>

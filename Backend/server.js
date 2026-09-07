@@ -12,7 +12,6 @@ import authRouter from "./routes/auth.routes.js";
 import userRouter from "./routes/userRoutes.js";
 import notificationRouter from "./routes/notificationRoutes.js";
 import app from "./app.js";
-import { initializeWebDefacementEndpointStore } from "./services/webDefacementEndpointService.js";
 
 // Environment variables are loaded via `import 'dotenv/config'` above
 // Debug: show DB_PASS type to help diagnose startup auth issues
@@ -28,14 +27,6 @@ app.use("/api/users", userRouter);
 
 // Notification routes (MongoDB, admin only)
 app.use("/api/notifications", notificationRouter);
-
-initializeWebDefacementEndpointStore()
-  .then(() => {
-    console.log("Web defacement endpoint store ready");
-  })
-  .catch((error) => {
-    console.error("Failed to initialize web defacement endpoint store:", error.message);
-  });
 
 const ENABLE_DB = process.env.ENABLE_DB !== "0";
 
@@ -122,7 +113,7 @@ const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 const INDEXER_URL = process.env.INDEXER_URL;
 const INDEXER_USER = "admin";
 const INDEXER_PASS = "3Hul7FhbSClUQe0AI8J?6CcyoluD36wg";
-
+const EXCLUDED_AGENT_IDS = ["000"];
 // =======================
 // 1) Endpoint FIM Real-time (Disabled - Wazuh API URL not configured)
 // =======================
@@ -135,48 +126,115 @@ const INDEXER_PASS = "3Hul7FhbSClUQe0AI8J?6CcyoluD36wg";
 async function handleEventsRequest(req, res) {
   try {
     const agent_id_param = req.params.agent_id;
-    const agent_id = agent_id_param === "all" || !agent_id_param ? undefined : agent_id_param;
+
+    const agent_id =
+      agent_id_param === "all" || !agent_id_param
+        ? undefined
+        : String(agent_id_param).padStart(3, "0");
 
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const size = Math.max(1, parseInt(req.query.size, 10) || 100);
     const from = (page - 1) * size;
 
-    const rangeKey = String(req.query.range || "30d").trim();
+    const rangeKey = String(
+      req.query.range || "30d"
+    ).trim();
+
     let { start, end } = req.query;
 
     if (!start && !end) {
       const preset = buildPresetRange(rangeKey);
+
       start = preset.start;
       end = preset.end;
     }
 
-    const must = [{ match: { "rule.groups": "syscheck" } }];
-    const filter = [];
-
-    if (agent_id) filter.push({ term: { "agent.id": String(agent_id) } });
-
     const timeRange = buildTimeRange(start, end);
-    if (timeRange) filter.push(timeRange);
+
+    // ==========================================
+    // 4. Susun filter OpenSearch
+    // ==========================================
+    const queryFilters = [
+      {
+        bool: {
+          should: [
+            // Event FIM standar Wazuh
+            {
+              term: {
+                "rule.groups": "syscheck",
+              },
+            },
+
+            // Event custom rule yang tetap berasal dari syscheck
+            {
+              term: {
+                location: "syscheck",
+              },
+            },
+
+            // Event yang mempunyai informasi file FIM
+            {
+              exists: {
+                field: "syscheck.path",
+              },
+            },
+          ],
+
+          minimum_should_match: 1,
+        },
+      },
+    ];
+    // Tambahkan agent tertentu jika URL memakai ID
+    if (agent_id) {
+      queryFilters.push({
+        term: {
+          "agent.id": agent_id,
+        },
+      });
+    }
+
+    // Tambahkan filter waktu jika tersedia
+    if (timeRange) {
+      queryFilters.push(timeRange);
+    }
 
     console.log(
-      `>>> FETCH: agent=${agent_id || "all"} page=${page} size=${size} range=${rangeKey} start=${start} end=${end}`
+      `>>> FETCH: agent=${agent_id || "all"} ` +
+      `page=${page} ` +
+      `size=${size} ` +
+      `range=${rangeKey} ` +
+      `start=${start} ` +
+      `end=${end}`
     );
+
 
     const requestBody = {
       track_total_hits: true,
+
       query: {
         bool: {
-          must: [{ match: { "rule.groups": "syscheck" } }],
-          should: [
-            { term: { "rule.id": "100601" } },
-            { match_phrase: { "rule.description": "[Judol Injection]" } },
-            { term: { "location": "syscheck" } }
+          filter: queryFilters,
+
+          // Jangan kirim data Wazuh Manager ID 000
+          must_not: [
+            {
+              terms: {
+                "agent.id": EXCLUDED_AGENT_IDS,
+              },
+            },
           ],
-          minimum_should_match: 1,
-          filter,
         },
       },
-      sort: [{ "@timestamp": { order: "desc", unmapped_type: "date" } }],
+
+      sort: [
+        {
+          "@timestamp": {
+            order: "desc",
+            unmapped_type: "date",
+          },
+        },
+      ],
+
       from,
       size,
     };
@@ -331,6 +389,7 @@ function extractDomainsFromHit(hit) {
 // Register two routes (one for all, one for specific agent) to avoid optional-param parsing issues
 app.get("/api/events", handleEventsRequest);
 app.get("/api/events/:agent_id", handleEventsRequest);
+
 
 async function handleDomainSummaryRequest(req, res) {
   try {

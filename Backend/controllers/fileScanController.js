@@ -49,7 +49,7 @@ export const listFileScanErrors = asyncHandler(async (req, res) => {
 });
 
 export const getFileScanStats = asyncHandler(async (req, res) => {
-  const data = await fileScanService.getFileScanStats();
+  const data = await fileScanService.getFileScanStats(req.query);
 
   res.json({
     success: true,

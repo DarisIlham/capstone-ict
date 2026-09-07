@@ -12,7 +12,8 @@ import {
   exactMatchClause,
   buildOptionalExactFilter,
   addDateRange,
-  normalizePagination
+  normalizePagination,
+  getHistogramInterval
 } from "../utils/esHelpers.js";
 
 // Fungsi internal (tidak perlu dieksport jika hanya dipakai di dalam file ini)
@@ -153,7 +154,21 @@ export async function getPredictionStats() {
 }
 
 export async function getPredictionTimeline(query) {
-  const minutes = Math.max(parseInt(query.minutes || "60", 10), 1);
+  const { start, end } = query;
+
+  let minutes = Math.max(parseInt(query.minutes || "60", 10), 1);
+  if (start && end) {
+    const durationMs = Math.max(new Date(end).getTime() - new Date(start).getTime(), 1);
+    minutes = Math.max(Math.ceil(durationMs / 60000), 1);
+  }
+
+  const rangeClause = {};
+  if (start) rangeClause.gte = start;
+  if (end) rangeClause.lte = end;
+  if (!start && !end) {
+    rangeClause.gte = `now-${minutes}m`;
+    rangeClause.lte = "now";
+  }
 
   const response = unwrapEsResponse(
     await es.search({
@@ -165,10 +180,7 @@ export async function getPredictionTimeline(query) {
             ...buildMlMustClauses(),
             {
               range: {
-                "@timestamp": {
-                  gte: `now-${minutes}m`,
-                  lte: "now"
-                }
+                "@timestamp": rangeClause
               }
             }
           ]
@@ -178,7 +190,7 @@ export async function getPredictionTimeline(query) {
         per_minute: {
           date_histogram: {
             field: "@timestamp",
-            fixed_interval: "1m",
+            fixed_interval: getHistogramInterval(minutes),
             min_doc_count: 0
           },
           aggs: {

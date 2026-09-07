@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import { AuthProvider } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import PrivateRoute from "./components/PrivateRoute";
+import AppLayout from "./components/AppLayout";
 import LoginPage from "./pages/LoginPage.jsx";
 import MainDashboard from "./pages/MainDashboard.jsx";
 import MlDashboard from "./pages/MlDashboard.jsx";
@@ -9,6 +10,7 @@ import FimEvents from "./pages/FimEvents.jsx";
 import AttackDashboard from "./pages/AttackDashboard.jsx";
 import FileSecurityScanner from "./pages/FileSecurityScanner.jsx";
 import UserManagement from "./pages/UserManagement.jsx";
+import Alert from "./pages/Alert.jsx";
 
 function App() {
   const routerBasename =
@@ -22,28 +24,25 @@ function App() {
         <Router basename={routerBasename}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
-            {/* Protected Routes */}
+
+            {/* Protected Routes with Layout */}
             <Route
               path="/"
               element={
                 <PrivateRoute>
-                  <MainDashboard />
+                  <AppLayout>
+                    <MainDashboard />
+                  </AppLayout>
                 </PrivateRoute>
               }
             />
             <Route
-              path="/ml-dashboard"
+              path="/alerts"
               element={
                 <PrivateRoute>
-                  <MlDashboard />
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/fim-events"
-              element={
-                <PrivateRoute>
-                  <FimEvents />
+                  <AppLayout>
+                    <Alert />
+                  </AppLayout>
                 </PrivateRoute>
               }
             />
@@ -51,7 +50,19 @@ function App() {
               path="/attack-dashboard"
               element={
                 <PrivateRoute>
-                  <AttackDashboard />
+                  <AppLayout>
+                    <AttackDashboard />
+                  </AppLayout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/fim-events"
+              element={
+                <PrivateRoute>
+                  <AppLayout>
+                    <FimEvents />
+                  </AppLayout>
                 </PrivateRoute>
               }
             />
@@ -59,7 +70,19 @@ function App() {
               path="/file-security"
               element={
                 <PrivateRoute>
-                  <FileSecurityScanner />
+                  <AppLayout>
+                    <FileSecurityScanner />
+                  </AppLayout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/ml-dashboard"
+              element={
+                <PrivateRoute>
+                  <AppLayout>
+                    <MlDashboard />
+                  </AppLayout>
                 </PrivateRoute>
               }
             />
@@ -67,12 +90,13 @@ function App() {
               path="/users"
               element={
                 <PrivateRoute requiredRole="admin">
-                  <UserManagement />
+                  <AppLayout>
+                    <UserManagement />
+                  </AppLayout>
                 </PrivateRoute>
               }
             />
-            
-            {/* Catch all - redirect ke login */}
+
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
         </Router>

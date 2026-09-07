@@ -1,33 +1,40 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Navbar from "../components/Navbar";
+import { useSearchParams } from "react-router-dom";
 import {
   Search,
   AlertTriangle,
   Clock,
   Terminal,
   Activity,
-  RefreshCw,
+  CalendarRange,
+  ChevronDown,
 } from "lucide-react";
+import DateRangeFilter from "../components/DateRangeFilter";
+import RangeFilter from "../components/RangeFilter";
+import {
+  createDefaultDateRange,
+  normalizeDateRange,
+  getIsoDateRange,
+  getDateRangeMinutes,
+  toDateTimeLocalValue,
+} from "../utils/dateRange";
 
-// ========================================
-// Range Filter Component
-// ========================================
-const RangeFilter = ({ rangeKey, onRangeChange }) => (
-  <div className="flex items-center gap-1 md:gap-2">
-    <span className="hidden sm:inline text-xs text-slate-500">Range</span>
-    <div className="flex bg-slate-800 rounded p-0.5 border border-slate-700 gap-0.5">
-      {["1h", "24h", "7d", "30d"].map((k) => (
-        <button
-          key={k}
-          onClick={() => onRangeChange(k)}
-          className={`px-1.5 md:px-2.5 py-0.5 md:py-1 text-xs rounded-sm ${rangeKey === k ? "bg-sky-600 text-white" : "text-slate-400"}`}
-        >
-          {k}
-        </button>
-      ))}
-    </div>
-  </div>
-);
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
+function rangeKeyToDateRange(rangeKey) {
+  const end = new Date();
+  const backMs =
+    rangeKey === "1h"
+      ? HOUR_MS
+      : rangeKey === "7d"
+      ? 7 * DAY_MS
+      : rangeKey === "30d"
+      ? 30 * DAY_MS
+      : DAY_MS;
+  const start = new Date(end.getTime() - backMs);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
 
 const SUSPICIOUS_HIGHLIGHT_KEYWORDS = [
   "rm",
@@ -131,16 +138,16 @@ const WaveChart = ({ data, rangeKey = "24h", height = 80, compact = false, activ
   const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
 
   return (
-    <div className="relative" onMouseLeave={() => setHoveredPoint(null)}>
-      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="block">
+    <div className="relative h-full w-full" onMouseLeave={() => setHoveredPoint(null)}>
+      <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block w-full h-full">
         {gridLines.map((gl) => (
           <g key={`grid-${gl.ratio}`}>
-            <line x1={padding.l} y1={gl.y} x2={padding.l + innerW} y2={gl.y} stroke="#334155" strokeDasharray="2,2" opacity="0.5" />
+            <line x1={padding.l} y1={gl.y} x2={padding.l + innerW} y2={gl.y} stroke="var(--soc-border)" strokeDasharray="2,2" opacity="0.5" />
             <text x={padding.l - 5} y={gl.y + 3} textAnchor="end" fontSize="8" fill="#64748b">{gl.value}</text>
           </g>
         ))}
-        <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="#334155" />
-        <line x1={padding.l} y1={padding.t + innerH} x2={padding.l + innerW} y2={padding.t + innerH} stroke="#334155" />
+        <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="var(--soc-border)" />
+        <line x1={padding.l} y1={padding.t + innerH} x2={padding.l + innerW} y2={padding.t + innerH} stroke="var(--soc-border)" />
         <path d={pathD} stroke="#f97316" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
         <defs>
           <linearGradient id="cmdWaveGradient" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -191,9 +198,16 @@ const WaveChart = ({ data, rangeKey = "24h", height = 80, compact = false, activ
         })}
       </svg>
       {hoveredPoint && (
-        <div className="pointer-events-none absolute z-50 min-w-[120px] max-w-[220px] rounded-lg border border-slate-700 bg-slate-900/95 px-3 py-2 text-xs shadow-lg" style={{ left: `${Math.min(Math.max((hoveredPoint.x / width) * 100, 12), 88)}%`, top: `${Math.max(((hoveredPoint.y - 60) / height) * 100, -15)}%`, transform: "translate(-50%, -100%)" }}>
-          <div className="font-semibold text-white">{hoveredPoint.value} commands</div>
-          <div className="mt-1 text-slate-400">{formatDetailedTimestamp(hoveredPoint.start || hoveredPoint.time)}</div>
+        <div
+          className="pointer-events-none absolute z-50 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-elevated)] px-3 py-2 text-[11px] shadow-xl"
+          style={{
+            left: `${Math.min(Math.max((hoveredPoint.x / width) * 100, 14), 86)}%`,
+            top: `${Math.max(((hoveredPoint.y - 58) / height) * 100, -10)}%`,
+            transform: "translate(-50%, -100%)",
+          }}
+        >
+          <div className="font-bold text-orange-300">{hoveredPoint.value} <span className="font-normal text-slate-400">commands</span></div>
+          <div className="mt-0.5 text-slate-500 leading-snug">{formatDetailedTimestamp(hoveredPoint.start || hoveredPoint.time)}</div>
         </div>
       )}
     </div>
@@ -208,7 +222,7 @@ const Donut = ({ items, size = 120, stroke = 12, centerLabelTop, centerLabelBott
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       <g transform={`translate(${size / 2} ${size / 2})`}>
-        <circle r={r} fill="transparent" stroke="#1e293b" strokeWidth={stroke} />
+        <circle r={r} fill="transparent" stroke="var(--soc-border)" strokeWidth={stroke} />
         {items.map((it, idx) => {
           const currentOffset = items
             .slice(0, idx)
@@ -245,7 +259,7 @@ const Donut = ({ items, size = 120, stroke = 12, centerLabelTop, centerLabelBott
 const Legend = ({ items }) => (
   <div className="flex flex-wrap gap-3 w-full justify-center">
     {items.map((it) => (
-      <div key={it.label} className="flex items-center gap-1.5 text-xs text-slate-400">
+      <div key={it.label} className="flex items-center gap-1.5 text-[11px] text-slate-400">
         <span className="inline-block w-2 h-2 rounded-sm shrink-0" style={{ background: it.color }} />
         <span>{it.label}</span>
         <span className="text-slate-500 font-mono">{it.value}</span>
@@ -254,10 +268,148 @@ const Legend = ({ items }) => (
   </div>
 );
 
+const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items" }) => {
+  const [selected, setSelected] = useState(null);
+  const rootRef = useRef(null);
+  const [size, setSize] = useState({ width: 1000, height: 210 });
+  const padding = { l: 56, r: 56, t: 12, b: 42 };
+
+  useEffect(() => {
+    const node = rootRef.current;
+    if (!node) return undefined;
+    const updateSize = () => {
+      const rect = node.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setSize({ width: rect.width, height: rect.height });
+      }
+    };
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const width = size.width;
+  const height = size.height;
+  if (!items || items.length === 0) {
+    return (
+      <div className="flex min-h-24 items-center justify-center text-[11px] text-slate-500">
+        No data available
+      </div>
+    );
+  }
+
+  const sorted = [...items].sort((a, b) => b.value - a.value);
+  const total = sorted.reduce((s, it) => s + it.value, 0) || 1;
+  const maxV = Math.max(1, ...sorted.map((d) => d.value));
+  const innerW = width - padding.l - padding.r;
+  const innerH = height - padding.t - padding.b;
+  const step = sorted.length > 1 ? innerW / (sorted.length - 1) : innerW;
+
+  const gridSteps = 4;
+  const gridLines = [];
+  for (let i = 0; i < gridSteps; i++) {
+    const ratio = i / (gridSteps - 1);
+    const value = Math.round((ratio * maxV * 10) / 10);
+    const y = padding.t + innerH - ratio * innerH;
+    gridLines.push({ value, y });
+  }
+
+  const xFor = (i) => padding.l + i * step;
+  const yFor = (v) => padding.t + innerH - (v / maxV) * innerH;
+
+  const points = sorted.map((it, i) => ({
+    x: xFor(i),
+    y: yFor(it.value),
+    label: it.label,
+    value: it.value,
+    color: it.color,
+    index: i,
+  }));
+
+  const segments = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    const controlX = (a.x + b.x) / 2;
+    segments.push({
+      d: `M ${a.x} ${a.y} C ${controlX} ${a.y}, ${controlX} ${b.y}, ${b.x} ${b.y}`,
+      color: b.color,
+      key: `${a.label}-${b.label}`,
+    });
+  }
+
+  return (
+    <div className="relative w-full flex flex-col h-full min-h-0" onMouseLeave={() => setSelected(null)}>
+      <div className="flex items-center justify-between mb-1 px-1">
+        <span className="text-[11px] text-slate-600 uppercase font-semibold">Total</span>
+        <span className="text-sm font-bold text-slate-300">
+          {total} <span className="text-xs font-normal text-slate-500">{totalLabel}</span>
+        </span>
+      </div>
+      <div ref={rootRef} className="flex-1 min-h-0 w-full">
+        <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block">
+          {gridLines.map((grid, idx) => (
+            <g key={`grid-${idx}`}>
+              <line x1={padding.l} y1={grid.y} x2={padding.l + innerW} y2={grid.y} stroke="var(--soc-border)" strokeWidth="1" opacity={grid.y === padding.t || grid.y === padding.t + innerH ? "1" : "0.5"} />
+              <text x={padding.l - 6} y={grid.y + 3} textAnchor="end" fontSize="10" fill="var(--soc-text-muted)" fontWeight="600">
+                {grid.value}
+              </text>
+            </g>
+          ))}
+          <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="var(--soc-border)" strokeWidth="1.5" />
+          <line x1={padding.l} y1={padding.t + innerH} x2={padding.l + innerW} y2={padding.t + innerH} stroke="var(--soc-border)" strokeWidth="1.5" />
+          {segments.map((seg) => (
+            <path key={seg.key} d={seg.d} stroke={seg.color} strokeWidth="2.5" fill="none" opacity="0.85" />
+          ))}
+          {points.map((p) => {
+            const isSel = selected?.index === p.index;
+            return (
+              <g key={`${p.label}-${p.index}`}>
+                <circle cx={p.x} cy={p.y} r={isSel ? "6" : "9"} fill="transparent" className="cursor-pointer"
+                  onMouseEnter={() => setSelected(p)}
+                  onMouseLeave={() => setSelected(null)}
+                  onFocus={() => setSelected(p)}
+                  onBlur={() => setSelected(null)}
+                  onClick={() => setSelected(isSel ? null : p)}
+                />
+                <circle cx={p.x} cy={p.y} r={isSel ? "5" : "3.5"} fill={p.color} stroke="var(--soc-bg)" strokeWidth="1.5" opacity="0.95" className="pointer-events-none" />
+                <text x={p.x} y={padding.t + innerH + 18} textAnchor="middle" fontSize="9" fill="var(--soc-text-muted)">{p.label}</text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 justify-center px-1 mt-1">
+        {points.map((p) => (
+          <div key={`${p.label}-${p.index}`} className="flex items-center gap-1.5 text-[11px] text-slate-400">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color }} />
+            <span className="whitespace-nowrap">{p.label}</span>
+            <span className="text-slate-500 font-mono">{p.value}</span>
+          </div>
+        ))}
+      </div>
+      {selected && (
+        <div
+          className="pointer-events-none absolute z-10 min-w-[110px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-xl"
+          style={{
+            left: `${Math.min(Math.max((selected.x / width) * 100, 10), 84)}%`,
+            top: `${Math.max(((selected.y - 46) / height) * 100, 2)}%`,
+            transform: "translate(-50%, -100%)",
+          }}
+        >
+          <div className="font-semibold text-slate-300">{selected.label}</div>
+          <div className="mt-1 text-slate-500">{selected.value} {totalLabel}</div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const CompactBarChart = ({ items, emptyLabel = "No data available" }) => {
   if (!items || items.length === 0) {
     return (
-      <div className="flex min-h-40 items-center justify-center text-sm text-slate-500">
+      <div className="flex min-h-24 items-center justify-center text-[11px] text-slate-500">
         {emptyLabel}
       </div>
     );
@@ -266,24 +418,28 @@ const CompactBarChart = ({ items, emptyLabel = "No data available" }) => {
   const maxValue = Math.max(...items.map((d) => d.value), 1);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       {items.map((item, i) => (
-        <div key={item.label} className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-2">
-            <div className="w-6">
-              <span className="text-xs font-bold text-slate-400">#{i + 1}</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-mono text-slate-300 truncate" title={item.label}>
-                {item.label}
-              </p>
-            </div>
-            <span className="text-xs font-bold text-slate-300">{item.value}x</span>
+        <div key={item.label} className="flex flex-col">
+          <div className="flex items-center gap-1.5">
+            <span className="w-4 text-[11px] font-bold text-slate-500 shrink-0">
+              {i + 1}.
+            </span>
+            <span className="flex-1 min-w-0 text-[11px] font-mono text-slate-400 truncate" title={item.label}>
+              {item.label}
+            </span>
+            <span className="text-[12px] font-bold text-slate-400 tabular-nums shrink-0 ml-1">
+              {item.value}x
+            </span>
           </div>
-          <div className="flex items-center gap-2 ml-6">
-            <div className="flex-1 bg-slate-800/50 rounded-full h-4 overflow-hidden border border-slate-700/30">
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="w-4 shrink-0" />
+            <div
+              className="flex-1 bg-[var(--soc-elevated)] border border-[var(--soc-border-strong)] rounded h-4 overflow-hidden"
+              title={`${item.label}: ${item.value} executions`}
+            >
               <div
-                className="h-full rounded-full transition-all"
+                className="h-full rounded transition-all"
                 style={{
                   width: `${(item.value / maxValue) * 100}%`,
                   backgroundColor: item.color,
@@ -302,34 +458,39 @@ const TopAgentsCard = ({ agents }) => {
   if (!agents || agents.length === 0) {
     return <div className="flex h-full items-center justify-center text-xs text-slate-600">No agent data</div>;
   }
-  const peak = Math.max(...agents.map((a) => a.value), 1);
+  const maxValue = Math.max(...agents.map((a) => a.value), 1);
   const COLORS = ["#34d399", "#38bdf8", "#fbbf24", "#f97316", "#a78bfa"];
   return (
-    <div className="flex flex-col gap-2.5">
-      {agents.map((agent, idx) => {
-        const accent = COLORS[idx % COLORS.length];
-        const fill = Math.max(10, Math.round((agent.value / peak) * 100));
+    <div className="space-y-3">
+      {agents.map((item, i) => {
+        const color = COLORS[i % COLORS.length];
         return (
-          <div key={agent.label} className="rounded-xl border border-slate-700/60 p-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black" style={{ backgroundColor: `${accent}1f`, color: accent }}>
-                  {idx + 1}
-                </span>
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-slate-100">{agent.label}</div>
-                  <div className="text-[11px] text-slate-500">
-                    Last seen {formatDetailedTimestamp(agent.lastSeen)}
-                  </div>
-                </div>
-              </div>
-              <div className="shrink-0 text-right">
-                <div className="text-sm font-black" style={{ color: accent }}>{agent.value}</div>
-                <div className="text-[11px] uppercase tracking-wide text-slate-500">events</div>
-              </div>
+          <div key={item.label} className="flex flex-col">
+            <div className="flex items-center gap-1.5">
+              <span className="w-5 text-[13px] font-bold text-slate-500 shrink-0">
+                {i + 1}.
+              </span>
+              <span className="flex-1 min-w-0 text-[13px] font-mono text-slate-300 truncate" title={item.label}>
+                {item.label}
+              </span>
+              <span className="text-[13px] font-bold text-slate-400 tabular-nums shrink-0 ml-1">
+                {new Intl.NumberFormat("en-US").format(item.value)}
+              </span>
             </div>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800">
-              <div className="h-full rounded-full" style={{ width: `${fill}%`, background: accent }} />
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="w-5 shrink-0" />
+              <div
+                className="flex-1 bg-[var(--soc-bg)] rounded h-4 overflow-hidden"
+                title={item.lastSeen ? `Last seen ${formatDetailedTimestamp(item.lastSeen)}` : `${item.label}: ${item.value} events`}
+              >
+                <div
+                  className="h-full rounded transition-all"
+                  style={{
+                    width: `${(item.value / maxValue) * 100}%`,
+                    backgroundColor: color,
+                  }}
+                />
+              </div>
             </div>
           </div>
         );
@@ -357,7 +518,7 @@ const PaginationControls = ({
     <div className="border-t border-slate-800 bg-slate-900/50 px-4 py-3">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-          <div className="text-xs font-mono text-slate-500">
+          <div className="text-[10px] md:text-[11px] font-mono text-slate-500">
             <span className="hidden md:inline">SHOWING </span>
             <span className="font-bold text-sky-400">{start}</span>
             <span className="hidden md:inline"> - </span>
@@ -392,7 +553,7 @@ const PaginationControls = ({
           <button
             disabled={page === 1 || loading}
             onClick={() => onPageChange(1)}
-            className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
+            className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
           >
             <span className="hidden md:inline">FIRST</span>
             <span className="md:hidden">«</span>
@@ -400,19 +561,19 @@ const PaginationControls = ({
           <button
             disabled={page === 1 || loading}
             onClick={() => onPageChange(Math.max(page - 1, 1))}
-            className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
+            className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
           >
             <span className="hidden md:inline">← PREV</span>
             <span className="md:hidden">‹</span>
           </button>
-          <span className="px-1 text-xs font-black text-slate-400">
+          <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400">
             <span className="hidden md:inline">PAGE </span>
             <span className="text-white">{page}</span> / {totalPages}
           </span>
           <button
             disabled={page === totalPages || loading}
             onClick={() => onPageChange(Math.min(page + 1, totalPages))}
-            className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
+            className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
           >
             <span className="hidden md:inline">NEXT →</span>
             <span className="md:hidden">›</span>
@@ -420,7 +581,7 @@ const PaginationControls = ({
           <button
             disabled={page === totalPages || loading}
             onClick={() => onPageChange(totalPages)}
-            className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
+            className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
           >
             <span className="hidden md:inline">LAST</span>
             <span className="md:hidden">»</span>
@@ -438,7 +599,7 @@ const CommandHighlighter = ({ command }) => {
   const parts = String(command || "").split(/(\s+)/);
 
   return (
-    <code className="text-xs font-mono">
+    <code className="text-[10px] md:text-[11px] font-mono">
       {parts.map((part, idx) => {
         const isSuspicious = SUSPICIOUS_HIGHLIGHT_KEYWORDS.some((kw) =>
           part.toLowerCase().includes(kw.toLowerCase())
@@ -462,12 +623,30 @@ const CommandHighlighter = ({ command }) => {
 const WORD_COLORS = ["#f472b6", "#38bdf8", "#4ade80", "#a78bfa", "#fb923c", "#34d399", "#f87171", "#facc15", "#60a5fa", "#e879f9"];
 
 const PayloadWordCloud = ({ words }) => {
+  const rootRef = useRef(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const node = rootRef.current;
+    if (!node) return undefined;
+    const updateSize = () => {
+      const rect = node.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setSize({ width: rect.width, height: rect.height });
+      }
+    };
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
   if (!words || words.length === 0) return <div className="flex items-center justify-center h-full text-slate-600 text-xs">No command data</div>;
-  const W = 620, H = 240;
+  const W = size.width || 640, H = size.height || 300;
   const maxCount = words[0].count;
   const minCount = words[words.length - 1].count;
   const range = Math.max(1, maxCount - minCount);
-  const fontSize = (count) => Math.round(11 + ((count - minCount) / range) * 31);
+  const fontSize = (count) => Math.round(16 + ((count - minCount) / range) * 46);
   const estWidth = (text, fs) => text.length * fs * 0.6;
   const placed = [];
   const rects = [];
@@ -494,15 +673,17 @@ const PayloadWordCloud = ({ words }) => {
     }
   }
   return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="command-word-cloud block w-full" style={{ minHeight: 140 }}>
-      <defs><radialGradient id="wcGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#0f172a" stopOpacity="0" /><stop offset="100%" stopColor="#020617" stopOpacity="0.6" /></radialGradient></defs>
-      <rect className="command-word-cloud-bg" width={W} height={H} fill="url(#wcGlow)" rx={8} />
-      {placed.map((w) => (
-        <text key={w.text} x={w.x} y={w.y} textAnchor="middle" dominantBaseline="middle" fontSize={w.fs} fontWeight={w.fs > 26 ? "800" : w.fs > 18 ? "700" : "500"} fill={w.color} opacity={w.opacity} style={{ cursor: "default", fontFamily: "monospace" }}>
-          <title>{`${w.text}: ${w.count} occurrences`}</title>{w.text}
-        </text>
-      ))}
-    </svg>
+    <div ref={rootRef} className="w-full h-full min-h-0">
+      <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="command-word-cloud block w-full h-full">
+        <defs><radialGradient id="wcGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#0f172a" stopOpacity="0" /><stop offset="100%" stopColor="#020617" stopOpacity="0.6" /></radialGradient></defs>
+        <rect className="command-word-cloud-bg" width={W} height={H} fill="url(#wcGlow)" rx={8} />
+        {placed.map((w) => (
+          <text key={w.text} x={w.x} y={w.y} textAnchor="middle" dominantBaseline="middle" fontSize={w.fs} fontWeight={w.fs > 46 ? "800" : w.fs > 30 ? "700" : "500"} fill={w.color} opacity={w.opacity} style={{ cursor: "default", fontFamily: "monospace" }}>
+            <title>{`${w.text}: ${w.count} occurrences`}</title>{w.text}
+          </text>
+        ))}
+      </svg>
+    </div>
   );
 };
 
@@ -657,12 +838,32 @@ function extractHighlightedCommandKeywords(logs) {
 // Main Component
 // ========================================
 const HostMonitoring = () => {
-  const [searchUser, setSearchUser] = useState("");
-  const [searchCommand, setSearchCommand] = useState("");
+  const [searchParams] = useSearchParams();
+  const urlStart = searchParams.get("start");
+  const urlEnd = searchParams.get("end");
+  const urlRange = searchParams.get("rangeKey");
+  const [searchQuery, setSearchQuery] = useState("");
   const [suspiciousOnly, setSuspiciousOnly] = useState(false);
   const [selectedSession, setSelectedSession] = useState(null);
-  const [selectedTimelinePoint, setSelectedTimelinePoint] = useState(null);
-  const [rangeKey, setRangeKey] = useState("24h");
+  const [selectedTimelinePoint, setSelectedTimelinePoint] = useState(() =>
+    urlStart && urlEnd ? { key: "custom", start: urlStart, end: urlEnd } : null
+  );
+  const [rangeKey, setRangeKey] = useState(() =>
+    urlRange && ["1h", "24h", "7d", "30d"].includes(urlRange) ? urlRange : "24h"
+  );
+  const [filterMode, setFilterMode] = useState(() =>
+    urlStart && urlEnd ? "custom" : "range"
+  );
+  const [customDateRange, setCustomDateRange] = useState(() => {
+    const base = createDefaultDateRange(1);
+    if (urlStart && urlEnd) {
+      return {
+        start: toDateTimeLocalValue(new Date(urlStart)),
+        end: toDateTimeLocalValue(new Date(urlEnd)),
+      };
+    }
+    return base;
+  });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
@@ -679,7 +880,7 @@ const HostMonitoring = () => {
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth : 1280
   );
-  const [timelineChartHeight, setTimelineChartHeight] = useState(250);
+  const [timelineChartHeight, setTimelineChartHeight] = useState(320);
 
   const logsTableRef = useRef(null);
 
@@ -695,25 +896,44 @@ const HostMonitoring = () => {
     const dangerousParams = new URLSearchParams({
       page: "1",
       limit: String(ANALYTICS_LIMIT),
+      suspicious: "true",
     });
 
-    if (searchUser.trim()) {
-      params.set("user", searchUser.trim());
-      analyticsParams.set("user", searchUser.trim());
-      dangerousParams.set("user", searchUser.trim());
-    }
-    if (searchCommand.trim()) {
-      params.set("contains", searchCommand.trim());
-      analyticsParams.set("contains", searchCommand.trim());
-      dangerousParams.set("contains", searchCommand.trim());
+    if (searchQuery.trim()) {
+      params.set("contains", searchQuery.trim());
+      analyticsParams.set("contains", searchQuery.trim());
+      dangerousParams.set("contains", searchQuery.trim());
     }
     if (suspiciousOnly) params.set("suspicious", "true");
-    if (selectedTimelinePoint?.start && selectedTimelinePoint?.end) {
-      params.set("start", selectedTimelinePoint.start);
-      params.set("end", selectedTimelinePoint.end);
-    }
 
-    const minutes = RANGE_TO_MINUTES[rangeKey] || RANGE_TO_MINUTES["24h"];
+    const filterDateRange =
+      filterMode === "custom"
+        ? getIsoDateRange(normalizeDateRange(customDateRange))
+        : rangeKeyToDateRange(rangeKey);
+
+    const timingStart = selectedTimelinePoint?.start || filterDateRange.start;
+    const timingEnd = selectedTimelinePoint?.end || filterDateRange.end;
+    params.set("start", timingStart);
+    params.set("end", timingEnd);
+    analyticsParams.set("start", timingStart);
+    analyticsParams.set("end", timingEnd);
+    dangerousParams.set("start", timingStart);
+    dangerousParams.set("end", timingEnd);
+
+    const minutes =
+      filterMode === "custom"
+        ? getDateRangeMinutes(getIsoDateRange(normalizeDateRange(customDateRange)))
+        : RANGE_TO_MINUTES[rangeKey] || RANGE_TO_MINUTES["24h"];
+
+    const statsParams = new URLSearchParams({
+      start: filterDateRange.start,
+      end: filterDateRange.end,
+    });
+    const timelineParams = new URLSearchParams({
+      minutes: String(minutes),
+      start: filterDateRange.start,
+      end: filterDateRange.end,
+    });
 
     try {
       setError("");
@@ -721,8 +941,8 @@ const HostMonitoring = () => {
 
       const [listResponse, statsResponse, timelineResponse, analyticsResponse, dangerousResponse] = await Promise.all([
         fetchJson(`${API_BASE_URL}/linux-commands?${params.toString()}`),
-        fetchJson(`${API_BASE_URL}/linux-commands/stats`),
-        fetchJson(`${API_BASE_URL}/linux-commands/timeline?minutes=${minutes}`),
+        fetchJson(`${API_BASE_URL}/linux-commands/stats?${statsParams.toString()}`),
+        fetchJson(`${API_BASE_URL}/linux-commands/timeline?${timelineParams.toString()}`),
         fetchJson(`${API_BASE_URL}/linux-commands?${analyticsParams.toString()}`),
         fetchJson(`${API_BASE_URL}/linux-commands?${dangerousParams.toString()}`),
       ]);
@@ -765,7 +985,7 @@ const HostMonitoring = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [page, pageSize, rangeKey, searchCommand, searchUser, selectedTimelinePoint, suspiciousOnly]);
+  }, [page, pageSize, rangeKey, filterMode, customDateRange, searchQuery, selectedTimelinePoint, suspiciousOnly]);
 
   useEffect(() => {
     loadDashboardData();
@@ -832,7 +1052,7 @@ const HostMonitoring = () => {
 
     const suspiciousCommands = suspiciousSourceLogs
       .filter((l) => l.command.risk === "suspicious")
-      .map((l) => l.command.cmd);
+      .map((l) => l.commandName && l.commandName !== "-" ? l.commandName : l.command.cmd.split(/\s+/)[0] || l.command.cmd);
 
     const topSuspicious = countBy(suspiciousCommands, (cmd) => cmd)
       .slice(0, 5)
@@ -849,7 +1069,16 @@ const HostMonitoring = () => {
       color: CHART_COLORS[i % CHART_COLORS.length],
     }));
 
-    return { topUsers, topAgents, topSuspicious, riskIndicators, uniqueAgents };
+    const topSessions = countBy(logs, (log) => log.sessionId && log.sessionId !== "-" ? log.sessionId : null)
+      .slice(0, 5)
+      .map((it, i) => ({
+        label: it.label.length > 18 ? `${it.label.slice(0, 16)}...` : it.label,
+        fullLabel: it.label,
+        value: it.value,
+        color: CHART_COLORS[i % CHART_COLORS.length],
+      }));
+
+    return { topUsers, topAgents, topSuspicious, riskIndicators, uniqueAgents, topSessions };
   }, [analyticsLogs, backendStats, dangerousLogs, logs]);
 
   const wordCloudSourceLogs = useMemo(() => {
@@ -882,12 +1111,11 @@ const HostMonitoring = () => {
       });
     }
 
-    if (searchUser) {
-      result = result.filter((l) => l.user.toLowerCase().includes(searchUser.toLowerCase()));
-    }
-
-    if (searchCommand) {
-      result = result.filter((l) => l.command.cmd.toLowerCase().includes(searchCommand.toLowerCase()));
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (l) => l.user.toLowerCase().includes(q) || (l.command?.cmd || "").toLowerCase().includes(q)
+      );
     }
 
     if (suspiciousOnly) {
@@ -895,7 +1123,7 @@ const HostMonitoring = () => {
     }
 
     return [...result].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  }, [logs, searchUser, searchCommand, selectedTimelinePoint, suspiciousOnly]);
+  }, [logs, searchQuery, selectedTimelinePoint, suspiciousOnly]);
 
   const sessionCommands = useMemo(() => {
     if (!selectedSession) return [];
@@ -904,9 +1132,6 @@ const HostMonitoring = () => {
       .filter((l) => l.sessionId === selectedSession)
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   }, [selectedSession, logs]);
-  const avgPerSession = stats.uniqueSessions
-    ? (stats.totalCommands / stats.uniqueSessions).toFixed(1)
-    : "0.0";
 
   const handleTimelinePointSelect = useCallback((point) => {
     setPage(1);
@@ -963,112 +1188,128 @@ const HostMonitoring = () => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans">
-      <Navbar />
-
-      <div className="p-2 md:p-4 flex flex-col gap-3 md:gap-4">
-        <div className="bg-slate-900 border border-slate-800 rounded-lg md:rounded-xl p-3 md:p-4 shadow-lg">
+    <>
+    <div className="p-4 md:p-5 flex flex-col gap-4 w-full">
+        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-3 md:p-4 shadow-lg">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-4">
             <div>
-              <h1 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
-                <Terminal className="h-5 md:h-6 w-5 md:w-6 text-orange-400" />
+              <h1 className="text-base font-bold text-white flex items-center gap-2">
+                <Terminal className="h-5 w-5 text-orange-400" />
                 Host Monitoring
               </h1>
-              <p className="text-xs md:text-sm text-slate-400 mt-1">
+              <p className="text-xs text-slate-500 mt-0.5">
                 Real-time Linux command auditing and user activity tracking
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-lg md:rounded-xl p-2 md:p-4 shadow-lg flex flex-col gap-3 md:gap-4">
-          <div className="flex items-center justify-between gap-1 md:gap-2 flex-wrap">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={loadDashboardData}
-                disabled={refreshing}
-                className="inline-flex items-center gap-2 px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs text-slate-200 transition-colors border border-slate-700 disabled:opacity-60"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
-                <span>Refresh</span>
-              </button>
-
-              <label className="flex items-center gap-2 text-xs text-slate-400">
-                <span className="hidden sm:inline">Rows</span>
-                <select
-                  value={pageSize}
-                  onChange={(event) => {
-                    setPage(1);
-                    setPageSize(Number(event.target.value));
-                    // Scroll to logs table
-                    setTimeout(() => {
-                      if (logsTableRef.current && typeof logsTableRef.current.scrollIntoView === "function") {
-                        try {
-                          logsTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-                        } catch (e) {
-                          // ignore
-                        }
+        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-2 md:p-4 shadow-lg flex flex-col gap-3 md:gap-4">
+          <div className="flex flex-col items-start gap-1 md:flex-row md:items-center md:justify-between md:gap-2">
+            <label className="hidden items-center gap-1 text-[10px] text-slate-400 sm:flex">
+              <span>Rows</span>
+            </label>
+            <div className="relative flex items-center bg-[var(--soc-card)] rounded border border-[var(--soc-border)]">
+              <select
+                value={pageSize}
+                onChange={(event) => {
+                  setPage(1);
+                  setPageSize(Number(event.target.value));
+                  // Scroll to logs table
+                  setTimeout(() => {
+                    if (logsTableRef.current && typeof logsTableRef.current.scrollIntoView === "function") {
+                      try {
+                        logsTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+                      } catch (e) {
+                        // ignore
                       }
-                    }, 100);
-                  }}
-                  className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-200 focus:border-sky-500 focus:outline-none"
-                >
-                  {[10, 25, 50, 100].map((size) => (
-                    <option key={size} value={size}>{size}</option>
-                  ))}
-                </select>
-              </label>
+                    }
+                  }, 100);
+                }}
+                className="appearance-none bg-transparent py-1.5 pl-2 pr-5 text-left text-[11px] font-medium leading-tight text-slate-100 focus:outline-none"
+              >
+                {[10, 25, 50, 100].map((size) => (
+                  <option key={size} value={size} className="bg-white text-black">{size}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
             </div>
 
-            <RangeFilter
-              rangeKey={rangeKey}
-              onRangeChange={(nextRange) => {
-                if (rangeKey !== nextRange) {
+            <div className="ml-auto flex items-center gap-2">
+              <RangeFilter
+                rangeKey={rangeKey}
+                onRangeChange={(nextRange) => {
+                  if (rangeKey !== nextRange) {
+                    setPage(1);
+                    setSelectedTimelinePoint(null);
+                    setRangeKey(nextRange);
+                    setFilterMode("range");
+                  }
+                }}
+                dimmed={filterMode === "custom"}
+              />
+              <DateRangeFilter
+                value={customDateRange}
+                onChange={(range) => {
                   setPage(1);
                   setSelectedTimelinePoint(null);
-                  setRangeKey(nextRange);
-                }
-              }}
-            />
+                  setCustomDateRange(range);
+                  setFilterMode("custom");
+                }}
+                className={filterMode === "range" ? "opacity-50" : ""}
+              />
+              <span className="hidden lg:flex items-center gap-1 text-[11px] text-slate-600">
+                <CalendarRange className="h-3 w-3" />
+                {filterMode === "custom"
+                  ? new Date(getIsoDateRange(normalizeDateRange(customDateRange)).start).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }) +
+                    " - " +
+                    new Date(getIsoDateRange(normalizeDateRange(customDateRange)).end).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+                  : rangeKey}
+              </span>
+            </div>
           </div>
 
           {error && (
-            <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-xs text-red-200">
               Gagal mengambil data backend: {error}
             </div>
           )}
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
-            <div className="bg-slate-800/50 border border-slate-700/60 rounded p-2 md:p-3">
-              <div className="text-[8px] md:text-[10px] text-slate-500 uppercase font-semibold">Commands</div>
-              <div className="text-lg md:text-2xl font-black text-orange-400 mt-0.5 md:mt-1">
+            <div className="bg-orange-500/10 border border-orange-500/30 rounded p-2 md:p-3">
+              <div className="text-[8px] md:text-[10px] text-orange-400 uppercase font-semibold">Commands</div>
+              <div className="text-sm md:text-lg font-black text-orange-300 mt-0.5 md:mt-1">
                 {loading ? "..." : stats.totalCommands}
               </div>
+              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">Linux commands monitored</div>
             </div>
             <div className="bg-red-500/10 border border-red-500/30 rounded p-2 md:p-3">
               <div className="text-[8px] md:text-[10px] text-red-400 uppercase font-semibold">Suspicious</div>
-              <div className="text-lg md:text-2xl font-black text-red-300 mt-0.5 md:mt-1">
+              <div className="text-sm md:text-lg font-black text-red-300 mt-0.5 md:mt-1">
                 {loading ? "..." : stats.suspiciousCount}
               </div>
-            </div>
-            <div className="bg-orange-500/10 border border-orange-500/30 rounded p-2 md:p-3">
-              <div className="text-[8px] md:text-[10px] text-orange-400 uppercase font-semibold">Sessions</div>
-              <div className="text-lg md:text-2xl font-black text-orange-300 mt-0.5 md:mt-1">
-                {loading ? "..." : stats.uniqueSessions}
-              </div>
+              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">suspicious detected</div>
             </div>
             <div className="bg-sky-500/10 border border-sky-500/30 rounded p-2 md:p-3">
-              <div className="text-[8px] md:text-[10px] text-sky-400 uppercase font-semibold">Users</div>
-              <div className="text-lg md:text-2xl font-black text-sky-300 mt-0.5 md:mt-1">
+              <div className="text-[8px] md:text-[10px] text-sky-400 uppercase font-semibold">Sessions</div>
+              <div className="text-sm md:text-lg font-black text-sky-300 mt-0.5 md:mt-1">
+                {loading ? "..." : stats.uniqueSessions}
+              </div>
+              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">unique sessions</div>
+            </div>
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded p-2 md:p-3">
+              <div className="text-[8px] md:text-[10px] text-emerald-400 uppercase font-semibold">Users</div>
+              <div className="text-sm md:text-lg font-black text-emerald-300 mt-0.5 md:mt-1">
                 {loading ? "..." : stats.uniqueUsers}
               </div>
+              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">unique users</div>
             </div>
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch">
-            <div className="bg-slate-800/30 border border-slate-800/50 rounded-lg p-4 md:p-6 flex flex-col h-full overflow-visible">
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-6 flex flex-col h-full overflow-visible">
               <div className="flex justify-between items-center mb-4 md:mb-6 gap-2">
-                <div className="text-xs md:text-sm font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
+                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
                   <Activity className="h-3 md:h-4 w-3 md:w-4 text-orange-400" />
                   Command Timeline
                 </div>
@@ -1077,8 +1318,8 @@ const HostMonitoring = () => {
                   <div className="text-[11px] text-slate-600">Updated {formatLiveTimestamp(lastUpdated)}</div>
                 </div>
               </div>
-              <div className="flex-1 rounded-lg border border-slate-800/40 p-2 md:p-4 overflow-visible">
-                <div className={isMobile ? "min-w-[620px]" : "min-w-0"}>
+              <div className="flex-1 min-h-[240px] md:min-h-[300px] min-w-0 rounded-lg bg-[var(--soc-card)] p-2 md:p-4 overflow-visible">
+                <div className="min-w-0 h-full">
                   <WaveChart
                     data={timelineData}
                     rangeKey={rangeKey}
@@ -1091,126 +1332,67 @@ const HostMonitoring = () => {
               </div>
             </div>
 
-            <div className="bg-slate-800/30 border border-slate-800/50 rounded-lg p-4 md:p-6 h-full">
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-6 h-full">
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-xs md:text-sm font-semibold text-slate-300">Top 5 Agents</div>
+                  <div className="text-[11px] md:text-xs font-semibold text-slate-300">Top 5 Agents</div>
                   <div className="mt-1 text-[11px] text-slate-500">Most active agents from host monitoring events</div>
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-slate-500">Unique agents</div>
-                  <div className="text-sm font-black text-emerald-300">{analytics.uniqueAgents}</div>
+                  <div className="text-xs font-black text-emerald-300">{analytics.uniqueAgents}</div>
                 </div>
               </div>
               <TopAgentsCard agents={analytics.topAgents} />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-            <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4 flex flex-col justify-center items-center">
-              <div className="text-xs md:text-sm font-semibold text-slate-300 mb-4 w-full">Active Users</div>
-              {analytics.topUsers.length > 0 ? (
-                <div className="flex flex-col items-center gap-4 justify-center w-full">
-                  <Donut
-                    items={analytics.topUsers}
-                    size={120}
-                    centerLabelTop={stats.uniqueUsers}
-                    centerLabelBottom="users"
-                  />
-                  <div className="w-full flex justify-center">
-                    <Legend items={analytics.topUsers} />
-                  </div>
-                </div>
-              ) : (
-                <div className="flex min-h-40 items-center justify-center text-sm text-slate-500">
-                  No active user data found
-                </div>
-              )}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col h-full min-h-[260px]">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-2 w-full">Top Sessions</div>
+              <div className="flex-1 min-h-0 w-full">
+                <CategoryLineChart items={analytics.topSessions} color="#f97316" totalLabel="sessions" />
+              </div>
             </div>
 
-            <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4 flex flex-col justify-center items-center">
-              <div className="text-xs md:text-sm font-semibold text-slate-300 mb-4 w-full">Risk Indicators</div>
-              {analytics.riskIndicators.length > 0 ? (
-                <div className="flex flex-col items-center gap-4 justify-center w-full">
-                  <Donut
-                    items={analytics.riskIndicators.slice(0, 5)}
-                    size={120}
-                    centerLabelTop={analytics.riskIndicators.reduce((sum, r) => sum + r.value, 0)}
-                    centerLabelBottom="risks"
-                  />
-                  <div className="w-full flex justify-center">
-                    <Legend items={analytics.riskIndicators.slice(0, 5)} />
-                  </div>
-                </div>
-              ) : (
-                <div className="flex min-h-40 items-center justify-center text-sm text-slate-500">
-                  No risk indicator data found
-                </div>
-              )}
-            </div>
-
-            <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4">
-              <div className="text-xs md:text-sm font-semibold text-slate-300 mb-3">Command Summary</div>
-              <div className="space-y-2 text-xs text-slate-400">
-                <div className="flex justify-between">
-                  <span>Safe Commands</span>
-                  <span className="font-bold text-emerald-400">
-                    {Math.max(stats.totalCommands - stats.suspiciousCount, 0)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Suspicious Commands</span>
-                  <span className="font-bold text-red-400">{stats.suspiciousCount}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Avg per Session</span>
-                  <span className="font-bold text-sky-400">{avgPerSession}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Loaded Rows</span>
-                  <span className="font-bold text-orange-400">{logs.length}</span>
-                </div>
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col h-full min-h-[260px]">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-2 w-full">Risk Indicators</div>
+              <div className="flex-1 min-h-0 w-full">
+                <CategoryLineChart items={analytics.riskIndicators} color="#ef4444" totalLabel="risks" />
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4">
-              <div className="text-xs md:text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-4 flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4" />
                 Top 5 Dangerous Commands Executed
               </div>
-              <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-800/50">
-                <CompactBarChart
-                  items={analytics.topSuspicious}
-                  emptyLabel="No suspicious command data found"
-                />
-              </div>
+              <CompactBarChart
+                items={analytics.topSuspicious}
+                emptyLabel="No suspicious command data found"
+              />
             </div>
 
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4">
-              <div className="text-xs md:text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-4 flex items-center gap-2">
                 <Terminal className="h-4 w-4" />
                 Command Keywords Distribution
               </div>
-              <div className="command-keywords-distribution-box w-full overflow-x-auto bg-slate-800/30 rounded-lg p-4 border border-slate-800/50">
-                <div className="min-w-[520px] md:min-w-0">
-                  <PayloadWordCloud words={commandPayloadWords} />
-                </div>
+              <div className="command-keywords-distribution-box w-full h-40">
+                <PayloadWordCloud words={commandPayloadWords} />
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-lg md:rounded-xl shadow-lg overflow-hidden">
-          <div ref={logsTableRef} className="p-3 md:p-4 border-b border-slate-800 bg-slate-800/50">
+        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl shadow-lg overflow-hidden">
+          <div ref={logsTableRef} className="p-3 md:p-4 border-b border-[var(--soc-border)] bg-[var(--soc-card)]">
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="text-xs md:text-sm font-semibold text-slate-300">
-                  Audit Log Entries ({pagination?.total ?? filteredLogs.length})
-                </div>
                 {selectedTimelinePoint && (
-                  <div className="mt-1 text-xs text-orange-300">
+                  <div className="text-xs text-orange-300">
                     Timeline filter: {formatTimelineBucketLabel(selectedTimelinePoint)}
                   </div>
                 )}
@@ -1234,26 +1416,13 @@ const HostMonitoring = () => {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-500" />
                 <input
                   type="text"
-                  placeholder="Filter by user..."
-                  value={searchUser}
+                  placeholder="Search user or command..."
+                  value={searchQuery}
                   onChange={(e) => {
                     setPage(1);
-                    setSearchUser(e.target.value);
+                    setSearchQuery(e.target.value);
                   }}
-                  className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 placeholder-slate-500"
-                />
-              </div>
-              <div className="flex-1 min-w-64 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-500" />
-                <input
-                  type="text"
-                  placeholder="Search command..."
-                  value={searchCommand}
-                  onChange={(e) => {
-                    setPage(1);
-                    setSearchCommand(e.target.value);
-                  }}
-                  className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 placeholder-slate-500"
+                  className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500"
                 />
               </div>
               <button
@@ -1261,7 +1430,7 @@ const HostMonitoring = () => {
                   setPage(1);
                   setSuspiciousOnly(!suspiciousOnly);
                 }}
-                className={`px-4 py-2 text-xs rounded-lg font-medium transition-colors ${
+                className={`px-4 py-2 text-[13px] rounded-lg font-medium transition-colors ${
                   suspiciousOnly
                     ? "bg-red-600 text-white"
                     : "bg-slate-700 text-slate-400 hover:bg-slate-600"
@@ -1273,7 +1442,7 @@ const HostMonitoring = () => {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-xs md:text-sm text-left whitespace-nowrap">
+            <table className="w-full text-[10px] md:text-[11px] text-left whitespace-nowrap">
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-800/70">
                   {["waktu", "user", "agent", "session id", "command", "status"].map((header) => (
@@ -1295,7 +1464,7 @@ const HostMonitoring = () => {
                         idx % 2 !== 0 ? "bg-slate-900/60" : ""
                       }`}
                     >
-                      <td className="px-2 md:px-4 py-1.5 md:py-3 text-slate-500 text-xs">
+                      <td className="px-2 md:px-4 py-1.5 md:py-3 text-slate-500 text-[10px] md:text-[11px]">
                         {new Date(log.timestamp).toLocaleString("en-US", {
                           month: "short",
                           day: "2-digit",
@@ -1305,15 +1474,15 @@ const HostMonitoring = () => {
                         })}
                       </td>
                       <td className="px-2 md:px-4 py-1.5 md:py-3">
-                        <span className="text-xs font-bold text-sky-300">{log.user}</span>
+                        <span className="text-[10px] md:text-[11px] font-bold text-sky-300">{log.user}</span>
                       </td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-3 text-xs text-slate-400">{log.agentName}</td>
+                      <td className="px-2 md:px-4 py-1.5 md:py-3 text-[10px] md:text-[11px] text-slate-400">{log.agentName}</td>
                       <td className="px-2 md:px-4 py-1.5 md:py-3">
                         <button
                           onClick={() =>
                             setSelectedSession(selectedSession === log.sessionId ? null : log.sessionId)
                           }
-                          className="text-xs font-mono text-purple-300 hover:text-purple-200 transition-colors"
+                          className="text-[10px] md:text-[11px] font-mono text-purple-300 hover:text-purple-200 transition-colors"
                         >
                           {log.sessionId}
                         </button>
@@ -1323,11 +1492,11 @@ const HostMonitoring = () => {
                       </td>
                       <td className="px-2 md:px-4 py-1.5 md:py-3">
                         {log.command.risk === "suspicious" ? (
-                          <span className="px-2 py-1 rounded-full text-xs font-bold bg-red-500/20 text-red-300">
+                          <span className="px-2 py-1 rounded-full text-[10px] md:text-[11px] font-bold bg-red-500/20 text-red-300">
                             Suspicious
                           </span>
                         ) : (
-                          <span className="px-2 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300">
+                          <span className="px-2 py-1 rounded-full text-[10px] md:text-[11px] font-bold bg-emerald-500/20 text-emerald-300">
                             Normal
                           </span>
                         )}
@@ -1336,7 +1505,7 @@ const HostMonitoring = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="px-2 md:px-4 py-10 text-center text-xs md:text-sm text-slate-500">
+                    <td colSpan={6} className="px-2 md:px-4 py-10 text-center text-[10px] md:text-[11px] text-slate-500">
                       No audit log entries found for the current filter.
                     </td>
                   </tr>
@@ -1377,7 +1546,7 @@ const HostMonitoring = () => {
             {/* Header */}
             <div className="sticky top-0 bg-slate-800 border-b border-slate-700 px-6 py-4 flex justify-between items-center">
               <div>
-                <h2 className="text-lg font-bold text-slate-100">Session Playback</h2>
+                <h2 className="text-base font-bold text-slate-100">Session Playback</h2>
                 <p className="text-xs text-slate-500 mt-0.5">{selectedSession}</p>
               </div>
               <button
@@ -1390,7 +1559,7 @@ const HostMonitoring = () => {
 
             {/* Session Commands */}
             <div className="p-6 space-y-4">
-              <div className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
+              <div className="text-xs font-semibold text-slate-300 mb-4 flex items-center gap-2">
                 <Clock className="h-4 w-4" />
                 Chronological Commands in This Session ({sessionCommands.length})
               </div>
@@ -1441,7 +1610,7 @@ const HostMonitoring = () => {
               ))}
 
               {sessionCommands.length === 0 && (
-                <div className="text-center py-8 text-slate-500">No commands found in this session</div>
+                <div className="text-center py-8 text-xs text-slate-500">No commands found in this session</div>
               )}
             </div>
 
@@ -1449,7 +1618,7 @@ const HostMonitoring = () => {
             <div className="sticky bottom-0 bg-slate-800 border-t border-slate-700 px-6 py-4 flex justify-end">
               <button
                 onClick={() => setSelectedSession(null)}
-                className="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg hover:bg-slate-600 transition-colors text-sm font-medium"
+                className="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg hover:bg-slate-600 transition-colors text-xs font-medium"
               >
                 Close
               </button>
@@ -1457,7 +1626,7 @@ const HostMonitoring = () => {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 

@@ -1,16 +1,14 @@
 import { useEffect, useState } from "react";
 import {
   AlertCircle,
-  Bell,
   CheckCircle,
   Clock,
   Eye,
   EyeOff,
   Plus,
-  RefreshCw,
   Trash2,
+  Users,
 } from "lucide-react";
-import Navbar from "../components/Navbar";
 import {
   addNewUser,
   deleteUserAccount,
@@ -18,7 +16,6 @@ import {
   restoreUserAccount,
   suspendUserAccount,
 } from "../services/userApi";
-import { fetchNotifications } from "../services/notificationApi";
 
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
@@ -26,8 +23,6 @@ const UserManagement = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [userStats, setUserStats] = useState({ total: 0, active: 0, pending: 0 });
-  const [notifications, setNotifications] = useState([]);
-  const [notificationsLoading, setNotificationsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showSuspendModal, setShowSuspendModal] = useState(false);
@@ -41,10 +36,6 @@ const UserManagement = () => {
   useEffect(() => {
     loadUsers();
   }, [currentPage]);
-
-  useEffect(() => {
-    loadNotifications();
-  }, []);
 
   const loadUsers = async () => {
     try {
@@ -160,21 +151,6 @@ const UserManagement = () => {
     }
   };
 
-  const loadNotifications = async () => {
-    try {
-      setNotificationsLoading(true);
-      const response = await fetchNotifications(1, 10);
-
-      if (response.success) {
-        setNotifications(response.notifications);
-      }
-    } catch (err) {
-      setError("Failed to load notifications: " + (err.response?.data?.message || err.message));
-    } finally {
-      setNotificationsLoading(false);
-    }
-  };
-
   const getRemainingTime = (pendingUntil) => {
     const now = new Date();
     const pending = new Date(pendingUntil);
@@ -200,111 +176,96 @@ const UserManagement = () => {
     return () => clearTimeout(timer);
   }, [error]);
 
-  const formatNotificationTime = (timestamp) =>
-    new Date(timestamp).toLocaleString("en-US", {
-      month: "short",
-      day: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
   return (
     <>
-      <Navbar />
-      <div className="min-h-screen bg-slate-950 text-slate-200 font-sans">
-        <div className="p-4 md:p-6 flex flex-col gap-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-6 shadow-lg flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex-1">
-              <h1 className="text-4xl font-bold text-white mb-2">User Management</h1>
-              <p className="text-slate-400">Manage user accounts and monitor admin login activity</p>
-            </div>
-
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors w-full sm:w-fit"
-            >
-              <Plus className="h-4 w-4" />
-              Add User
-            </button>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-5 shadow-lg">
-            <div className="flex flex-col gap-1 mb-4">
-              <p className="text-sm font-semibold text-white">Account Overview</p>
-              <p className="text-sm text-slate-400">A quick summary of current account status across the platform</p>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div className="relative overflow-hidden rounded-xl border border-sky-900/40 bg-sky-950/30 px-5 py-4">
-                <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-sky-500/10 blur-2xl" />
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-300/70">Total Accounts</p>
-                <p className="mt-3 text-3xl font-bold text-white">{userStats.total}</p>
-                <p className="mt-2 text-sm text-slate-400">All registered users in the system</p>
+    <div className="p-4 md:p-5 flex flex-col gap-4 w-full">
+          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-3 md:p-4 shadow-lg">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <h1 className="text-base font-bold text-white flex items-center gap-2">
+                  <Users className="h-4 w-4 text-sky-400" />
+                  User Management
+                </h1>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Manage user accounts and monitor admin login activity
+                </p>
               </div>
-
-              <div className="relative overflow-hidden rounded-xl border border-emerald-900/40 bg-emerald-950/25 px-5 py-4">
-                <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-emerald-400/10 blur-2xl" />
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-300/70">Active Accounts</p>
-                <p className="mt-3 text-3xl font-bold text-emerald-300">{userStats.active}</p>
-                <p className="mt-2 text-sm text-slate-400">Users who currently have normal access</p>
-              </div>
-
-              <div className="relative overflow-hidden rounded-xl border border-amber-900/40 bg-amber-950/25 px-5 py-4">
-                <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-amber-400/10 blur-2xl" />
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-300/70">Pending Accounts</p>
-                <p className="mt-3 text-3xl font-bold text-amber-300">{userStats.pending}</p>
-                <p className="mt-2 text-sm text-slate-400">Users who are temporarily restricted</p>
-              </div>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors w-full sm:w-fit"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add User
+              </button>
             </div>
           </div>
 
           {successMessage && (
-            <div className="p-4 bg-green-500/15 border border-green-500/30 rounded-xl text-green-300">
-              <p className="font-medium">Success: {successMessage}</p>
+            <div className="px-3 py-2 bg-green-500/15 border border-green-500/30 rounded-lg text-green-300">
+              <p className="text-[11px] font-medium">Success: {successMessage}</p>
             </div>
           )}
 
           {error && (
-            <div className="p-4 bg-red-500/15 border border-red-500/30 rounded-xl text-red-300">
-              <p className="font-medium">Error: {error}</p>
+            <div className="px-3 py-2 bg-red-500/15 border border-red-500/30 rounded-lg text-red-300">
+              <p className="text-[11px] font-medium">Error: {error}</p>
             </div>
           )}
 
-          <div className="mb-12 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg">
-            <div className="overflow-x-auto">
+          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg overflow-hidden shadow-lg">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 p-3 md:p-4 border-b border-[var(--soc-border)]">
+                Account Overview
+              </div>
+              <div className="grid grid-cols-3 gap-2 md:gap-3 p-3 md:p-4 border-b border-[var(--soc-border)]">
+                <div className="bg-sky-500/10 border border-sky-500/30 rounded p-2 md:p-3">
+                  <div className="text-[8px] md:text-[10px] text-sky-400 uppercase font-semibold">Total Accounts</div>
+                  <div className="text-sm md:text-lg font-black text-sky-300 mt-0.5 md:mt-1">{userStats.total}</div>
+                  <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">all registered users</div>
+                </div>
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded p-2 md:p-3">
+                  <div className="text-[8px] md:text-[10px] text-emerald-400 uppercase font-semibold">Active Accounts</div>
+                  <div className="text-sm md:text-lg font-black text-emerald-300 mt-0.5 md:mt-1">{userStats.active}</div>
+                  <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">users with normal access</div>
+                </div>
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded p-2 md:p-3">
+                  <div className="text-[8px] md:text-[10px] text-amber-400 uppercase font-semibold">Pending Accounts</div>
+                  <div className="text-sm md:text-lg font-black text-amber-300 mt-0.5 md:mt-1">{userStats.pending}</div>
+                  <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">users temporarily restricted</div>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
               {loading ? (
                 <div className="flex justify-center items-center py-12">
-                  <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-cyan-500"></div>
+                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-sky-400 border-t-transparent" />
                 </div>
               ) : users.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-slate-400">No users found</p>
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <p className="text-sm text-slate-400 font-medium">No users found</p>
                 </div>
               ) : (
-                <table className="w-full">
-                  <thead className="bg-sky-950/45 border-b border-sky-900/50">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-slate-300 font-semibold">Name</th>
-                      <th className="px-6 py-4 text-left text-slate-300 font-semibold">Email</th>
-                      <th className="px-6 py-4 text-left text-slate-300 font-semibold">Role</th>
-                      <th className="px-6 py-4 text-left text-slate-300 font-semibold">Status</th>
-                      <th className="px-6 py-4 text-left text-slate-300 font-semibold">Actions</th>
+                <table className="w-full text-[10px] md:text-[11px]">
+                  <thead>
+                    <tr className="border-b border-slate-800 bg-slate-800/70">
+                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Name</th>
+                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Email</th>
+                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Role</th>
+                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Status</th>
+                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {users.map((user) => {
+                  <tbody>
+                    {users.map((user, idx) => {
                       const remainingTime = user.status === "pending" ? getRemainingTime(user.pendingUntil) : null;
 
                       return (
-                        <tr key={user.id} className="hover:bg-slate-800/70 transition-colors">
-                          <td className="px-6 py-4">
-                            <div className="font-medium text-white">{user.name}</div>
+                        <tr key={user.id} className={`border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors ${idx % 2 !== 0 ? "bg-slate-900/30" : ""}`}>
+                          <td className="px-2 md:px-4 py-1.5 md:py-2">
+                            <div className="font-semibold text-slate-100">{user.name}</div>
                           </td>
-                          <td className="px-6 py-4 text-slate-300">{user.email}</td>
-                          <td className="px-6 py-4">
+                          <td className="px-2 md:px-4 py-1.5 md:py-2 text-slate-400">{user.email}</td>
+                          <td className="px-2 md:px-4 py-1.5 md:py-2">
                             <span
-                              className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                              className={`inline-flex rounded-full border px-1.5 py-0.5 text-[9px] md:text-[10px] font-semibold ${
                                 user.role === "admin"
                                   ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-300"
                                   : "border-slate-600 bg-slate-800 text-slate-300"
@@ -313,20 +274,20 @@ const UserManagement = () => {
                               {user.role === "admin" ? "Admin" : "User"}
                             </span>
                           </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
+                          <td className="px-2 md:px-4 py-1.5 md:py-2">
+                            <div className="flex items-center gap-1.5">
                               {user.status === "active" ? (
                                 <>
-                                  <CheckCircle className="h-4 w-4 text-green-500" />
+                                  <CheckCircle className="h-3.5 w-3.5 text-green-400" />
                                   <span className="text-green-400 font-medium">Active</span>
                                 </>
                               ) : (
                                 <>
-                                  <Clock className="h-4 w-4 text-yellow-500" />
+                                  <Clock className="h-3.5 w-3.5 text-yellow-400" />
                                   <span className="text-yellow-400 font-medium">
                                     Pending
                                     {remainingTime && (
-                                      <span className="text-xs text-yellow-300 ml-1">
+                                      <span className="text-[9px] md:text-[10px] text-yellow-300 ml-1">
                                         ({remainingTime.hours}h {remainingTime.minutes}m)
                                       </span>
                                     )}
@@ -335,25 +296,25 @@ const UserManagement = () => {
                               )}
                             </div>
                           </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
+                          <td className="px-2 md:px-4 py-1.5 md:py-2">
+                            <div className="flex items-center gap-1.5">
                               {user.status === "active" ? (
                                 <button
                                   onClick={() => handleSuspendUser(user)}
-                                  className="p-2 hover:bg-yellow-500/20 text-yellow-400 rounded transition-colors"
+                                  className="p-1.5 hover:bg-yellow-500/20 text-yellow-400 rounded transition-colors"
                                   title="Suspend for 2 hours"
                                   disabled={actionLoading}
                                 >
-                                  <Clock className="h-4 w-4" />
+                                  <Clock className="h-3.5 w-3.5" />
                                 </button>
                               ) : (
                                 <button
                                   onClick={() => handleRestoreUser(user)}
-                                  className="p-2 hover:bg-green-500/20 text-green-400 rounded transition-colors"
+                                  className="p-1.5 hover:bg-green-500/20 text-green-400 rounded transition-colors"
                                   title="Restore from pending"
                                   disabled={actionLoading}
                                 >
-                                  <CheckCircle className="h-4 w-4" />
+                                  <CheckCircle className="h-3.5 w-3.5" />
                                 </button>
                               )}
 
@@ -362,11 +323,11 @@ const UserManagement = () => {
                                   setSelectedUser(user);
                                   setShowDeleteModal(true);
                                 }}
-                                className="p-2 hover:bg-red-500/20 text-red-400 rounded transition-colors"
+                                className="p-1.5 hover:bg-red-500/20 text-red-400 rounded transition-colors"
                                 title="Delete user"
                                 disabled={actionLoading}
                               >
-                                <Trash2 className="h-4 w-4" />
+                                <Trash2 className="h-3.5 w-3.5" />
                               </button>
                             </div>
                           </td>
@@ -376,137 +337,91 @@ const UserManagement = () => {
                   </tbody>
                 </table>
               )}
-            </div>
-          </div>
-
-          <div className="mb-12 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg">
-            <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4 bg-slate-900/80">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-cyan-500/10 p-2 text-cyan-300">
-                  <Bell className="h-4 w-4" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-white">Admin Login Notifications</h2>
-                  <p className="text-sm text-slate-400">Recent admin sign-in activity</p>
-                </div>
               </div>
-              <button
-                onClick={loadNotifications}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-700"
-                disabled={notificationsLoading}
-              >
-                <RefreshCw className={`h-4 w-4 ${notificationsLoading ? "animate-spin" : ""}`} />
-                Refresh
-              </button>
-            </div>
 
-            <div className="overflow-x-auto">
-              {notificationsLoading ? (
-                <div className="flex justify-center items-center py-12">
-                  <div className="animate-spin rounded-full h-10 w-10 border-4 border-cyan-500 border-t-blue-500"></div>
-                </div>
-              ) : notifications.length === 0 ? (
-                <div className="px-6 py-12 text-center text-slate-400">No login notifications found</div>
-              ) : (
-                <table className="w-full">
-                  <thead className="bg-cyan-950/35 border-b border-cyan-900/40">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-slate-300 font-semibold">ID Notifikasi</th>
-                      <th className="px-6 py-4 text-left text-slate-300 font-semibold">Deskripsi</th>
-                      <th className="px-6 py-4 text-left text-slate-300 font-semibold">Timestamp</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {notifications.map((notification) => (
-                      <tr key={notification.id} className="hover:bg-slate-800/70 transition-colors">
-                        <td className="px-6 py-4 text-cyan-300 font-mono text-sm">{notification.id_notifikasi}</td>
-                        <td className="px-6 py-4 text-slate-200">{notification.deskripsi}</td>
-                        <td className="px-6 py-4 text-slate-400 text-sm">{formatNotificationTime(notification.timestamp)}</td>
-                      </tr>
+              {totalPages > 1 && (
+                <div className="border-t border-slate-800 bg-slate-900/50 px-4 py-3 flex flex-col md:flex-row items-start md:items-center justify-between gap-2">
+                  <div className="text-[10px] md:text-[11px] font-mono text-slate-500">
+                    <span className="font-bold text-sky-400">PAGE </span>
+                    <span className="font-bold text-white">{currentPage}</span> / {totalPages}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                      disabled={currentPage === 1}
+                      className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
+                    >
+                      PREV
+                    </button>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={`min-w-[28px] rounded border px-2 py-1.5 text-[10px] md:text-[11px] font-bold transition-all ${
+                          currentPage === page
+                            ? "border-sky-600/50 bg-sky-600/20 text-sky-400"
+                            : "border-slate-700 bg-slate-800 text-slate-300 hover:border-sky-500/50 hover:bg-sky-900/20"
+                        }`}
+                      >
+                        {page}
+                      </button>
                     ))}
-                  </tbody>
-                </table>
+                    <button
+                      onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                      disabled={currentPage === totalPages}
+                      className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
+                    >
+                      NEXT
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
-          </div>
-
-          {totalPages > 1 && (
-            <div className="flex justify-center items-center gap-2 mt-4">
-              <button
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Previous
-              </button>
-
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                <button
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
-                  className={`px-4 py-2 rounded ${
-                    currentPage === page ? "bg-cyan-600 text-white" : "bg-slate-700 hover:bg-slate-600 text-white"
-                  }`}
-                >
-                  {page}
-                </button>
-              ))}
-
-              <button
-                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                disabled={currentPage === totalPages}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Next
-              </button>
-            </div>
-          )}
         </div>
-      </div>
 
-      {showAddModal && (
+        {showAddModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 max-w-md w-full">
-            <h2 className="text-2xl font-bold text-white mb-4">Add New User</h2>
+          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-5 max-w-md w-full">
+            <h2 className="text-base md:text-lg font-bold text-white mb-4">Add New User</h2>
             <form onSubmit={handleAddUser} className="space-y-4">
               <div>
-                <label className="block text-slate-300 font-medium mb-2">Name</label>
+                <label className="block text-[11px] text-slate-300 font-medium mb-1.5">Name</label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full bg-slate-700 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-cyan-500"
+                  className="w-full bg-[var(--soc-card)] border border-[var(--soc-border)] rounded px-3 py-2 text-xs text-[var(--soc-text-primary)] placeholder-slate-600 focus:outline-none focus:border-sky-500/50"
                   placeholder="Enter name"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 font-medium mb-2">Email</label>
+                <label className="block text-[11px] text-slate-300 font-medium mb-1.5">Email</label>
                 <input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full bg-slate-700 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-cyan-500"
+                  className="w-full bg-[var(--soc-card)] border border-[var(--soc-border)] rounded px-3 py-2 text-xs text-[var(--soc-text-primary)] placeholder-slate-600 focus:outline-none focus:border-sky-500/50"
                   placeholder="Enter email"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 font-medium mb-2">Password</label>
+                <label className="block text-[11px] text-slate-300 font-medium mb-1.5">Password</label>
                 <div className="relative">
                   <input
                     type={showPassword ? "text" : "password"}
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full bg-slate-700 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-[var(--soc-card)] border border-[var(--soc-border)] rounded px-3 py-2 text-xs text-[var(--soc-text-primary)] placeholder-slate-600 focus:outline-none focus:border-sky-500/50"
                     placeholder="Enter password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-300"
+                    className="absolute right-3 top-2 text-slate-400 hover:text-slate-300"
                   >
-                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
@@ -515,14 +430,14 @@ const UserManagement = () => {
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded font-medium transition-colors"
+                  className="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-[var(--soc-border)] text-white rounded text-xs font-medium transition-colors"
                   disabled={actionLoading}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium transition-colors"
+                  className="flex-1 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded text-xs font-medium transition-colors"
                   disabled={actionLoading}
                 >
                   {actionLoading ? "Loading..." : "Add User"}
@@ -535,12 +450,12 @@ const UserManagement = () => {
 
       {showDeleteModal && selectedUser && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 max-w-md w-full">
+          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-5 max-w-md w-full">
             <div className="flex items-center gap-3 mb-4">
-              <AlertCircle className="h-6 w-6 text-red-500" />
-              <h2 className="text-2xl font-bold text-white">Delete User?</h2>
+              <AlertCircle className="h-5 w-5 text-red-400" />
+              <h2 className="text-base md:text-lg font-bold text-white">Delete User?</h2>
             </div>
-            <p className="text-slate-300 mb-6">
+            <p className="text-xs text-slate-300 mb-6">
               Are you sure you want to delete <span className="font-semibold">'{selectedUser.name}'</span>? This action
               cannot be undone.
             </p>
@@ -550,14 +465,14 @@ const UserManagement = () => {
                   setShowDeleteModal(false);
                   setSelectedUser(null);
                 }}
-                className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded font-medium transition-colors"
+                className="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-[var(--soc-border)] text-white rounded text-xs font-medium transition-colors"
                 disabled={actionLoading}
               >
                 Cancel
               </button>
               <button
                 onClick={handleDeleteUser}
-                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-medium transition-colors"
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-medium transition-colors"
                 disabled={actionLoading}
               >
                 {actionLoading ? "Loading..." : "Delete"}
@@ -569,12 +484,12 @@ const UserManagement = () => {
 
       {showSuspendModal && selectedUser && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 max-w-md w-full">
+          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-5 max-w-md w-full">
             <div className="flex items-center gap-3 mb-4">
-              <Clock className="h-6 w-6 text-yellow-500" />
-              <h2 className="text-2xl font-bold text-white">Suspend User?</h2>
+              <Clock className="h-5 w-5 text-yellow-400" />
+              <h2 className="text-base md:text-lg font-bold text-white">Suspend User?</h2>
             </div>
-            <p className="text-slate-300 mb-6">
+            <p className="text-xs text-slate-300 mb-6">
               Are you sure you want to suspend <span className="font-semibold">'{selectedUser.name}'</span> for 2 hours?
               The user will not be able to sign in during this period.
             </p>
@@ -584,14 +499,14 @@ const UserManagement = () => {
                   setShowSuspendModal(false);
                   setSelectedUser(null);
                 }}
-                className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded font-medium transition-colors"
+                className="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-[var(--soc-border)] text-white rounded text-xs font-medium transition-colors"
                 disabled={actionLoading}
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmSuspend}
-                className="flex-1 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded font-medium transition-colors"
+                className="flex-1 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded text-xs font-medium transition-colors"
                 disabled={actionLoading}
               >
                 {actionLoading ? "Loading..." : "Suspend"}

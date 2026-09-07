@@ -1,0 +1,46 @@
+import { AlertTriangle, Inbox, SearchX } from "lucide-react";
+
+const VARIANTS = {
+  empty: {
+    icon: Inbox,
+    title: "No data available",
+    description: "There is no data to display at this time.",
+  },
+  error: {
+    icon: AlertTriangle,
+    title: "Something went wrong",
+    description: "An error occurred while loading data.",
+  },
+  noResults: {
+    icon: SearchX,
+    title: "No results found",
+    description: "Try adjusting your search or filters.",
+  },
+};
+
+export default function EmptyState({
+  variant = "empty",
+  title,
+  description,
+  icon: CustomIcon,
+  action,
+  className = "",
+}) {
+  const defaults = VARIANTS[variant] || VARIANTS.empty;
+  const Icon = CustomIcon || defaults.icon;
+
+  return (
+    <div className={`flex flex-col items-center justify-center py-12 px-6 text-center ${className}`}>
+      <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-slate-800/50 border border-slate-700/50 mb-4">
+        <Icon className="h-6 w-6 text-slate-500" />
+      </div>
+      <h3 className="text-sm font-semibold text-slate-300 mb-1">
+        {title || defaults.title}
+      </h3>
+      <p className="text-xs text-slate-500 max-w-xs mb-4">
+        {description || defaults.description}
+      </p>
+      {action && <div>{action}</div>}
+    </div>
+  );
+}

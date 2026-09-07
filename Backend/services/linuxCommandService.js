@@ -13,7 +13,8 @@ import {
   buildContainsClause,
   parseBoolean,
   addDateRange,
-  normalizePagination
+  normalizePagination,
+  getHistogramInterval
 } from "../utils/esHelpers.js";
 
 // Fungsi pembantu internal (tidak perlu diekspor)
@@ -383,7 +384,12 @@ export async function listSuspiciousLinuxCommands(query) {
   };
 }
 
-export async function getLinuxCommandStats() {
+export async function getLinuxCommandStats(query) {
+  const { start, end } = query;
+
+  const must = buildLinuxCommandMustClauses();
+  addDateRange(must, start, end);
+
   const response = unwrapEsResponse(
     await es.search({
       index: elastic.index,
@@ -391,13 +397,13 @@ export async function getLinuxCommandStats() {
       track_total_hits: true,
       query: {
         bool: {
-          must: buildLinuxCommandMustClauses()
+          must
         }
       },
       aggs: {
         total_sessions: {
           cardinality: {
-            field: "linux.session.keyword"
+            field: "linux.session"
           }
         },
         total_users: {
@@ -456,17 +462,27 @@ export async function getLinuxCommandStats() {
 }
 
 export async function getLinuxCommandTimeline(query) {
-  const minutes = Math.max(parseInt(query.minutes || "60", 10), 1);
-  const { user } = query;
+  const { start, end, user } = query;
+
+  let minutes = Math.max(parseInt(query.minutes || "60", 10), 1);
+  if (start && end) {
+    const durationMs = Math.max(new Date(end).getTime() - new Date(start).getTime(), 1);
+    minutes = Math.max(Math.ceil(durationMs / 60000), 1);
+  }
+
+  const rangeClause = {};
+  if (start) rangeClause.gte = start;
+  if (end) rangeClause.lte = end;
+  if (!start && !end) {
+    rangeClause.gte = `now-${minutes}m`;
+    rangeClause.lte = "now";
+  }
 
   const must = [
     ...buildLinuxCommandMustClauses(),
     {
       range: {
-        "@timestamp": {
-          gte: `now-${minutes}m`,
-          lte: "now"
-        }
+        "@timestamp": rangeClause
       }
     }
   ];
@@ -485,7 +501,7 @@ export async function getLinuxCommandTimeline(query) {
         per_minute: {
           date_histogram: {
             field: "@timestamp",
-            fixed_interval: "1m",
+            fixed_interval: getHistogramInterval(minutes),
             min_doc_count: 0
           },
           aggs: {

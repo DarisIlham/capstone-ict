@@ -14,7 +14,7 @@ const BASE = '/api/ml';
 
 export function getPredictions(params = {}) {
   // Set default limit to 10000 to fetch all predictions (not just 20)
-  const fullParams = { limit: 10000, ...params };
+  const fullParams = { limit: 10000000, ...params };
   const qs = new URLSearchParams(fullParams).toString();
   const url = qs ? `${BASE}/predictions?${qs}` : `${BASE}/predictions`;
   return fetchJson(url);
@@ -28,9 +28,10 @@ export function getStats() {
   return fetchJson(`${BASE}/predictions/stats`);
 }
 
-export function getTimeline(minutes = 60, end) {
+export function getTimeline(minutes = 60, options = {}) {
   const params = new URLSearchParams({ minutes: String(minutes) });
-  if (end) params.set('end', end);
+  if (options?.start) params.set('start', options.start);
+  if (options?.end) params.set('end', options.end);
   const url = `${BASE}/predictions/timeline?${params.toString()}`;
   return fetchJson(url);
 }

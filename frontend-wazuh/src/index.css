@@ -1,27 +1,93 @@
 @import "tailwindcss";
 
+/* =============================================
+   THEME TOKENS - Centralized semantic design system
+   Both dark and light themes use the SAME --soc-*
+   semantic tokens. Utility classes and charts read
+   these variables so the whole app flips correctly.
+   ============================================= */
+
+/* ----- DARK THEME (default): lighter navy ----- */
+:root,
 :root[data-theme="dark"] {
+  font-size: 24px;
   color-scheme: dark;
+
+  /* Surfaces */
+  --soc-bg: #0B1220;            /* page background          */
+  --soc-surface: #0F172A;       /* secondary background     */
+  --soc-card: #111C2E;          /* card / panel             */
+  --soc-elevated: #162235;      /* elevated panel           */
+  --soc-border: #22324A;        /* visible border           */
+  --soc-border-strong: #2E4060; /* hover / selected border  */
+
+  /* Text */
+  --soc-text-primary: #E2E8F0;
+  --soc-text-secondary: #94A3B8;
+  --soc-text-muted: #64748B;
+  --soc-text-faint: #4B5A74;
+
+  /* Accent / semantic */
+  --soc-accent: #38BDF8;
+  --soc-success: #34D399;
+  --soc-warning: #FBBF24;
+  --soc-high: #FB923C;
+  --soc-critical: #F87171;
+
+  /* Tailwind slate remap for existing pages (dark navy) */
+  --color-slate-950: #0B1220;
+  --color-slate-900: #0F172A;
+  --color-slate-800: #111C2E;
+  --color-slate-700: #22324A;
+  --color-slate-600: #475569;
+  --color-slate-500: #64748B;
+  --color-slate-400: #94A3B8;
+  --color-slate-300: #CBD5E1;
+  --color-slate-200: #E2E8F0;
+  --color-slate-100: #EEF2F7;
+  --color-slate-50: #F8FAFC;
 }
 
-:root[data-theme="dark"] body {
-  background: #020617;
-  color: #e2e8f0;
+:root[data-theme="dark"] body,
+:root body {
+  background: var(--soc-bg);
+  color: var(--soc-text-primary);
 }
 
+/* ----- LIGHT THEME: real light palette ----- */
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --color-slate-950: #eef4fb;
-  --color-slate-900: #f8fbff;
-  --color-slate-800: #e8f0f8;
-  --color-slate-700: #d7e2ee;
-  --color-slate-600: #c3cfdd;
-  --color-slate-500: #64748b;
-  --color-slate-400: #475569;
-  --color-slate-300: #334155;
-  --color-slate-200: #1f2937;
-  --color-slate-100: #0f172a;
+  --soc-bg: #F5F7FA;
+  --soc-surface: #F8FAFC;
+  --soc-card: #FFFFFF;
+  --soc-elevated: #FFFFFF;
+  --soc-border: #D7DEE8;
+  --soc-border-strong: #C2CDDA;
+
+  --soc-text-primary: #0F172A;
+  --soc-text-secondary: #475569;
+  --soc-text-muted: #64748B;
+  --soc-text-faint: #94A3B8;
+
+  --soc-accent: #0284C7;
+  --soc-success: #059669;
+  --soc-warning: #D97706;
+  --soc-high: #EA580C;
+  --soc-critical: #DC2626;
+
+  /* Tailwind slate remap for existing pages (light) */
+  --color-slate-950: #F5F7FA;
+  --color-slate-900: #FFFFFF;
+  --color-slate-800: #F1F5F9;
+  --color-slate-700: #E2E8F0;
+  --color-slate-600: #CBD5E1;
+  --color-slate-500: #94A3B8;
+  --color-slate-400: #64748B;
+  --color-slate-300: #475569;
+  --color-slate-200: #334155;
+  --color-slate-100: #1E293B;
+  --color-slate-50: #0F172A;
 
   --color-sky-950: #f0f9ff;
   --color-sky-900: #e0f2fe;
@@ -98,201 +164,168 @@
 }
 
 :root[data-theme="light"] body {
-  background: #eef4fb;
-  color: #1f2937;
+  background: var(--soc-bg);
+  color: var(--soc-text-primary);
 }
 
-/* Light-mode color remap for the existing dark Tailwind classes. */
-:root[data-theme="light"] .text-white,
-:root[data-theme="light"] [class~="hover:text-white"]:hover {
-  color: #0f172a !important;
-}
+/* =============================================
+   Light-mode tuning that the variable palette
+   cannot express (overlay backdrops and colored
+   buttons that must keep white label text).
+   ============================================= */
 
+:root[data-theme="light"] [class~="bg-black/40"] { background-color: rgba(15, 23, 42, 0.18) !important; }
+:root[data-theme="light"] [class~="bg-black/60"] { background-color: rgba(248, 251, 255, 0.94) !important; }
+:root[data-theme="light"] [class~="bg-black/70"],
+:root[data-theme="light"] [class~="bg-black/80"] { background-color: rgba(15, 23, 42, 0.26) !important; }
+
+/* Default: white text becomes dark so headings/titles are readable on
+   light surfaces across all pages. */
+:root[data-theme="light"] .text-white { color: var(--soc-text-primary) !important; }
+
+/* Colored buttons keep white label text */
 :root[data-theme="light"] [class~="bg-sky-600"][class~="text-white"],
+:root[data-theme="light"] [class~="bg-sky-700"][class~="text-white"],
 :root[data-theme="light"] [class~="bg-sky-500"][class~="text-white"],
 :root[data-theme="light"] [class~="bg-blue-600"][class~="text-white"],
+:root[data-theme="light"] [class~="bg-blue-700"][class~="text-white"],
 :root[data-theme="light"] [class~="bg-cyan-600"][class~="text-white"],
 :root[data-theme="light"] [class~="bg-red-600"][class~="text-white"],
+:root[data-theme="light"] [class~="bg-red-700"][class~="text-white"],
 :root[data-theme="light"] [class~="from-blue-600"][class~="text-white"],
-:root[data-theme="light"] [class~="from-sky-600"][class~="text-white"] {
-  color: #ffffff !important;
-}
+:root[data-theme="light"] [class~="from-sky-600"][class~="text-white"] { color: #ffffff !important; }
 
-:root[data-theme="light"] [class~="bg-slate-950"] {
-  background-color: #eef4fb !important;
-}
-
-:root[data-theme="light"] [class~="bg-slate-950/50"],
-:root[data-theme="light"] [class~="bg-slate-950/55"] {
-  background-color: rgba(248, 251, 255, 0.9) !important;
-}
-
-:root[data-theme="light"] [class~="bg-slate-900"],
-:root[data-theme="light"] [class~="bg-slate-900/95"],
-:root[data-theme="light"] [class~="bg-slate-900/90"] {
-  background-color: rgba(255, 255, 255, 0.96) !important;
-}
-
-:root[data-theme="light"] [class~="bg-slate-900/60"],
-:root[data-theme="light"] [class~="bg-slate-900/50"],
-:root[data-theme="light"] [class~="bg-slate-900/40"],
-:root[data-theme="light"] [class~="bg-slate-900/30"],
-:root[data-theme="light"] [class~="bg-slate-900/20"],
-:root[data-theme="light"] [class~="bg-slate-900/10"] {
-  background-color: rgba(255, 255, 255, 0.72) !important;
-}
-
-:root[data-theme="light"] [class~="bg-slate-800"],
-:root[data-theme="light"] [class~="bg-slate-800/80"],
-:root[data-theme="light"] [class~="bg-slate-800/70"],
-:root[data-theme="light"] [class~="bg-slate-800/60"],
-:root[data-theme="light"] [class~="bg-slate-800/50"] {
-  background-color: rgba(238, 244, 251, 0.92) !important;
-}
-
-:root[data-theme="light"] [class~="bg-slate-800/40"],
-:root[data-theme="light"] [class~="bg-slate-800/30"] {
-  background-color: rgba(232, 240, 248, 0.72) !important;
-}
-
-:root[data-theme="light"] [class~="bg-slate-700"],
-:root[data-theme="light"] [class~="bg-slate-700/60"],
-:root[data-theme="light"] [class~="bg-slate-700/50"],
-:root[data-theme="light"] [class~="bg-slate-700/30"] {
-  background-color: rgba(224, 232, 242, 0.92) !important;
-}
-
-:root[data-theme="light"] [class~="bg-slate-600"],
-:root[data-theme="light"] [class~="bg-slate-600/30"] {
-  background-color: rgba(204, 216, 230, 0.88) !important;
-}
-
-:root[data-theme="light"] [class~="hover:bg-slate-900"]:hover,
-:root[data-theme="light"] [class~="hover:bg-slate-800"]:hover,
-:root[data-theme="light"] [class~="hover:bg-slate-800/60"]:hover,
-:root[data-theme="light"] [class~="hover:bg-slate-800/50"]:hover,
-:root[data-theme="light"] [class~="hover:bg-slate-800/40"]:hover,
-:root[data-theme="light"] [class~="hover:bg-slate-800/30"]:hover,
-:root[data-theme="light"] [class~="hover:bg-slate-700"]:hover,
-:root[data-theme="light"] [class~="hover:bg-slate-700/50"]:hover,
-:root[data-theme="light"] [class~="hover:bg-slate-600"]:hover {
-  background-color: rgba(218, 229, 241, 0.95) !important;
-}
-
-:root[data-theme="light"] [class~="bg-black/40"] {
-  background-color: rgba(15, 23, 42, 0.16) !important;
-}
-
-:root[data-theme="light"] [class~="bg-black/60"] {
-  background-color: rgba(248, 251, 255, 0.9) !important;
-}
-
-:root[data-theme="light"] [class~="bg-black/70"],
-:root[data-theme="light"] [class~="bg-black/80"] {
-  background-color: rgba(15, 23, 42, 0.24) !important;
-}
-
-:root[data-theme="light"] [class~="bg-red-950/60"],
-:root[data-theme="light"] [class~="bg-red-950/50"],
-:root[data-theme="light"] [class~="bg-rose-950/50"] {
-  background-color: rgba(255, 241, 242, 0.9) !important;
-}
-
-:root[data-theme="light"] [class~="bg-red-900/50"],
-:root[data-theme="light"] [class~="bg-red-900/30"] {
-  background-color: rgba(254, 226, 226, 0.56) !important;
-}
-
-:root[data-theme="light"] [class~="bg-green-900/30"] {
-  background-color: rgba(220, 252, 231, 0.66) !important;
-}
-
-:root[data-theme="light"] [class~="bg-yellow-900/50"],
-:root[data-theme="light"] [class~="bg-yellow-900/30"] {
-  background-color: rgba(254, 249, 195, 0.72) !important;
-}
-
-:root[data-theme="light"] [class~="bg-orange-900/50"],
-:root[data-theme="light"] [class~="bg-orange-900/30"] {
-  background-color: rgba(255, 237, 213, 0.72) !important;
-}
-
-:root[data-theme="light"] [class~="bg-emerald-950/50"],
-:root[data-theme="light"] [class~="bg-emerald-950/30"],
-:root[data-theme="light"] [class~="bg-emerald-950/25"],
-:root[data-theme="light"] [class~="bg-green-950/30"] {
-  background-color: rgba(236, 253, 245, 0.9) !important;
-}
-
-:root[data-theme="light"] [class~="bg-amber-950/50"],
-:root[data-theme="light"] [class~="bg-amber-950/25"] {
-  background-color: rgba(255, 251, 235, 0.86) !important;
-}
-
-:root[data-theme="light"] [class~="bg-sky-950/45"],
-:root[data-theme="light"] [class~="bg-sky-950/30"],
-:root[data-theme="light"] [class~="bg-cyan-950/35"] {
-  background-color: rgba(240, 249, 255, 0.82) !important;
-}
+/* =============================================
+   Light-mode fixes for chart SVG that still uses
+   hardcoded hex fills (existing team pages). The
+   centralized --color-slate-* variables already flip
+   all `bg-|text-|border-slate-*` utilities.
+   ============================================= */
 
 :root[data-theme="light"] svg text[fill="#f1f5f9"],
 :root[data-theme="light"] svg text[fill="#e2e8f0"],
-:root[data-theme="light"] svg text[fill="#cbd5e1"] {
-  fill: #1f2937 !important;
+:root[data-theme="light"] svg text[fill="#cbd5e1"],
+:root[data-theme="light"] svg text[fill="#E2E8F0"],
+:root[data-theme="light"] svg text[fill="#CBD5E1"] {
+  fill: #334155 !important;
 }
-
 :root[data-theme="light"] svg text[fill="#94a3b8"],
-:root[data-theme="light"] svg text[fill="#64748b"] {
+:root[data-theme="light"] svg text[fill="#64748b"],
+:root[data-theme="light"] svg text[fill="#94A3B8"],
+:root[data-theme="light"] svg text[fill="#64748B"] {
   fill: #64748b !important;
 }
-
-:root[data-theme="light"] svg line[stroke="#1e293b"],
-:root[data-theme="light"] svg line[stroke="#334155"],
-:root[data-theme="light"] svg circle[stroke="#1e293b"],
-:root[data-theme="light"] svg circle[stroke="#334155"],
-:root[data-theme="light"] svg rect[stroke="#334155"] {
-  stroke: #cbd5e1 !important;
+:root[data-theme="light"] svg text[fill="#22324a"],
+:root[data-theme="light"] svg text[fill="#22324A"] {
+  fill: #94a3b8 !important;
 }
 
-:root[data-theme="light"] svg rect[fill="#0f172a"],
 :root[data-theme="light"] svg rect[fill="#1e293b"],
-:root[data-theme="light"] svg circle[fill="#1e293b"] {
-  fill: #e8f0f8 !important;
+:root[data-theme="light"] svg rect[fill="#1E293B"],
+:root[data-theme="light"] svg rect[fill="#0f172a"],
+:root[data-theme="light"] svg rect[fill="#0F172A"],
+:root[data-theme="light"] svg circle[fill="#1e293b"],
+:root[data-theme="light"] svg circle[fill="#1E293B"] {
+  fill: #eef4fb !important;
 }
 
+:root[data-theme="light"] svg rect[fill="#111c2e"],
+:root[data-theme="light"] svg rect[fill="#111C2E"] {
+  fill: #ffffff !important;
+}
+
+/* Grid / axis lines in the new lighter-navy palette */
+:root[data-theme="light"] svg line[stroke="#22324a"],
+:root[data-theme="light"] svg line[stroke="#22324A"],
+:root[data-theme="light"] svg line[stroke="#1e293b"],
+:root[data-theme="light"] svg line[stroke="#1E293B"],
+:root[data-theme="light"] svg circle[stroke="#1e293b"],
+:root[data-theme="light"] svg circle[stroke="#1E293B"],
+:root[data-theme="light"] svg rect[stroke="#334155"] {
+  stroke: #d3dbe6 !important;
+}
+
+/* Word cloud / distribution backgrounds */
 :root[data-theme="light"] .command-keywords-distribution-box {
-  background-color: rgba(232, 240, 248, 0.72) !important;
+  background-color: #eef4fb !important;
+}
+:root[data-theme="light"] .command-word-cloud-bg {
+  fill: #eef4fb !important;
 }
 
-:root[data-theme="light"] .command-word-cloud-bg {
-  fill: rgba(232, 240, 248, 0.72) !important;
+/* Fallback for any hardcoded rounded-tooltip backgrounds */
+:root[data-theme="light"] [class~="bg-black/80"][class~="text-white"] { background-color: #ffffff !important; }
+
+
+/* =============================================
+   Global Layout Styles
+   ============================================= */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--soc-border) transparent;
 }
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--soc-border);
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--soc-border-strong);
+}
+
+/* Focus styles for accessibility */
+*:focus-visible {
+  outline: 2px solid var(--soc-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* =============================================
+   Animations
+   ============================================= */
 
 @layer utilities {
   @keyframes blob {
-    0%, 100% {
-      transform: translate(0, 0) scale(1);
-    }
-    25% {
-      transform: translate(20px, -50px) scale(1.1);
-    }
-    50% {
-      transform: translate(-20px, 20px) scale(0.9);
-    }
-    75% {
-      transform: translate(50px, 50px) scale(1.05);
-    }
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    25% { transform: translate(20px, -50px) scale(1.1); }
+    50% { transform: translate(-20px, 20px) scale(0.9); }
+    75% { transform: translate(50px, 50px) scale(1.05); }
   }
 
   @keyframes slide-in-right {
-    from {
-      transform: translateX(400px);
-      opacity: 0;
-    }
-    to {
-      transform: translateX(0);
-      opacity: 1;
-    }
+    from { transform: translateX(400px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+
+  @keyframes slide-in-left {
+    from { transform: translateX(-280px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes fade-in-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
   }
 
   .animate-blob {
@@ -303,18 +336,74 @@
     animation: slide-in-right 0.3s ease-out;
   }
 
+  .animate-slide-in-left {
+    animation: slide-in-left 0.3s ease-out;
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.2s ease-out;
+  }
+
+  .animate-fade-in-up {
+    animation: fade-in-up 0.25s ease-out;
+  }
+
+  .animate-pulse-dot {
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+
   .animation-delay-2000 {
     animation-delay: 2s;
   }
 }
 
-/* Hide native password reveal/clear icons in various browsers */
+/* =============================================
+   SOC Component Utility Classes
+   ============================================= */
+
+.soc-panel {
+  background: var(--soc-card);
+  border: 1px solid var(--soc-border);
+  border-radius: 8px;
+}
+
+.soc-panel-elevated {
+  background: var(--soc-elevated);
+  border: 1px solid var(--soc-border);
+  border-radius: 8px;
+}
+
+.soc-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--soc-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.soc-metric-value {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.soc-severity-critical { color: var(--soc-critical); }
+.soc-severity-high { color: var(--soc-high); }
+.soc-severity-medium { color: var(--soc-warning); }
+.soc-severity-low { color: var(--soc-success); }
+.soc-severity-info { color: var(--soc-accent); }
+
+/* =============================================
+   Password Input Override
+   ============================================= */
+
 input[type="password"]::-ms-reveal,
 input[type="password"]::-ms-clear {
   display: none;
 }
 
-/* WebKit/Blink engines: try hiding decoration container/button */
 input[type="password"]::-webkit-textfield-decoration-container,
 input[type="password"]::-webkit-textfield-decoration-button,
 input[type="password"]::-webkit-textfield-decoration-wrapper {
@@ -322,7 +411,6 @@ input[type="password"]::-webkit-textfield-decoration-wrapper {
   -webkit-appearance: none !important;
 }
 
-/* Fallback: remove default appearance so our toggle icon is used */
 input[type="password"] {
   -webkit-appearance: none;
   appearance: none;

@@ -1,5 +1,24 @@
 // utils/esHelpers.js
 
+const MINUTE_MS = 60 * 1000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+// Menentukan interval histogram yang adaptif terhadap rentang waktu (dalam menit)
+// agar jumlah bucket tetap wajar dan di bawah limit search.max_buckets (65536).
+export function getHistogramInterval(minutes) {
+  const durationMs = Math.max(Number(minutes) || 1, 1) * MINUTE_MS;
+
+  if (durationMs <= HOUR_MS) return "1m";
+  if (durationMs <= 6 * HOUR_MS) return "5m";
+  if (durationMs <= DAY_MS) return "15m";
+  if (durationMs <= 7 * DAY_MS) return "1h";
+  if (durationMs <= 30 * DAY_MS) return "3h";
+  if (durationMs <= 90 * DAY_MS) return "12h";
+  if (durationMs <= 366 * DAY_MS) return "1d";
+  return "7d";
+}
+
 export function unwrapEsResponse(response) {
   if (response && response.body) {
     return response.body;

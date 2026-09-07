@@ -1,6 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Navbar from "../components/Navbar";
+import { useSearchParams } from "react-router-dom";
 import { API_BASE_URL } from "../config/Api";
+import DateRangeFilter from "../components/DateRangeFilter";
+import RangeFilter from "../components/RangeFilter";
+import {
+  createDefaultDateRange,
+  normalizeDateRange,
+  getIsoDateRange,
+  getDateRangeMinutes,
+  toDateTimeLocalValue,
+} from "../utils/dateRange";
 import {
   AlertTriangle,
   Copy,
@@ -10,10 +19,10 @@ import {
   FileText,
   AlertCircle,
   BarChart3,
-  RefreshCw,
-  FolderOpen,
   ShieldCheck,
-  Network,
+  ChevronDown,
+  CalendarRange,
+  X,
 } from "lucide-react";
 
 const API_ROOT = `${API_BASE_URL}/api`;
@@ -267,23 +276,6 @@ async function fetchJson(url) {
   return data;
 }
 
-const RangeFilter = ({ rangeKey, onRangeChange }) => (
-  <div className="flex items-center gap-1 md:gap-2">
-    <span className="hidden sm:inline text-xs text-slate-500">Range</span>
-    <div className="flex bg-slate-800 rounded p-0.5 border border-slate-700 gap-0.5">
-      {["1h", "24h", "7d", "30d"].map((k) => (
-        <button
-          key={k}
-          onClick={() => onRangeChange(k)}
-          className={`px-1.5 md:px-2.5 py-0.5 md:py-1 text-xs rounded-sm ${rangeKey === k ? "bg-sky-600 text-white" : "text-slate-400"}`}
-        >
-          {k}
-        </button>
-      ))}
-    </div>
-  </div>
-);
-
 const WaveChart = ({
   data,
   color = "#ef4444",
@@ -302,7 +294,7 @@ const WaveChart = ({
 
   if (!data || data.length === 0) {
     return (
-      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="block">
+      <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block w-full h-full">
         <text x={width / 2} y={height / 2} textAnchor="middle" fontSize="12" fill="#64748b">No data</text>
       </svg>
     );
@@ -341,17 +333,17 @@ const WaveChart = ({
   const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
 
   return (
-    <div className="relative" onMouseLeave={() => setSelectedPoint(null)}>
-      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="block">
+    <div className="relative h-full w-full" onMouseLeave={() => setSelectedPoint(null)}>
+      <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block w-full h-full">
         {gridLines.map((grid) => (
           <g key={`grid-${grid.ratio}`}>
-            <line x1={padding.l} y1={grid.y} x2={padding.l + innerW} y2={grid.y} stroke="#334155" strokeDasharray="2,2" opacity="0.5" />
+            <line x1={padding.l} y1={grid.y} x2={padding.l + innerW} y2={grid.y} stroke="var(--soc-border)" strokeDasharray="2,2" opacity="0.5" />
             <text x={padding.l - 5} y={grid.y + 3} textAnchor="end" fontSize="8" fill="#64748b">{grid.value}</text>
           </g>
         ))}
 
-        <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="#334155" />
-        <line x1={padding.l} y1={padding.t + innerH} x2={padding.l + innerW} y2={padding.t + innerH} stroke="#334155" />
+        <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="var(--soc-border)" />
+        <line x1={padding.l} y1={padding.t + innerH} x2={padding.l + innerW} y2={padding.t + innerH} stroke="var(--soc-border)" />
         <path d={pathD} stroke={color} strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
         <defs>
           <linearGradient id="waveGradientFileScanner" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -437,7 +429,7 @@ const WaveChart = ({
           const x = padding.l + i * pointSpacing;
           return (
             <g key={`tick-${d.t}`}>
-              <line x1={x} y1={padding.t + innerH} x2={x} y2={padding.t + innerH + 3} stroke="#334155" />
+              <line x1={x} y1={padding.t + innerH} x2={x} y2={padding.t + innerH + 3} stroke="var(--soc-border)" />
               <text
                 x={x}
                 y={padding.t + innerH + 14}
@@ -477,7 +469,7 @@ const Donut = ({ items, size = 120, stroke = 12, centerLabelTop, centerLabelBott
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       <g transform={`translate(${size / 2} ${size / 2})`}>
-        <circle r={r} fill="transparent" stroke="#1e293b" strokeWidth={stroke} />
+        <circle r={r} fill="transparent" stroke="var(--soc-border)" strokeWidth={stroke} />
         {items.map((it, idx) => {
           const currentOffset = items.slice(0, idx).reduce((acc, prev) => acc + (prev.value / total) * c, 0);
           const dash = (it.value / total) * c;
@@ -524,33 +516,186 @@ const Legend = ({ items }) => (
   </div>
 );
 
-const CompactBarChart = ({ items, getKey, getLabel, getValue, getBarColor = () => "#38bdf8", secondaryValue }) => {
-  const maxValue = Math.max(...items.map((item) => getValue(item)), 1);
+const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items" }) => {
+  const [selected, setSelected] = useState(null);
+  const rootRef = useRef(null);
+  const [size, setSize] = useState({ width: 1000, height: 210 });
+  const padding = { l: 56, r: 56, t: 12, b: 42 };
 
-  if (!items.length) {
+  useEffect(() => {
+    const node = rootRef.current;
+    if (!node) return undefined;
+    const updateSize = () => {
+      const rect = node.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setSize({ width: rect.width, height: rect.height });
+      }
+    };
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const width = size.width;
+  const height = size.height;
+  if (!items || items.length === 0) {
     return (
-      <div className="flex h-40 items-center justify-center rounded-lg border border-dashed border-slate-700 bg-slate-800/20 text-sm text-slate-500">
+      <div className="flex min-h-24 items-center justify-center text-[11px] text-slate-500">
         No data available
       </div>
     );
   }
 
+  const sorted = [...items].sort((a, b) => b.value - a.value);
+  const total = sorted.reduce((s, it) => s + it.value, 0) || 1;
+  const maxV = Math.max(1, ...sorted.map((d) => d.value));
+  const innerW = width - padding.l - padding.r;
+  const innerH = height - padding.t - padding.b;
+  const step = sorted.length > 1 ? innerW / (sorted.length - 1) : innerW;
+
+  const gridSteps = 4;
+  const gridLines = [];
+  for (let i = 0; i < gridSteps; i++) {
+    const ratio = i / (gridSteps - 1);
+    const value = Math.round((ratio * maxV * 10) / 10);
+    const y = padding.t + innerH - ratio * innerH;
+    gridLines.push({ value, y });
+  }
+
+  const xFor = (i) => padding.l + i * step;
+  const yFor = (v) => padding.t + innerH - (v / maxV) * innerH;
+
+  const points = sorted.map((it, i) => ({
+    x: xFor(i),
+    y: yFor(it.value),
+    label: it.label,
+    value: it.value,
+    color: it.color,
+    index: i,
+  }));
+
+  const segments = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    const controlX = (a.x + b.x) / 2;
+    segments.push({
+      d: `M ${a.x} ${a.y} C ${controlX} ${a.y}, ${controlX} ${b.y}, ${b.x} ${b.y}`,
+      color: b.color,
+      key: `${a.label}-${b.label}`,
+    });
+  }
+
   return (
-    <div className="space-y-3">
-      {items.map((item) => (
-        <div key={getKey(item)} className="grid grid-cols-[minmax(0,180px)_minmax(0,1fr)_auto] items-center gap-3">
-          <div className="truncate font-mono text-[11px] text-slate-300" title={getLabel(item)}>
-            {getLabel(item)}
+    <div className="relative w-full flex flex-col h-full min-h-0" onMouseLeave={() => setSelected(null)}>
+      <div className="flex items-center justify-between mb-1 px-1">
+        <span className="text-[11px] text-slate-600 uppercase font-semibold">Total</span>
+        <span className="text-sm font-bold text-slate-300">
+          {total} <span className="text-xs font-normal text-slate-500">{totalLabel}</span>
+        </span>
+      </div>
+      <div ref={rootRef} className="flex-1 min-h-0 w-full">
+        <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block">
+          {gridLines.map((grid, idx) => (
+            <g key={`grid-${idx}`}>
+              <line x1={padding.l} y1={grid.y} x2={padding.l + innerW} y2={grid.y} stroke="var(--soc-border)" strokeWidth="1" opacity={grid.y === padding.t || grid.y === padding.t + innerH ? "1" : "0.5"} />
+              <text x={padding.l - 6} y={grid.y + 3} textAnchor="end" fontSize="10" fill="var(--soc-text-muted)" fontWeight="600">
+                {grid.value}
+              </text>
+            </g>
+          ))}
+          <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="var(--soc-border)" strokeWidth="1.5" />
+          <line x1={padding.l} y1={padding.t + innerH} x2={padding.l + innerW} y2={padding.t + innerH} stroke="var(--soc-border)" strokeWidth="1.5" />
+          {segments.map((seg) => (
+            <path key={seg.key} d={seg.d} stroke={seg.color} strokeWidth="2.5" fill="none" opacity="0.85" />
+          ))}
+          {points.map((p) => {
+            const isSel = selected?.index === p.index;
+            return (
+              <g key={`${p.label}-${p.index}`}>
+                <circle cx={p.x} cy={p.y} r={isSel ? "6" : "9"} fill="transparent" className="cursor-pointer"
+                  onMouseEnter={() => setSelected(p)}
+                  onMouseLeave={() => setSelected(null)}
+                  onFocus={() => setSelected(p)}
+                  onBlur={() => setSelected(null)}
+                  onClick={() => setSelected(isSel ? null : p)}
+                />
+                <circle cx={p.x} cy={p.y} r={isSel ? "5" : "3.5"} fill={p.color} stroke="var(--soc-bg)" strokeWidth="1.5" opacity="0.95" className="pointer-events-none" />
+                <text x={p.x} y={padding.t + innerH + 18} textAnchor="middle" fontSize="9" fill="var(--soc-text-muted)">{p.label}</text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 justify-center px-1 mt-1">
+        {points.map((p) => (
+          <div key={`${p.label}-${p.index}`} className="flex items-center gap-1.5 text-[11px] text-slate-400">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color }} />
+            <span className="whitespace-nowrap">{p.label}</span>
+            <span className="text-slate-500 font-mono">{p.value}</span>
           </div>
-          <div className="relative h-7">
-            <div className="absolute inset-0 rounded-md border border-slate-800 bg-slate-950/80" />
+        ))}
+      </div>
+      {selected && (
+        <div
+          className="pointer-events-none absolute z-10 min-w-[110px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-xl"
+          style={{
+            left: `${Math.min(Math.max((selected.x / width) * 100, 10), 84)}%`,
+            top: `${Math.max(((selected.y - 46) / height) * 100, 2)}%`,
+            transform: "translate(-50%, -100%)",
+          }}
+        >
+          <div className="font-semibold text-slate-300">{selected.label}</div>
+          <div className="mt-1 text-slate-500">{selected.value} {totalLabel}</div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const CompactBarChart = ({ items, emptyLabel = "No data available" }) => {
+  if (!items || items.length === 0) {
+    return (
+      <div className="flex min-h-24 items-center justify-center text-[11px] text-slate-500">
+        {emptyLabel}
+      </div>
+    );
+  }
+
+  const maxValue = Math.max(...items.map((d) => d.value), 1);
+
+  return (
+    <div className="space-y-2.5">
+      {items.map((item, i) => (
+        <div key={item.label} className="flex flex-col">
+          <div className="flex items-center gap-1.5">
+            <span className="w-4 text-[11px] font-bold text-slate-500 shrink-0">
+              {i + 1}.
+            </span>
+            <span className="flex-1 min-w-0 text-[11px] font-mono text-slate-400 truncate" title={item.label}>
+              {item.label}
+            </span>
+            <span className="text-[12px] font-bold text-slate-400 tabular-nums shrink-0 ml-1">
+              {item.value}x
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="w-4 shrink-0" />
             <div
-              className="absolute left-0 top-0 h-full rounded-md transition-all duration-500"
-              style={{ width: `${(getValue(item) / maxValue) * 100}%`, background: getBarColor(item) }}
-            />
-            {secondaryValue ? <div className="absolute inset-y-0 right-2 flex items-center text-[10px] font-semibold text-slate-100">{secondaryValue(item)}</div> : null}
+              className="flex-1 bg-[var(--soc-elevated)] border border-[var(--soc-border-strong)] rounded h-4 overflow-hidden"
+              title={`${item.label}: ${item.value} hits`}
+            >
+              <div
+                className="h-full rounded transition-all"
+                style={{
+                  width: `${(item.value / maxValue) * 100}%`,
+                  backgroundColor: item.color,
+                  opacity: 0.85,
+                }}
+              />
+            </div>
           </div>
-          <div className="w-10 text-right text-xs font-bold text-slate-200">{getValue(item)}</div>
         </div>
       ))}
     </div>
@@ -563,42 +708,41 @@ const TopAgentsCard = ({ agents }) => {
   if (!agents || agents.length === 0) {
     return <div className="flex h-full items-center justify-center text-xs text-slate-600">No agent data</div>;
   }
-
-  const peakCount = Math.max(...agents.map((agent) => agent.count), 1);
-
+  const maxValue = Math.max(...agents.map((a) => Number(a.count) || 0), 1);
+  const COLORS = ["#34d399", "#38bdf8", "#fbbf24", "#f97316", "#a78bfa"];
   return (
-    <div className="flex flex-col gap-2.5">
-      {agents.map((agent, idx) => {
-        const accent = TOP_AGENT_COLORS[idx % TOP_AGENT_COLORS.length];
-        const fillWidth = Math.max(10, Math.round((agent.count / peakCount) * 100));
-
+    <div className="space-y-3">
+      {agents.map((item, i) => {
+        const color = COLORS[i % COLORS.length];
+        const label = item.name || "Unknown agent";
+        const value = Number(item.count) || 0;
         return (
-          <div key={`${agent.name}-${idx}`} className="rounded-xl border border-slate-700/60 p-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
-                <span
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black"
-                  style={{ backgroundColor: `${accent}1f`, color: accent }}
-                >
-                  {idx + 1}
-                </span>
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-slate-100">{agent.name}</div>
-                  <div className="text-[11px] text-slate-500">
-                    Last seen {formatLiveTimestamp(agent.lastSeen)}
-                  </div>
-                </div>
-              </div>
-              <div className="shrink-0 text-right">
-                <div className="text-sm font-black" style={{ color: accent }}>{agent.count}</div>
-                <div className="text-[11px] uppercase tracking-wide text-slate-500">files</div>
-              </div>
+          <div key={label} className="flex flex-col">
+            <div className="flex items-center gap-1.5">
+              <span className="w-5 text-[13px] font-bold text-slate-500 shrink-0">
+                {i + 1}.
+              </span>
+              <span className="flex-1 min-w-0 text-[13px] font-mono text-slate-300 truncate" title={label}>
+                {label}
+              </span>
+              <span className="text-[13px] font-bold text-slate-400 tabular-nums shrink-0 ml-1">
+                {new Intl.NumberFormat("en-US").format(value)}
+              </span>
             </div>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800">
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="w-5 shrink-0" />
               <div
-                className="h-full rounded-full"
-                style={{ width: `${fillWidth}%`, background: accent }}
-              />
+                className="flex-1 bg-[var(--soc-bg)] rounded h-4 overflow-hidden"
+                title={item.lastSeen ? `Last seen ${formatLiveTimestamp(item.lastSeen)}` : `${label}: ${value} findings`}
+              >
+                <div
+                  className="h-full rounded transition-all"
+                  style={{
+                    width: `${(value / maxValue) * 100}%`,
+                    backgroundColor: color,
+                  }}
+                />
+              </div>
             </div>
           </div>
         );
@@ -609,7 +753,7 @@ const TopAgentsCard = ({ agents }) => {
 
 const RiskIndicator = ({ severity }) => {
   const sev = normalizeSeverity(severity, "INFO");
-  return <span className={`px-3 py-1 rounded-full text-xs font-bold ${severityColors[sev]}`}>{sev}</span>;
+  return <span className={`px-2 py-0.5 rounded-full text-[9px] md:text-[10px] font-bold ${severityColors[sev]}`}>{sev}</span>;
 };
 
 const HealthIndicator = ({ health }) => {
@@ -632,55 +776,60 @@ const PaginationControls = ({ pagination, page, pageSize, loading, onPageChange 
   const end = Math.min(page * limit, total);
 
   return (
-    <div className="p-2 md:p-4 border-t border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-2 md:gap-0 bg-slate-900/50 rounded-b-lg md:rounded-b-xl">
-      <div className="text-xs text-slate-500 font-mono">
-        <span className="hidden md:inline">SHOWING </span>
-        <span className="text-sky-400 font-bold">{start}</span>
-        <span className="hidden md:inline">{" - "}</span>
-        <span className="md:hidden">-</span>
-        <span className="text-sky-400 font-bold">{end}</span>
-        <span className="hidden md:inline">{" OF "}</span>
-        <span className="md:hidden"> / </span>
-        <span className="text-sky-400 font-bold">{total}</span>
-        <span className="hidden md:inline"> RECORDS</span>
-      </div>
+    <div className="border-t border-slate-800 bg-slate-900/50 px-4 py-3">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+          <div className="text-[10px] md:text-[11px] font-mono text-slate-500">
+            <span className="hidden md:inline">SHOWING </span>
+            <span className="font-bold text-sky-400">{start}</span>
+            <span className="hidden md:inline"> - </span>
+            <span className="md:hidden">-</span>
+            <span className="font-bold text-sky-400">{end}</span>
+            <span className="hidden md:inline"> OF </span>
+            <span className="md:hidden"> / </span>
+            <span className="font-bold text-sky-400">{total}</span>
+            <span className="hidden md:inline"> RECORDS</span>
+          </div>
+        </div>
 
-      <div className="flex flex-wrap gap-1 md:gap-2 items-center">
-        <button
-          onClick={() => onPageChange(1)}
-          disabled={loading || page <= 1}
-          className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
-        >
-          <span className="hidden md:inline">FIRST</span>
-          <span className="md:hidden">«</span>
-        </button>
-        <button
-          onClick={() => onPageChange(Math.max(1, page - 1))}
-          disabled={loading || page <= 1}
-          className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
-        >
-          <span className="hidden md:inline">PREV</span>
-          <span className="md:hidden">‹</span>
-        </button>
-        <span className="text-xs font-black text-slate-400 px-1 md:px-2">
-          <span className="hidden md:inline">PAGE </span><span className="text-white">{page}</span> / {totalPages}
-        </span>
-        <button
-          onClick={() => onPageChange(Math.min(totalPages, page + 1))}
-          disabled={loading || page >= totalPages}
-          className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
-        >
-          <span className="hidden md:inline">NEXT</span>
-          <span className="md:hidden">›</span>
-        </button>
-        <button
-          onClick={() => onPageChange(totalPages)}
-          disabled={loading || page >= totalPages}
-          className="px-2 md:px-4 py-1 md:py-2 rounded text-xs font-bold bg-slate-800 border border-slate-700 hover:bg-sky-900/20 hover:border-sky-500/50 transition-all disabled:opacity-20"
-        >
-          <span className="hidden md:inline">LAST</span>
-          <span className="md:hidden">»</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            disabled={page === 1 || loading}
+            onClick={() => onPageChange(1)}
+            className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
+          >
+            <span className="hidden md:inline">FIRST</span>
+            <span className="md:hidden">«</span>
+          </button>
+          <button
+            disabled={page === 1 || loading}
+            onClick={() => onPageChange(Math.max(page - 1, 1))}
+            className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
+          >
+            <span className="hidden md:inline">← PREV</span>
+            <span className="md:hidden">‹</span>
+          </button>
+          <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400">
+            <span className="hidden md:inline">PAGE </span>
+            <span className="text-white">{page}</span> / {totalPages}
+          </span>
+          <button
+            disabled={page >= totalPages || loading}
+            onClick={() => onPageChange(Math.min(page + 1, totalPages))}
+            className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
+          >
+            <span className="hidden md:inline">NEXT →</span>
+            <span className="md:hidden">›</span>
+          </button>
+          <button
+            disabled={page >= totalPages || loading}
+            onClick={() => onPageChange(totalPages)}
+            className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
+          >
+            <span className="hidden md:inline">LAST</span>
+            <span className="md:hidden">»</span>
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -695,12 +844,30 @@ const EmptyState = ({ message }) => (
 );
 
 const FileSecurityScanner = () => {
+  const [searchParams] = useSearchParams();
+  const urlStart = searchParams.get("start");
+  const urlEnd = searchParams.get("end");
+  const urlRange = searchParams.get("rangeKey");
   const [selectedFile, setSelectedFile] = useState(null);
   const [copiedText, setCopiedText] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterSeverity, setFilterSeverity] = useState("all");
-  const [isScanning, setIsScanning] = useState(false);
-  const [rangeKey, setRangeKey] = useState("24h");
+  const [rangeKey, setRangeKey] = useState(() =>
+    urlRange && ["1h", "24h", "7d", "30d"].includes(urlRange) ? urlRange : "24h"
+  );
+  const [filterMode, setFilterMode] = useState(() =>
+    urlStart && urlEnd ? "custom" : "range"
+  );
+  const [customDateRange, setCustomDateRange] = useState(() => {
+    const base = createDefaultDateRange(1);
+    if (urlStart && urlEnd) {
+      return {
+        start: toDateTimeLocalValue(new Date(urlStart)),
+        end: toDateTimeLocalValue(new Date(urlEnd)),
+      };
+    }
+    return base;
+  });
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [files, setFiles] = useState([]);
   const [stats, setStats] = useState(null);
@@ -714,7 +881,9 @@ const FileSecurityScanner = () => {
     typeof window !== "undefined" ? window.innerWidth : 1280
   );
   const [timelineChartHeight, setTimelineChartHeight] = useState(160);
-  const [selectedTimelinePoint, setSelectedTimelinePoint] = useState(null);
+  const [selectedTimelinePoint, setSelectedTimelinePoint] = useState(() =>
+    urlStart && urlEnd ? { key: "custom", start: urlStart, end: urlEnd } : null
+  );
   const topAgentsPanelRef = useRef(null);
   const filesTableRef = useRef(null);
 
@@ -723,20 +892,48 @@ const FileSecurityScanner = () => {
     setLoadError("");
 
     try {
-      const minutes = rangeToMinutes[rangeKey] || 1440;
+      const filterDateRange =
+        filterMode === "custom"
+          ? getIsoDateRange(normalizeDateRange(customDateRange))
+          : (() => {
+              const minutes = rangeToMinutes[rangeKey] || 1440;
+              const end = new Date();
+              const start = new Date(end.getTime() - minutes * 60000);
+              return { start: start.toISOString(), end: end.toISOString() };
+            })();
+      const minutes =
+        filterMode === "custom"
+          ? getDateRangeMinutes(getIsoDateRange(normalizeDateRange(customDateRange)))
+          : rangeToMinutes[rangeKey] || 1440;
       const suspiciousParams = new URLSearchParams({
         page: String(page),
         limit: String(pageSize),
       });
-      if (selectedTimelinePoint?.start && selectedTimelinePoint?.end) {
+      if (filterMode === "custom" && filterDateRange) {
+        suspiciousParams.set("start", filterDateRange.start);
+        suspiciousParams.set("end", filterDateRange.end);
+      } else if (selectedTimelinePoint?.start && selectedTimelinePoint?.end) {
         suspiciousParams.set("start", selectedTimelinePoint.start);
         suspiciousParams.set("end", selectedTimelinePoint.end);
+      } else if (filterDateRange) {
+        suspiciousParams.set("start", filterDateRange.start);
+        suspiciousParams.set("end", filterDateRange.end);
       }
+
+      const statsParams = new URLSearchParams({
+        start: filterDateRange.start,
+        end: filterDateRange.end,
+      });
+      const timelineParams = new URLSearchParams({
+        minutes: String(minutes),
+        start: filterDateRange.start,
+        end: filterDateRange.end,
+      });
 
       const [suspiciousResponse, statsResponse, timelineResponse] = await Promise.all([
         fetchJson(`${API_ROOT}/file-scans/suspicious?${suspiciousParams.toString()}`),
-        fetchJson(`${API_ROOT}/file-scans/stats`),
-        fetchJson(`${API_ROOT}/file-scans/timeline?minutes=${minutes}`),
+        fetchJson(`${API_ROOT}/file-scans/stats?${statsParams.toString()}`),
+        fetchJson(`${API_ROOT}/file-scans/timeline?${timelineParams.toString()}`),
       ]);
 
       const normalizedSuspicious = (suspiciousResponse.data || []).map(normalizeFileScan);
@@ -776,7 +973,7 @@ const FileSecurityScanner = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, rangeKey, selectedTimelinePoint]);
+  }, [page, pageSize, rangeKey, selectedTimelinePoint, filterMode, customDateRange]);
 
   useEffect(() => {
     loadData();
@@ -784,7 +981,7 @@ const FileSecurityScanner = () => {
 
   useEffect(() => {
     setPage(1);
-    setSelectedTimelinePoint(null);
+    setSelectedTimelinePoint((prev) => (prev?.key === "custom" ? prev : null));
   }, [rangeKey]);
 
   useEffect(() => {
@@ -885,15 +1082,15 @@ const FileSecurityScanner = () => {
     const folderMap = new Map();
     filteredFiles.forEach((file) => folderMap.set(file.folder, (folderMap.get(file.folder) || 0) + 1));
     const topFolders = Array.from(folderMap.entries())
-      .map(([folder, count]) => ({ folder, count }))
-      .sort((a, b) => b.count - a.count)
+      .map(([folder, count]) => ({ label: folder, value: count, color: "#f59e0b" }))
+      .sort((a, b) => b.value - a.value)
       .slice(0, 10);
 
     const scannerMap = new Map();
     filteredFiles.forEach((file) => scannerMap.set(file.scanner, (scannerMap.get(file.scanner) || 0) + 1));
     const topScanners = Array.from(scannerMap.entries())
-      .map(([scanner, count]) => ({ scanner, count }))
-      .sort((a, b) => b.count - a.count)
+      .map(([scanner, count]) => ({ label: scanner, value: count, color: "#38bdf8" }))
+      .sort((a, b) => b.value - a.value)
       .slice(0, 10);
 
     const fallbackAgentMap = new Map();
@@ -932,13 +1129,6 @@ const FileSecurityScanner = () => {
     return { fileTypes, severities, topFolders, topScanners, topAgents, uniqueAgents };
   }, [stats, files, filteredFiles]);
 
-  const health = useMemo(() => {
-    const total = Number(stats?.totalEvents || 0);
-    if (!total) return 100;
-    const errorsCount = Number(stats?.totalErrorScans || 0);
-    return Math.max(0, Number((((total - errorsCount) / total) * 100).toFixed(1)));
-  }, [stats]);
-
   const copyToClipboard = (text, type) => {
     navigator.clipboard.writeText(text || "-");
     setCopiedText(type);
@@ -947,15 +1137,10 @@ const FileSecurityScanner = () => {
 
   const getVirusTotalLink = (sha256) => `https://www.virustotal.com/gui/file/${sha256}`;
 
-  const handleRefresh = async () => {
-    setIsScanning(true);
-    await loadData();
-    setIsScanning(false);
-  };
-
   const handleRangeChange = (nextRange) => {
     setPage(1);
     setSelectedTimelinePoint(null);
+    setFilterMode("range");
     setRangeKey(nextRange);
   };
 
@@ -987,54 +1172,68 @@ const FileSecurityScanner = () => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans">
-      <Navbar />
-
-      <div className="p-2 md:p-4 flex flex-col gap-3 md:gap-4">
-        <div className="bg-slate-900 border border-slate-800 rounded-lg md:rounded-xl p-3 md:p-4 shadow-lg">
+    <>
+    <div className="p-4 md:p-5 flex flex-col gap-4 w-full">
+        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-3 md:p-4 shadow-lg">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-4">
             <div>
-              <h1 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
-                <Bug className="h-5 md:h-6 w-5 md:w-6 text-red-400" />
+              <h1 className="text-base font-bold text-white flex items-center gap-2">
+                <Bug className="h-5 w-5 text-red-400" />
                 File Content Scanner
               </h1>
-              <p className="text-xs md:text-sm text-slate-400 mt-1">
+              <p className="text-xs text-slate-500 mt-0.5">
                 Real-time file content scanning and suspicious file detection
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-lg md:rounded-xl p-2 md:p-4 shadow-lg flex flex-col gap-3 md:gap-4">
-          <div className="flex items-center justify-between gap-1 md:gap-2 flex-wrap">
+        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-2 md:p-4 shadow-lg flex flex-col gap-3 md:gap-4">
+          <div className="flex flex-col items-start gap-1 md:flex-row md:items-center md:justify-between md:gap-2">
             <div className="flex items-center gap-2">
-              <button
-                onClick={handleRefresh}
-                disabled={isScanning || loading}
-                className="inline-flex items-center gap-2 px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs text-slate-200 transition-colors border border-slate-700 disabled:opacity-60"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${(isScanning || loading) ? "animate-spin" : ""}`} />
-                <span>{isScanning || loading ? "Loading..." : "Refresh"}</span>
-              </button>
-
-              <label className="flex items-center gap-2 text-xs text-slate-400">
-                <span className="hidden sm:inline">Rows</span>
+              <span className="text-[11px] text-slate-400 whitespace-nowrap">Rows</span>
+              <div className="relative flex items-center bg-[var(--soc-card)] rounded border border-[var(--soc-border)]">
                 <select
                   value={pageSize}
                   onChange={(event) => {
                     setPage(1);
                     setPageSize(Number(event.target.value));
                   }}
-                  className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-200 focus:border-sky-500 focus:outline-none"
+                  className="appearance-none bg-transparent py-1.5 pl-2 pr-5 text-left text-[11px] font-medium leading-tight text-slate-100 focus:outline-none"
                 >
                   {[10, 20, 50, 100].map((size) => (
-                    <option key={size} value={size}>{size}</option>
+                    <option key={size} value={size} className="bg-white text-black">{size}</option>
                   ))}
                 </select>
-              </label>
+                <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
+              </div>
             </div>
 
-            <RangeFilter rangeKey={rangeKey} onRangeChange={handleRangeChange} />
+            <div className="ml-auto flex items-center gap-2">
+              <RangeFilter
+                rangeKey={rangeKey}
+                onRangeChange={handleRangeChange}
+                dimmed={filterMode === "custom"}
+              />
+              <DateRangeFilter
+                value={customDateRange}
+                onChange={(range) => {
+                  setPage(1);
+                  setSelectedTimelinePoint(null);
+                  setCustomDateRange(range);
+                  setFilterMode("custom");
+                }}
+                className={filterMode === "range" ? "opacity-50" : ""}
+              />
+              <span className="hidden lg:flex items-center gap-1 text-[11px] text-slate-600">
+                <CalendarRange className="h-3 w-3" />
+                {filterMode === "custom"
+                  ? new Date(getIsoDateRange(normalizeDateRange(customDateRange)).start).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }) +
+                    " - " +
+                    new Date(getIsoDateRange(normalizeDateRange(customDateRange)).end).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+                  : rangeKey}
+              </span>
+            </div>
           </div>
 
           {loadError && (
@@ -1043,34 +1242,34 @@ const FileSecurityScanner = () => {
             </div>
           )}
 
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-3">
-            <div className="bg-slate-800/50 border border-slate-700/60 rounded p-2 md:p-3">
-              <div className="text-[8px] md:text-[10px] text-slate-500 uppercase font-semibold">Total Events</div>
-              <div className="text-lg md:text-2xl font-black text-blue-400 mt-0.5 md:mt-1">{stats?.totalEvents ?? 0}</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+            <div className="bg-sky-500/10 border border-sky-500/30 rounded p-2 md:p-3">
+              <div className="text-[8px] md:text-[10px] text-sky-400 uppercase font-semibold">Total Events</div>
+              <div className="text-sm md:text-lg font-black text-sky-300 mt-0.5 md:mt-1">{stats?.totalEvents ?? 0}</div>
+              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">scans in range</div>
             </div>
             <div className="bg-red-500/10 border border-red-500/30 rounded p-2 md:p-3">
               <div className="text-[8px] md:text-[10px] text-red-400 uppercase font-semibold">Suspicious</div>
-              <div className="text-lg md:text-2xl font-black text-red-300 mt-0.5 md:mt-1">{stats?.suspiciousScans ?? 0}</div>
+              <div className="text-sm md:text-lg font-black text-red-300 mt-0.5 md:mt-1">{stats?.suspiciousScans ?? 0}</div>
+              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">suspicious detected</div>
             </div>
             <div className="bg-emerald-500/10 border border-emerald-500/30 rounded p-2 md:p-3">
               <div className="text-[8px] md:text-[10px] text-emerald-400 uppercase font-semibold">Clean</div>
-              <div className="text-lg md:text-2xl font-black text-emerald-300 mt-0.5 md:mt-1">{stats?.cleanScans ?? 0}</div>
+              <div className="text-sm md:text-lg font-black text-emerald-300 mt-0.5 md:mt-1">{stats?.cleanScans ?? 0}</div>
+              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">clean scans</div>
             </div>
             <div className="bg-orange-500/10 border border-orange-500/30 rounded p-2 md:p-3">
-              <div className="text-[8px] md:text-[10px] text-orange-400 uppercase font-semibold">Errors</div>
-              <div className="text-lg md:text-2xl font-black text-orange-300 mt-0.5 md:mt-1">{stats?.totalErrorScans ?? 0}</div>
-            </div>
-            <div className="bg-slate-800/50 border border-slate-700/60 rounded p-2 md:p-3">
-              <div className="text-[8px] md:text-[10px] text-slate-400 uppercase font-semibold">Scan Success Rate</div>
-              <div className="text-lg md:text-2xl font-black text-emerald-400 mt-0.5 md:mt-1">{health}%</div>
+              <div className="text-[8px] md:text-[10px] text-orange-400 uppercase font-semibold">Max Findings</div>
+              <div className="text-sm md:text-lg font-black text-orange-300 mt-0.5 md:mt-1">{Math.round(Number(stats?.maxFindings || 0))}</div>
+              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">most indicators in one file</div>
             </div>
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch">
-            <div className="bg-slate-800/30 border border-slate-800/50 rounded-lg p-4 md:p-6 flex flex-col h-full">
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-6 flex flex-col h-full overflow-visible">
               <div className="flex justify-between items-center mb-4 md:mb-6 gap-2">
                 <div>
-                  <div className="text-xs md:text-sm font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
+                  <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
                     <BarChart3 className="h-3 md:h-4 w-3 md:w-4 text-red-400" />
                     Detection Timeline
                   </div>
@@ -1081,8 +1280,8 @@ const FileSecurityScanner = () => {
                   <div className="text-[11px] text-slate-600">Updated {formatLiveTimestamp(lastUpdated)}</div>
                 </div>
               </div>
-              <div className="overflow-x-auto flex-1 bg-slate-800/30 rounded-lg border border-slate-800/40 p-2 md:p-4">
-                <div className={isMobile ? "min-w-[620px]" : "min-w-0"}>
+              <div className="flex-1 min-h-[240px] md:min-h-[280px] min-w-0 rounded-lg bg-[var(--soc-card)] p-2 md:p-4 overflow-visible">
+                <div className="min-w-0 h-full">
                   <WaveChart
                     data={timeline}
                     color="#ef4444"
@@ -1097,145 +1296,120 @@ const FileSecurityScanner = () => {
               </div>
             </div>
 
-            <div ref={topAgentsPanelRef} className="bg-slate-800/30 border border-slate-800/50 rounded-lg p-4 md:p-6 h-full">
+            <div ref={topAgentsPanelRef} className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-6 h-full">
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-xs md:text-sm font-semibold text-slate-300">Top 5 Agents</div>
+                  <div className="text-[11px] md:text-xs font-semibold text-slate-300">Top 5 Agents</div>
                   <div className="mt-1 text-[11px] text-slate-500">Most suspicious file findings by agent</div>
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-slate-500">Unique agents</div>
-                  <div className="text-sm font-black text-emerald-300">{analytics.uniqueAgents}</div>
+                  <div className="text-xs font-black text-emerald-300">{analytics.uniqueAgents}</div>
                 </div>
               </div>
               <TopAgentsCard agents={analytics.topAgents} />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-            <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4 shadow-lg flex flex-col">
-              <div className="text-xs md:text-sm font-semibold text-slate-300 mb-4 w-full">File Type Distribution</div>
-              <div className="flex items-center justify-center flex-1">
-                <div className="flex flex-col items-center gap-4">
-                  <Donut items={analytics.fileTypes} size={150} centerLabelTop={stats?.totalSuccessScans ?? 0} centerLabelBottom="files" />
-                  <div className="text-xs w-44"><Legend items={analytics.fileTypes} /></div>
-                </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col h-full min-h-[260px]">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-2 w-full">File Type Distribution</div>
+              <div className="flex-1 min-h-0 w-full">
+                <CategoryLineChart items={analytics.fileTypes} color="#ef4444" totalLabel="files" />
               </div>
             </div>
 
-            <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4 shadow-lg flex flex-col">
-              <div className="text-xs md:text-sm font-semibold text-slate-300 mb-4 w-full">Severity Distribution</div>
-              <div className="flex items-center justify-center flex-1">
-                <div className="flex flex-col items-center gap-4">
-                  <Donut items={analytics.severities} size={150} centerLabelTop={files.length} centerLabelBottom="page" />
-                  <div className="text-xs w-44"><Legend items={analytics.severities} /></div>
-                </div>
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col h-full min-h-[260px]">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-2 w-full">Severity Distribution</div>
+              <div className="flex-1 min-h-0 w-full">
+                <CategoryLineChart items={analytics.severities} color="#ef4444" totalLabel="files" />
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4">
-            <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4">
-              <div className="flex items-center gap-2 mb-4">
-                <Network className="h-4 w-4 text-red-400" />
-                <div>
-                  <div className="text-xs md:text-sm font-semibold text-slate-200">Top Scanner Sources</div>
-                  <div className="text-xs text-slate-500">Scanner frequency from the current table page</div>
-                </div>
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-4">
+                Top Scanner Sources
               </div>
-              <CompactBarChart
-                items={analytics.topScanners}
-                getKey={(item) => item.scanner}
-                getLabel={(item) => item.scanner}
-                getValue={(item) => item.count}
-                getBarColor={() => "linear-gradient(90deg, #0ea5e9 0%, #38bdf8 100%)"}
-              />
+              <CompactBarChart items={analytics.topScanners} emptyLabel="No scanner source data found" />
             </div>
 
-            <div className="bg-slate-800/30 border border-slate-800 rounded-xl p-3 md:p-4">
-              <div className="flex items-center gap-2 mb-4">
-                <FolderOpen className="h-4 w-4 text-amber-400" />
-                <div>
-                  <div className="text-xs md:text-sm font-semibold text-slate-200">Top Scanned Folders</div>
-                  <div className="text-xs text-slate-500">Most frequent file paths from the current table page</div>
-                </div>
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-4">
+                Top Scanned Folders
               </div>
-              <CompactBarChart
-                items={analytics.topFolders}
-                getKey={(item) => item.folder}
-                getLabel={(item) => item.folder}
-                getValue={(item) => item.count}
-                getBarColor={() => "linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%)"}
-              />
+              <CompactBarChart items={analytics.topFolders} emptyLabel="No folder data found" />
             </div>
           </div>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-lg md:rounded-xl shadow-lg overflow-hidden">
-          <div className="border-b border-slate-800 bg-slate-800/50 px-6 py-4">
-            <span className="flex items-center gap-2 font-medium text-red-400">
-              <Bug className="h-4 w-4" />
-              Suspicious Files ({pagination.total})
-            </span>
+        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl shadow-lg overflow-hidden">
+          <div className="p-2 md:p-3 border-b border-[var(--soc-border)] flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div className="relative flex-1 min-w-0">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search current page by file, path, agent, scanner, or SHA-256..."
+                className="w-full rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-8 pr-8 text-[11px] text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-red-500/50"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  aria-label="Clear search"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="relative">
+              <select
+                value={filterSeverity}
+                onChange={(event) => setFilterSeverity(event.target.value)}
+                className="appearance-none rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-3 pr-8 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-red-500/50"
+              >
+                <option value="all" className="bg-white text-black">All severities</option>
+                {["CRITICAL", "HIGH", "MEDIUM", "LOW"].map((severity) => (
+                  <option key={severity} value={severity} className="bg-white text-black">{severity}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            </div>
           </div>
 
-          <div className="p-3 md:p-4">
-            <div className="mb-[12px] space-y-4">
-              <div className="flex gap-3 flex-wrap">
-                <div className="flex-1 min-w-64 relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-500" />
-                  <input
-                    type="text"
-                    placeholder="Search current page by file, path, agent, scanner, or SHA-256..."
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 placeholder-slate-500"
-                  />
+          <div className="overflow-x-auto">
+            {selectedTimelinePoint && (
+              <div className="flex flex-col items-start justify-between gap-3 border-b border-[var(--soc-border)] bg-[var(--soc-elevated)] p-3 sm:flex-row sm:items-center">
+                <div className="text-xs text-red-300">
+                  Timeline filter: {formatDetailedTimestamp(selectedTimelinePoint.start)}
+                  {selectedTimelinePoint.end ? ` - ${formatDetailedTimestamp(selectedTimelinePoint.end)}` : ""}
                 </div>
-                <div className="flex gap-2 flex-wrap">
-                  {["all", "CRITICAL", "HIGH", "MEDIUM", "LOW"].map((severity) => (
-                    <button
-                      key={severity}
-                      onClick={() => setFilterSeverity(severity)}
-                      className={`px-3 py-2 text-xs rounded-lg font-medium transition-colors ${filterSeverity === severity ? "bg-red-600 text-white" : "bg-slate-700 text-slate-400 hover:bg-slate-600"
-                        }`}
-                    >
-                      {severity}
-                    </button>
-                  ))}
-                </div>
+                <button
+                  onClick={() => {
+                    setSelectedTimelinePoint(null);
+                    setPage(1);
+                  }}
+                  className="rounded border border-slate-700 bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-slate-300 transition-colors hover:border-red-400/50 hover:text-red-300"
+                >
+                  Clear filter
+                </button>
               </div>
-
-              <div ref={filesTableRef} className="overflow-x-auto rounded-lg border border-slate-800">
-                {selectedTimelinePoint && (
-                  <div className="flex flex-col items-start justify-between gap-3 border-b border-slate-800 bg-slate-800/60 p-3 sm:flex-row sm:items-center">
-                    <div className="text-xs text-red-300">
-                      Timeline filter: {formatDetailedTimestamp(selectedTimelinePoint.start)}
-                      {selectedTimelinePoint.end ? ` - ${formatDetailedTimestamp(selectedTimelinePoint.end)}` : ""}
-                    </div>
-                    <button
-                      onClick={() => {
-                        setSelectedTimelinePoint(null);
-                        setPage(1);
-                      }}
-                      className="rounded border border-slate-700 bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-slate-300 transition-colors hover:border-red-400/50 hover:text-red-300"
-                    >
-                      Clear filter
-                    </button>
-                  </div>
-                )}
-                <table className="w-full text-xs md:text-sm">
+            )}
+                <table className="w-full text-[10px] md:text-[11px]">
                   <thead>
-                    <tr className="border-b border-slate-800 bg-slate-800/50">
-                      <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">File</th>
-                      <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Agent</th>
-                      <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Type</th>
-                      <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Scanner</th>
-                      <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">File Path</th>
-                      <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Severity</th>
-                      <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Findings</th>
-                      <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Detected</th>
-                      <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Action</th>
+                    <tr className="border-b border-slate-800 bg-slate-800/70">
+                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">File</th>
+                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Agent</th>
+                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Type</th>
+                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Scanner</th>
+                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">File Path</th>
+                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Severity</th>
+                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Findings</th>
+                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Detected</th>
+                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1252,36 +1426,36 @@ const FileSecurityScanner = () => {
 
                         return (
                           <tr key={file.id} className={`border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors ${idx % 2 !== 0 ? "bg-slate-900/30" : ""}`}>
-                            <td className="px-2 md:px-4 py-1.5 md:py-3">
+                            <td className="px-2 md:px-4 py-1.5 md:py-2">
                               <div className="flex items-center gap-2">
                                 <div className="w-8 h-8 bg-slate-700 rounded flex items-center justify-center text-xs font-bold text-slate-300">
                                   {String(file.fileType || "?").charAt(0).toUpperCase()}
                                 </div>
                                 <div className="min-w-0">
-                                  <div className="font-mono text-sky-300 text-xs truncate max-w-xs">{file.fileName}</div>
-                                  <div className="text-[11px] text-slate-500">{file.sizeLabel}</div>
+                                  <div className="font-mono text-sky-300 text-[10px] md:text-[11px] truncate max-w-xs">{file.fileName}</div>
+                                  <div className="text-[9px] md:text-[10px] text-slate-500">{file.sizeLabel}</div>
                                 </div>
                               </div>
                             </td>
-                            <td className="px-2 md:px-4 py-1.5 md:py-3">
+                            <td className="px-2 md:px-4 py-1.5 md:py-2">
                               <div className="min-w-[140px]">
-                                <div className="truncate text-xs font-semibold text-slate-200">{file.agentName || "Unknown agent"}</div>
+                                <div className="truncate text-[10px] md:text-[11px] font-semibold text-slate-200">{file.agentName || "Unknown agent"}</div>
                               </div>
                             </td>
-                            <td className="px-2 md:px-4 py-1.5 md:py-3 text-xs text-slate-400">{file.fileType}</td>
-                            <td className="px-2 md:px-4 py-1.5 md:py-3 text-xs text-slate-400 font-mono">{file.scanner}</td>
-                            <td className="px-2 md:px-4 py-1.5 md:py-3 max-w-[300px]">
-                              <div className="font-mono text-xs text-amber-300 truncate" title={file.filePath}>{file.filePath || "-"}</div>
+                            <td className="px-2 md:px-4 py-1.5 md:py-2 text-[10px] md:text-[11px] text-slate-400">{file.fileType}</td>
+                            <td className="px-2 md:px-4 py-1.5 md:py-2 text-[10px] md:text-[11px] text-slate-400 font-mono">{file.scanner}</td>
+                            <td className="px-2 md:px-4 py-1.5 md:py-2 max-w-[300px]">
+                              <div className="font-mono text-[10px] md:text-[11px] text-amber-300 truncate" title={file.filePath}>{file.filePath || "-"}</div>
                             </td>
-                            <td className="px-2 md:px-4 py-1.5 md:py-3"><RiskIndicator severity={maxSeverity?.severity || "HIGH"} /></td>
-                            <td className="px-2 md:px-4 py-1.5 md:py-3 text-xs"><span className="text-slate-300 font-mono">{file.findingsCount} found</span></td>
-                            <td className="px-2 md:px-4 py-1.5 md:py-3 text-xs text-slate-400">
+                            <td className="px-2 md:px-4 py-1.5 md:py-2"><RiskIndicator severity={maxSeverity?.severity || "HIGH"} /></td>
+                            <td className="px-2 md:px-4 py-1.5 md:py-2 text-[10px] md:text-[11px]"><span className="text-slate-300 font-mono">{file.findingsCount} found</span></td>
+                            <td className="px-2 md:px-4 py-1.5 md:py-2 text-[10px] md:text-[11px] text-slate-400">
                               {file.timestamp ? new Date(file.timestamp).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}
                             </td>
-                            <td className="px-2 md:px-4 py-1.5 md:py-3">
+                            <td className="px-2 md:px-4 py-1.5 md:py-2">
                               <button
                                 onClick={() => setSelectedFile(file)}
-                                className="px-3 py-1.5 rounded text-xs font-medium transition-colors flex items-center gap-1 bg-red-500/10 text-red-300 hover:bg-red-500/20"
+                                className="px-3 py-1.5 rounded text-[10px] md:text-[11px] font-medium transition-colors flex items-center gap-1 bg-red-500/10 text-red-300 hover:bg-red-500/20"
                               >
                                 <FileText className="h-3.5 w-3.5" />
                                 Detail
@@ -1294,8 +1468,6 @@ const FileSecurityScanner = () => {
                   </tbody>
                 </table>
               </div>
-            </div>
-          </div>
 
           <PaginationControls pagination={pagination} page={page} pageSize={pageSize} loading={loading} onPageChange={setPage} />
         </div>
@@ -1303,46 +1475,46 @@ const FileSecurityScanner = () => {
 
       {selectedFile && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-lg max-w-4xl w-full max-h-[95vh] overflow-y-auto">
-            <div className="sticky top-0 bg-slate-800 border-b border-slate-700 px-6 py-4 flex justify-between items-center">
+          <div className="bg-slate-800 border border-slate-700 rounded-lg max-w-3xl w-full max-h-[95vh] overflow-y-auto">
+            <div className="sticky top-0 bg-slate-800 border-b border-slate-700 px-4 py-3 flex justify-between items-center">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-slate-700 rounded flex items-center justify-center text-sm font-bold text-slate-300">
+                <div className="w-9 h-9 bg-slate-700 rounded flex items-center justify-center text-xs font-bold text-slate-300">
                   {String(selectedFile.fileType || "?").charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-slate-100">{selectedFile.fileName}</h2>
-                  <p className="text-xs text-slate-500 mt-0.5">Forensic Analysis Report</p>
+                  <h2 className="text-base font-bold text-slate-100">{selectedFile.fileName}</h2>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Forensic Analysis Report</p>
                 </div>
               </div>
-              <button onClick={() => setSelectedFile(null)} className="text-slate-400 hover:text-slate-200 text-2xl">✕</button>
+              <button onClick={() => setSelectedFile(null)} className="text-slate-400 hover:text-slate-200 text-xl">✕</button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-4 md:p-5 space-y-5">
               <div>
-                <h3 className="text-sm font-semibold text-slate-200 mb-4 flex items-center gap-2"><FileText className="h-4 w-4" /> File Metadata</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-slate-700/30 rounded-lg p-4 border border-slate-700">
-                  <div><p className="text-xs text-slate-400 uppercase font-semibold mb-1">File Type</p><p className="text-sm text-slate-100">{selectedFile.fileType}</p></div>
-                  <div><p className="text-xs text-slate-400 uppercase font-semibold mb-1">Size</p><p className="text-sm text-slate-100">{selectedFile.sizeLabel}</p></div>
-                  <div><p className="text-xs text-slate-400 uppercase font-semibold mb-1">Scanner</p><p className="text-sm text-slate-100">{selectedFile.scanner}</p></div>
-                  <div><p className="text-xs text-slate-400 uppercase font-semibold mb-1">Agent</p><p className="text-sm text-slate-100">{selectedFile.agentName || "Unknown agent"}</p></div>
-                  <div className="md:col-span-2"><p className="text-xs text-slate-400 uppercase font-semibold mb-1">File Path</p><p className="text-sm font-mono text-amber-300 break-all">{selectedFile.filePath || "-"}</p></div>
-                  <div><p className="text-xs text-slate-400 uppercase font-semibold mb-1">Detected</p><p className="text-sm text-slate-100">{selectedFile.timestamp ? new Date(selectedFile.timestamp).toLocaleString() : "-"}</p></div>
-                  <div><p className="text-xs text-slate-400 uppercase font-semibold mb-1">Action</p><p className="text-sm text-slate-100">{selectedFile.actionStatus}</p></div>
+                <h3 className="text-xs md:text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2"><FileText className="h-3.5 w-3.5" /> File Metadata</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-700/30 rounded-lg p-3 border border-slate-700">
+                  <div><p className="text-[10px] text-slate-400 uppercase font-semibold mb-1">File Type</p><p className="text-xs text-slate-100">{selectedFile.fileType}</p></div>
+                  <div><p className="text-[10px] text-slate-400 uppercase font-semibold mb-1">Size</p><p className="text-xs text-slate-100">{selectedFile.sizeLabel}</p></div>
+                  <div><p className="text-[10px] text-slate-400 uppercase font-semibold mb-1">Scanner</p><p className="text-xs text-slate-100">{selectedFile.scanner}</p></div>
+                  <div><p className="text-[10px] text-slate-400 uppercase font-semibold mb-1">Agent</p><p className="text-xs text-slate-100">{selectedFile.agentName || "Unknown agent"}</p></div>
+                  <div className="md:col-span-2"><p className="text-[10px] text-slate-400 uppercase font-semibold mb-1">File Path</p><p className="text-xs font-mono text-amber-300 break-all">{selectedFile.filePath || "-"}</p></div>
+                  <div><p className="text-[10px] text-slate-400 uppercase font-semibold mb-1">Detected</p><p className="text-xs text-slate-100">{selectedFile.timestamp ? new Date(selectedFile.timestamp).toLocaleString() : "-"}</p></div>
+                  <div><p className="text-[10px] text-slate-400 uppercase font-semibold mb-1">Action</p><p className="text-xs text-slate-100">{selectedFile.actionStatus}</p></div>
                   {/* Agent ID intentionally hidden from UI per request */}
-                  <div><p className="text-xs text-slate-400 uppercase font-semibold mb-1">File Risk Score</p><HealthIndicator health={selectedFile.health} /></div>
+                  <div><p className="text-[10px] text-slate-400 uppercase font-semibold mb-1">File Risk Score</p><HealthIndicator health={selectedFile.health} /></div>
                 </div>
               </div>
 
               <div>
-                <h3 className="text-sm font-semibold text-slate-200 mb-4 flex items-center gap-2"><FileText className="h-4 w-4" /> File Hashes</h3>
-                <div className="space-y-3 bg-slate-700/30 rounded-lg p-4 border border-slate-700">
+                <h3 className="text-xs md:text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2"><FileText className="h-3.5 w-3.5" /> File Hashes</h3>
+                <div className="space-y-2 bg-slate-700/30 rounded-lg p-3 border border-slate-700">
                   <div>
-                    <p className="text-xs text-slate-400 uppercase font-semibold mb-2">SHA-256</p>
+                    <p className="text-[10px] text-slate-400 uppercase font-semibold mb-1.5">SHA-256</p>
                     <div className="flex items-center gap-2 bg-slate-800/50 rounded p-2">
-                      <code className="text-xs text-slate-300 font-mono flex-1 break-all">{selectedFile.sha256}</code>
-                      <button onClick={() => copyToClipboard(selectedFile.sha256, "sha256")} className={`p-1.5 rounded transition-colors ${copiedText === "sha256" ? "bg-green-500/30 text-green-300" : "bg-slate-600/30 text-slate-400 hover:bg-slate-600"}`}><Copy className="h-4 w-4" /></button>
+                      <code className="text-[11px] text-slate-300 font-mono flex-1 break-all">{selectedFile.sha256}</code>
+                      <button onClick={() => copyToClipboard(selectedFile.sha256, "sha256")} className={`p-1.5 rounded transition-colors ${copiedText === "sha256" ? "bg-green-500/30 text-green-300" : "bg-slate-600/30 text-slate-400 hover:bg-slate-600"}`}><Copy className="h-3.5 w-3.5" /></button>
                       {selectedFile.sha256 !== "-" && (
-                        <a href={getVirusTotalLink(selectedFile.sha256)} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded bg-slate-600/30 text-slate-400 hover:text-sky-400 transition-colors"><ExternalLink className="h-4 w-4" /></a>
+                        <a href={getVirusTotalLink(selectedFile.sha256)} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded bg-slate-600/30 text-slate-400 hover:text-sky-400 transition-colors"><ExternalLink className="h-3.5 w-3.5" /></a>
                       )}
                     </div>
                   </div>
@@ -1351,24 +1523,24 @@ const FileSecurityScanner = () => {
 
               {selectedFile.error ? (
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-200 mb-4 flex items-center gap-2"><AlertCircle className="h-4 w-4" /> Error Detail</h3>
-                  <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-4 text-sm text-orange-200 break-all">{selectedFile.error}</div>
+                  <h3 className="text-xs md:text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2"><AlertCircle className="h-3.5 w-3.5" /> Error Detail</h3>
+                  <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3 text-xs text-orange-200 break-all">{selectedFile.error}</div>
                 </div>
               ) : null}
 
               <div>
-                <h3 className="text-sm font-semibold text-slate-200 mb-4 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Detected Indicators ({selectedFile.findings.length})</h3>
-                <div className="space-y-3">
+                <h3 className="text-xs md:text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2"><AlertTriangle className="h-3.5 w-3.5" /> Detected Indicators ({selectedFile.findings.length})</h3>
+                <div className="space-y-2">
                   {selectedFile.findings.length === 0 ? (
-                    <div className="bg-slate-700/30 rounded-lg p-4 border border-slate-700 text-sm text-slate-400">No indicators reported.</div>
+                    <div className="bg-slate-700/30 rounded-lg p-3 border border-slate-700 text-xs text-slate-400">No indicators reported.</div>
                   ) : (
                     selectedFile.findings.map((finding, idx) => (
-                      <div key={`${finding.name}-${idx}`} className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+                      <div key={`${finding.name}-${idx}`} className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1">
-                            <div className="flex items-center gap-2"><p className="font-semibold text-slate-100">{finding.name}</p><RiskIndicator severity={finding.severity} /></div>
-                            <p className="text-sm text-slate-400 mt-1">{finding.desc}</p>
-                            <p className="text-xs text-slate-500 mt-2 font-mono">{finding.type}</p>
+                            <div className="flex items-center gap-2"><p className="text-xs font-semibold text-slate-100">{finding.name}</p><RiskIndicator severity={finding.severity} /></div>
+                            <p className="text-xs text-slate-400 mt-1">{finding.desc}</p>
+                            <p className="text-[11px] text-slate-500 mt-1.5 font-mono">{finding.type}</p>
                           </div>
                         </div>
                       </div>
@@ -1379,12 +1551,12 @@ const FileSecurityScanner = () => {
 
               {selectedFile.extractedUrls.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-200 mb-4 flex items-center gap-2"><ExternalLink className="h-4 w-4" /> Extracted URLs ({selectedFile.extractedUrls.length})</h3>
+                  <h3 className="text-xs md:text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2"><ExternalLink className="h-3.5 w-3.5" /> Extracted URLs ({selectedFile.extractedUrls.length})</h3>
                   <div className="space-y-2">
                     {selectedFile.extractedUrls.map((url, idx) => (
-                      <div key={`${url}-${idx}`} className="bg-slate-700/30 rounded-lg p-3 border border-slate-700 flex items-center justify-between gap-3">
-                        <code className="text-xs text-slate-300 font-mono flex-1 break-all">{url}</code>
-                        <a href={url} target="_blank" rel="noopener noreferrer" className="p-2 text-slate-400 hover:text-sky-400 transition-colors flex-shrink-0"><ExternalLink className="h-4 w-4" /></a>
+                      <div key={`${url}-${idx}`} className="bg-slate-700/30 rounded-lg p-2 border border-slate-700 flex items-center justify-between gap-3">
+                        <code className="text-[11px] text-slate-300 font-mono flex-1 break-all">{url}</code>
+                        <a href={url} target="_blank" rel="noopener noreferrer" className="p-1.5 text-slate-400 hover:text-sky-400 transition-colors flex-shrink-0"><ExternalLink className="h-3.5 w-3.5" /></a>
                       </div>
                     ))}
                   </div>
@@ -1393,36 +1565,36 @@ const FileSecurityScanner = () => {
 
               {selectedFile.matchedSources.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-200 mb-4">Matched Sources ({selectedFile.matchedSources.length})</h3>
+                  <h3 className="text-xs md:text-sm font-semibold text-slate-200 mb-3">Matched Sources ({selectedFile.matchedSources.length})</h3>
                   <div className="space-y-2">
                     {selectedFile.matchedSources.map((source, idx) => (
-                      <div key={`${source}-${idx}`} className="bg-slate-700/30 rounded-lg p-3 border border-slate-700"><p className="text-sm text-slate-300 font-mono break-all">{typeof source === "object" ? JSON.stringify(source) : source}</p></div>
+                      <div key={`${source}-${idx}`} className="bg-slate-700/30 rounded-lg p-2 border border-slate-700"><p className="text-xs text-slate-300 font-mono break-all">{typeof source === "object" ? JSON.stringify(source) : source}</p></div>
                     ))}
                   </div>
                 </div>
               )}
 
               <div>
-                <h3 className="text-sm font-semibold text-slate-200 mb-3">Recommended Actions</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <h3 className="text-xs md:text-sm font-semibold text-slate-200 mb-3">Recommended Actions</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {selectedFile.sha256 !== "-" ? (
-                    <a href={getVirusTotalLink(selectedFile.sha256)} target="_blank" rel="noopener noreferrer" className="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 rounded-lg text-sm font-medium text-white transition-colors flex items-center justify-center gap-2"><ExternalLink className="h-4 w-4" /> VirusTotal</a>
+                    <a href={getVirusTotalLink(selectedFile.sha256)} target="_blank" rel="noopener noreferrer" className="px-3 py-2 bg-sky-600 hover:bg-sky-700 rounded-lg text-xs font-medium text-white transition-colors flex items-center justify-center gap-2"><ExternalLink className="h-3.5 w-3.5" /> VirusTotal</a>
                   ) : (
-                    <button disabled className="px-4 py-2.5 bg-slate-700/50 rounded-lg text-sm font-medium text-slate-500 flex items-center justify-center gap-2"><ExternalLink className="h-4 w-4" /> VirusTotal</button>
+                    <button disabled className="px-3 py-2 bg-slate-700/50 rounded-lg text-xs font-medium text-slate-500 flex items-center justify-center gap-2"><ExternalLink className="h-3.5 w-3.5" /> VirusTotal</button>
                   )}
-                  <button onClick={() => copyToClipboard(JSON.stringify(selectedFile, null, 2), "export")} className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"><Copy className="h-4 w-4" /> Copy JSON</button>
-                  <button className="px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 bg-red-600/20 hover:bg-red-600/30 text-red-300"><ShieldCheck className="h-4 w-4" /> {selectedFile.actionStatus}</button>
+                  <button onClick={() => copyToClipboard(JSON.stringify(selectedFile, null, 2), "export")} className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2"><Copy className="h-3.5 w-3.5" /> Copy JSON</button>
+                  <button className="px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2 bg-red-600/20 hover:bg-red-600/30 text-red-300"><ShieldCheck className="h-3.5 w-3.5" /> {selectedFile.actionStatus}</button>
                 </div>
               </div>
             </div>
 
-            <div className="sticky bottom-0 bg-slate-800 border-t border-slate-700 px-6 py-4 flex justify-end gap-3">
-              <button onClick={() => setSelectedFile(null)} className="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg hover:bg-slate-600 transition-colors text-sm font-medium">Close</button>
+            <div className="sticky bottom-0 bg-slate-800 border-t border-slate-700 px-4 py-3 flex justify-end gap-3">
+              <button onClick={() => setSelectedFile(null)} className="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg hover:bg-slate-600 transition-colors text-xs font-medium">Close</button>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 
