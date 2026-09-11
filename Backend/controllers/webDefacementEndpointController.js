@@ -20,7 +20,7 @@ export const addWebDefacementEndpoint = asyncHandler(async (req, res) => {
   if (!endpointUrl) {
     return res.status(400).json({
       success: false,
-      message: "Endpoint URL harus diisi",
+      message: "Endpoint URL is required",
     });
   }
 
@@ -28,7 +28,7 @@ export const addWebDefacementEndpoint = asyncHandler(async (req, res) => {
 
   res.status(201).json({
     success: true,
-    message: "Endpoint URL berhasil ditambahkan",
+    message: "Endpoint URL added successfully",
     endpoint,
   });
 });
@@ -39,7 +39,7 @@ export const removeWebDefacementEndpoint = asyncHandler(async (req, res) => {
   if (!endpointId) {
     return res.status(400).json({
       success: false,
-      message: "Endpoint ID harus diisi",
+      message: "Endpoint ID is required",
     });
   }
 
@@ -47,7 +47,7 @@ export const removeWebDefacementEndpoint = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    message: "Endpoint URL berhasil dihapus",
+    message: "Endpoint URL deleted successfully",
     endpoint,
   });
 });

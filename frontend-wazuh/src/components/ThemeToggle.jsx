@@ -15,8 +15,8 @@ const ThemeToggle = ({ className = "", compact = false }) => {
           ? "rounded-md px-2.5 py-1.5 text-[11px]"
           : "rounded-lg px-3 py-2 text-xs"
       } ${className}`}
-      aria-label={`Aktifkan ${nextThemeLabel.toLowerCase()} mode`}
-      title={`Aktifkan ${nextThemeLabel} Mode`}
+      aria-label={`Enable ${nextThemeLabel.toLowerCase()} mode`}
+      title={`Enable ${nextThemeLabel} Mode`}
     >
       <Icon className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
       <span>{nextThemeLabel}</span>

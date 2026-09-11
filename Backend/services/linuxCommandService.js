@@ -417,6 +417,12 @@ export async function getLinuxCommandStats(query) {
             size: 20
           }
         },
+        by_agent: {
+          terms: {
+            field: "agent.name",
+            size: 20
+          }
+        },
         by_command_name: {
           terms: {
             field: "linux.command_name.keyword",
@@ -448,6 +454,10 @@ export async function getLinuxCommandStats(query) {
     suspiciousCommands: response.aggregations?.suspicious_count?.doc_count ?? 0,
     users: (response.aggregations?.by_user?.buckets || []).map((bucket) => ({
       user: bucket.key,
+      count: bucket.doc_count
+    })),
+    agents: (response.aggregations?.by_agent?.buckets || []).map((bucket) => ({
+      agent: bucket.key,
       count: bucket.doc_count
     })),
     commandNames: (response.aggregations?.by_command_name?.buckets || []).map((bucket) => ({

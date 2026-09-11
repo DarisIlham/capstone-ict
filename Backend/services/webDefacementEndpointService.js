@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto";
+﻿import { randomUUID } from "crypto";
 import pool from "../config/pg.js";
 
 let initializationPromise = null;
@@ -16,7 +16,7 @@ function mapRowToEndpoint(row) {
 export function normalizeStoredEndpoint(endpoint = "") {
   const trimmed = String(endpoint).trim();
   if (!trimmed) {
-    const error = new Error("Endpoint URL harus diisi");
+    const error = new Error("Endpoint URL is required");
     error.statusCode = 400;
     throw error;
   }
@@ -27,13 +27,13 @@ export function normalizeStoredEndpoint(endpoint = "") {
   try {
     parsedUrl = new URL(withProtocol);
   } catch {
-    const error = new Error("Format endpoint URL tidak valid");
+    const error = new Error("Invalid endpoint URL format");
     error.statusCode = 400;
     throw error;
   }
 
   if (!parsedUrl.hostname) {
-    const error = new Error("Format endpoint URL tidak valid");
+    const error = new Error("Invalid endpoint URL format");
     error.statusCode = 400;
     throw error;
   }
@@ -97,7 +97,7 @@ export async function createWebDefacementEndpoint(endpointUrl) {
     return mapRowToEndpoint(result.rows[0]);
   } catch (error) {
     if (error?.code === "23505") {
-      const duplicateError = new Error("Endpoint URL sudah terdaftar");
+      const duplicateError = new Error("Endpoint URL is already registered");
       duplicateError.statusCode = 409;
       throw duplicateError;
     }
@@ -119,7 +119,7 @@ export async function deleteWebDefacementEndpoint(endpointId) {
   );
 
   if (!result.rows.length) {
-    const error = new Error("Endpoint URL tidak ditemukan");
+    const error = new Error("Endpoint URL not found");
     error.statusCode = 404;
     throw error;
   }

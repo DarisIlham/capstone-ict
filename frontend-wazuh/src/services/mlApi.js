@@ -36,10 +36,5 @@ export function getTimeline(minutes = 60, options = {}) {
   return fetchJson(url);
 }
 
-export function getTimelineMock(minutes = 60) {
-  const url = `${BASE}/predictions/timeline-mock?minutes=${encodeURIComponent(minutes)}`;
-  return fetchJson(url);
-}
-
-const mlApi = { getPredictions, getLatest, getStats, getTimeline, getTimelineMock };
+const mlApi = { getPredictions, getLatest, getStats, getTimeline };
 export default mlApi;

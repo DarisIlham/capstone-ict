@@ -18,19 +18,35 @@ import {
 
 // Horizontal bar chart untuk Source IPs dengan gradient color, dashed pattern, dan UI yang lebih bagus
 const HorizontalBarChart = ({ data }) => {
+  const chartWrapRef = useRef(null);
+  const [wrapWidth, setWrapWidth] = useState(1100);
+
+  useEffect(() => {
+    const el = chartWrapRef.current;
+    if (!el) return;
+    const updateSize = () => {
+      if (el.clientWidth > 0) setWrapWidth(el.clientWidth);
+    };
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   if (!data || data.length === 0) {
     return <div className="h-32 flex items-center justify-center text-slate-500">No data</div>;
   }
-  
+
+  const width = Math.max(wrapWidth, 480);
   const maxCount = Math.max(1, ...data.map(d => d.count));
   const rowHeight = 42;
   const barHeight = 28;
   const chartHeight = data.length * rowHeight + 12;
-  const labelWidth = 180;
-  const barStartX = 205;
-  const barMaxWidth = 710;
-  const rankX = 1040;
-  
+  const labelWidth = Math.round(width * 0.18);
+  const barStartX = labelWidth + 25;
+  const rankX = width - 32;
+  const barMaxWidth = Math.max(60, rankX - barStartX - 40);
+
   const getGradientColor = (index) => {
     // Red (rank 1) → Orange → Yellow → Green → Cyan → Blue (rank 10)
     const ratio = index / Math.max(1, data.length - 1);
@@ -42,106 +58,106 @@ const HorizontalBarChart = ({ data }) => {
     if (ratio < 0.85) return `rgb(30, 144, 255)`; // Vivid Blue
     return `rgb(75, 0, 130)`; // Indigo
   };
-  
+
   return (
-    <div className="space-y-1">
-      <svg width="100%" height={chartHeight} viewBox={`0 0 1100 ${chartHeight}`} className="block w-full">
+    <div ref={chartWrapRef} className="space-y-1 w-full">
+      <svg width="100%" height={chartHeight} viewBox={`0 0 ${width} ${chartHeight}`} className="block w-full">
         <defs>
           {/* Glow effect untuk bar */}
           <filter id="barGlow">
-            <feGaussianBlur stdDeviation="0.5" result="coloredBlur"/>
+            <feGaussianBlur stdDeviation="0.5" result="coloredBlur" />
             <feMerge>
-              <feMergeNode in="coloredBlur"/>
-              <feMergeNode in="SourceGraphic"/>
+              <feMergeNode in="coloredBlur" />
+              <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
         </defs>
-        
+
         {data.map((item, i) => {
           const ratio = item.count / maxCount;
           const barWidth = ratio * barMaxWidth;
           const y = i * rowHeight + 12;
           const color = getGradientColor(i);
-          
+
           return (
             <g key={`bar-${i}`}>
               {/* Subtle shadow/glow background */}
               <rect x={barStartX} y={y + 2} width={barMaxWidth} height={barHeight} fill="#0f172a" rx="8" opacity="0.3" />
-              
+
               {/* Background bar container */}
               <rect x={barStartX} y={y} width={barMaxWidth} height={barHeight} fill="var(--soc-border)" rx="8" strokeWidth="0.5" stroke="var(--soc-border)" />
-              
+
               {/* Solid bar with smooth edges */}
-              <rect 
-                x={barStartX} y={y} width={barWidth} height={barHeight} 
+              <rect
+                x={barStartX} y={y} width={barWidth} height={barHeight}
                 fill={color}
                 rx="8"
                 filter="url(#barGlow)"
               />
-              
+
               {/* Bar border - outline untuk edge yang lebih tajam */}
-              <rect 
-                x={barStartX} y={y} width={barWidth} height={barHeight} 
-                fill="none" 
-                stroke={color} 
-                strokeWidth="1" 
+              <rect
+                x={barStartX} y={y} width={barWidth} height={barHeight}
+                fill="none"
+                stroke={color}
+                strokeWidth="1"
                 rx="8"
                 opacity="0.6"
               />
-              
+
               {/* Highlight bar - top edge glow */}
-              <line 
-                x1={barStartX} y1={y + 1} x2={barStartX + barWidth} y2={y + 1} 
-                stroke="white" 
-                strokeWidth="0.75" 
-                opacity="0.2" 
+              <line
+                x1={barStartX} y1={y + 1} x2={barStartX + barWidth} y2={y + 1}
+                stroke="white"
+                strokeWidth="0.75"
+                opacity="0.2"
                 rx="6"
               />
-              
+
               {/* Count label - dalam atau luar bar */}
               {ratio > 0.12 ? (
-                <text 
-                  x={barStartX + barWidth - 10} y={y + 19} 
-                  textAnchor="end" 
-                  fontSize="12" 
-                  fill="white" 
+                <text
+                  x={barStartX + barWidth - 10} y={y + 19}
+                  textAnchor="end"
+                  fontSize="12"
+                  fill="white"
                   fontWeight="700"
                   fontFamily="'Courier New', monospace"
                 >
                   {item.count}
                 </text>
               ) : (
-                <text 
-                  x={barStartX + barWidth + 10} y={y + 19} 
-                  textAnchor="start" 
-                  fontSize="12" 
-                  fill={color} 
+                <text
+                  x={barStartX + barWidth + 10} y={y + 19}
+                  textAnchor="start"
+                  fontSize="12"
+                  fill={color}
                   fontWeight="700"
                   fontFamily="'Courier New', monospace"
                 >
                   {item.count}
                 </text>
               )}
-              
+
               {/* IP Label */}
-              <text 
-                x={labelWidth / 2 + 8} y={y + 18} 
+              <text
+                x={labelWidth / 2 + 8} y={y + 18}
                 textAnchor="middle"
-                fontSize="13" 
-                fill="white" 
-                fontWeight="700" 
+                fontSize="13"
+                fill="white"
+                fontWeight="700"
                 fontFamily="'Courier New', monospace"
               >
                 {item.label}
               </text>
-              
+
               {/* Rank - dengan styling yang lebih baik */}
               <circle cx={rankX} cy={y + 14} r="10" fill="var(--soc-border)" stroke="var(--soc-border)" strokeWidth="1.2" />
-              <text 
-                x={rankX} y={y + 18} 
-                textAnchor="middle" 
-                fontSize="11" 
-                fill="white" 
+              <text
+                x={rankX} y={y + 18}
+                textAnchor="middle"
+                fontSize="11"
+                fill="white"
                 fontWeight="700"
               >
                 {i + 1}
@@ -149,9 +165,9 @@ const HorizontalBarChart = ({ data }) => {
             </g>
           );
         })}
-        
+
         {/* Separator line */}
-        <line x1="0" y1={chartHeight - 8} x2="1100" y2={chartHeight - 8} stroke="var(--soc-border)" strokeWidth="0.5" opacity="0.5" />
+        <line x1="0" y1={chartHeight - 8} x2={width} y2={chartHeight - 8} stroke="var(--soc-border)" strokeWidth="0.5" opacity="0.5" />
       </svg>
     </div>
   );
@@ -392,10 +408,15 @@ const formatBucketLabel = (timestamp, rangeKey) => {
     });
   }
 
-  if (rangeKey === '24h' || rangeKey === '7d') {
+  if (rangeKey === '24h') {
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+    });
+  }
+
+  if (rangeKey === '7d') {
     return date.toLocaleString('en-US', {
-      month: 'short',
-      day: '2-digit',
+      weekday: 'short',
       hour: '2-digit',
     });
   }
@@ -408,8 +429,8 @@ const formatBucketLabel = (timestamp, rangeKey) => {
 
 const getTimelineBucketMs = (minutes) => {
   if (minutes <= 60) return 5 * 60 * 1000;
-  if (minutes <= 1440) return 30 * 60 * 1000;
-  if (minutes <= 10080) return 3 * 60 * 60 * 1000;
+  if (minutes <= 1440) return 60 * 60 * 1000;
+  if (minutes <= 10080) return 6 * 60 * 60 * 1000;
   if (minutes <= 525600) return 24 * 60 * 60 * 1000;
   return 7 * 24 * 60 * 60 * 1000;
 };
@@ -445,11 +466,10 @@ const formatTimelineBucketLabel = (point, rangeKey) => {
 const buildTimelineFromPredictions = (predictions, minutes, start, end) => {
   const safeMinutes = Math.max(parseInt(minutes || '60', 10), 1);
   const rangeMs = safeMinutes * 60 * 1000;
-  const stepMs = getTimelineBucketMs(safeMinutes);
+  const preferredStepMs = getTimelineBucketMs(safeMinutes);
   const now = Date.now();
   const startMs = start ? getTimestampMs(start) : now - rangeMs;
   const endMs = end ? getTimestampMs(end) : now;
-  const bucketStart = (ts) => Math.floor(ts / stepMs) * stepMs;
 
   const filteredPredictions = predictions
     .map((item) => ({
@@ -458,13 +478,13 @@ const buildTimelineFromPredictions = (predictions, minutes, start, end) => {
     }))
     .filter((item) => Number.isFinite(item._ts) && Number.isFinite(startMs) && Number.isFinite(endMs) && item._ts >= startMs && item._ts <= endMs);
 
-  if (!filteredPredictions.length) {
-    return [];
-  }
+  // Keep empty ML timelines readable by placing zero-value points one hour apart.
+  const stepMs = filteredPredictions.length ? preferredStepMs : 60 * 60 * 1000;
+  const bucketStart = (ts) => Math.floor(ts / stepMs) * stepMs;
 
   const buckets = new Map();
-  let minBucket = Infinity;
-  let maxBucket = -Infinity;
+  let minBucket = Number.isFinite(startMs) ? bucketStart(startMs) : Infinity;
+  let maxBucket = Number.isFinite(endMs) ? bucketStart(endMs) : -Infinity;
 
   filteredPredictions.forEach((item) => {
     const bucket = bucketStart(item._ts);
@@ -567,9 +587,9 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items" }) =
   const height = size.height;
   if (!items || items.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-6 text-center">
-        <p className="text-sm font-medium text-[var(--soc-text-secondary)]">No data available</p>
-        <p className="mt-0.5 text-xs text-[var(--soc-text-muted)]">No data for the selected time range.</p>
+      <div className="flex h-full min-h-24 w-full flex-col items-center justify-center text-center text-xs text-slate-600">
+        <p>No data available</p>
+        <p className="mt-0.5">No data for the selected time range.</p>
       </div>
     );
   }
@@ -624,36 +644,36 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items" }) =
       </div>
       <div ref={rootRef} className="flex-1 min-h-0 w-full">
         <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block">
-        {gridLines.map((grid, idx) => (
-          <g key={`grid-${idx}`}>
-            <line x1={padding.l} y1={grid.y} x2={padding.l + innerW} y2={grid.y} stroke="var(--soc-border)" strokeWidth="1" opacity={grid.y === padding.t || grid.y === padding.t + innerH ? "1" : "0.5"} />
-            <text x={padding.l - 6} y={grid.y + 3} textAnchor="end" fontSize="10" fill="var(--soc-text-muted)" fontWeight="600">
-              {grid.value}
-            </text>
-          </g>
-        ))}
-        <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="var(--soc-border)" strokeWidth="1.5" />
-        <line x1={padding.l} y1={padding.t + innerH} x2={padding.l + innerW} y2={padding.t + innerH} stroke="var(--soc-border)" strokeWidth="1.5" />
-        {segments.map((seg) => (
-          <path key={seg.key} d={seg.d} stroke={seg.color} strokeWidth="2.5" fill="none" opacity="0.85" />
-        ))}
-        {points.map((p) => {
-          const isSel = selected?.index === p.index;
-          return (
-            <g key={`${p.label}-${p.index}`}>
-              <circle cx={p.x} cy={p.y} r={isSel ? "6" : "9"} fill="transparent" className="cursor-pointer"
-                onMouseEnter={() => setSelected(p)}
-                onMouseLeave={() => setSelected(null)}
-                onFocus={() => setSelected(p)}
-                onBlur={() => setSelected(null)}
-                onClick={() => setSelected(isSel ? null : p)}
-              />
-              <circle cx={p.x} cy={p.y} r={isSel ? "5" : "3.5"} fill={p.color} stroke="var(--soc-bg)" strokeWidth="1.5" opacity="0.95" className="pointer-events-none" />
-              <text x={p.x} y={padding.t + innerH + 18} textAnchor="middle" fontSize="9" fill="var(--soc-text-muted)">{p.label}</text>
+          {gridLines.map((grid, idx) => (
+            <g key={`grid-${idx}`}>
+              <line x1={padding.l} y1={grid.y} x2={padding.l + innerW} y2={grid.y} stroke="var(--soc-border)" strokeWidth="1" opacity={grid.y === padding.t || grid.y === padding.t + innerH ? "1" : "0.5"} />
+              <text x={padding.l - 6} y={grid.y + 3} textAnchor="end" fontSize="10" fill="var(--soc-text-muted)" fontWeight="600">
+                {grid.value}
+              </text>
             </g>
-          );
-        })}
-      </svg>
+          ))}
+          <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="var(--soc-border)" strokeWidth="1.5" />
+          <line x1={padding.l} y1={padding.t + innerH} x2={padding.l + innerW} y2={padding.t + innerH} stroke="var(--soc-border)" strokeWidth="1.5" />
+          {segments.map((seg) => (
+            <path key={seg.key} d={seg.d} stroke={seg.color} strokeWidth="2.5" fill="none" opacity="0.85" />
+          ))}
+          {points.map((p) => {
+            const isSel = selected?.index === p.index;
+            return (
+              <g key={`${p.label}-${p.index}`}>
+                <circle cx={p.x} cy={p.y} r={isSel ? "6" : "9"} fill="transparent" className="cursor-pointer"
+                  onMouseEnter={() => setSelected(p)}
+                  onMouseLeave={() => setSelected(null)}
+                  onFocus={() => setSelected(p)}
+                  onBlur={() => setSelected(null)}
+                  onClick={() => setSelected(isSel ? null : p)}
+                />
+                <circle cx={p.x} cy={p.y} r={isSel ? "5" : "3.5"} fill={p.color} stroke="var(--soc-bg)" strokeWidth="1.5" opacity="0.95" className="pointer-events-none" />
+                <text x={p.x} y={padding.t + innerH + 18} textAnchor="middle" fontSize="9" fill="var(--soc-text-muted)">{p.label}</text>
+              </g>
+            );
+          })}
+        </svg>
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 justify-center px-1 mt-1">
         {points.map((p) => (
@@ -683,31 +703,38 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items" }) =
 
 const WaveChart = ({ data, width = 1000, height = 320, rangeKey, onPointSelect, activePointKey }) => {
   const [selectedPoint, setSelectedPoint] = useState(null);
+  const rootRef = useRef(null);
+  const [size, setSize] = useState({ width, height });
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setSize({ width: Math.max(rect.width, 200), height: Math.max(rect.height, 100) });
+      }
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  width = size.width;
+  height = size.height;
   const maxV = Math.max(1, ...data.map((d) => d.v));
-  const padding = { l: 28, r: 10, t: 8, b: 36 };
+  const padding = { l: 28, r: 10, t: 8, b: 24 };
   const innerW = width - padding.l - padding.r;
   const innerH = height - padding.t - padding.b;
   const pointSpacing = data.length > 1 ? innerW / (data.length - 1) : 0;
 
   const gridLines = [];
-  const seenValues = new Set();
 
   const gridSteps = 5;
   for (let i = 0; i < gridSteps; i++) {
     const ratio = i / (gridSteps - 1);
-    let value = Math.round(ratio * maxV);
-
-    if (seenValues.has(value)) {
-      let offset = 1;
-      while (seenValues.has(value + offset) && offset <= maxV) offset++;
-      if (offset <= maxV) {
-        value = value + offset;
-      } else {
-        continue;
-      }
-    }
-
-    seenValues.add(value);
+    const value = Math.round(ratio * maxV);
     const y = padding.t + innerH - ratio * innerH;
     gridLines.push({ value, y, ratio });
   }
@@ -733,7 +760,7 @@ const WaveChart = ({ data, width = 1000, height = 320, rangeKey, onPointSelect, 
   const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
 
   return (
-    <div className="relative h-full w-full overflow-visible" onMouseLeave={() => setSelectedPoint(null)}>
+    <div ref={rootRef} className="relative h-full w-full overflow-visible" onMouseLeave={() => setSelectedPoint(null)}>
       <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block w-full h-full overflow-visible">
         {gridLines.map((grid, idx) => (
           <g key={`grid-${idx}`}>
@@ -759,7 +786,6 @@ const WaveChart = ({ data, width = 1000, height = 320, rangeKey, onPointSelect, 
           const x = padding.l + i * pointSpacing;
           const y = padding.t + innerH - (d.v / maxV) * innerH;
           const pointKey = d.key || d.start || d.time || d.t || `point-${i}`;
-          const isSelected = selectedPoint?.index === i;
           const isActive = activePointKey === pointKey;
           const pointData = {
             index: i,
@@ -775,24 +801,13 @@ const WaveChart = ({ data, width = 1000, height = 320, rangeKey, onPointSelect, 
           };
           return (
             <g key={pointKey}>
-              {isActive && (
-                <circle
-                  cx={x}
-                  cy={y}
-                  r="7.5"
-                  fill="transparent"
-                  stroke="#a78bfa"
-                  strokeWidth="1.5"
-                  opacity="0.85"
-                  className="pointer-events-none"
-                />
-              )}
               <circle
                 cx={x}
                 cy={y}
                 r="10"
                 fill="transparent"
-                className="cursor-pointer"
+                className="cursor-pointer focus:outline-none"
+                style={{ outline: "none" }}
                 role="button"
                 tabIndex={0}
                 aria-label={`Select prediction data`}
@@ -811,10 +826,10 @@ const WaveChart = ({ data, width = 1000, height = 320, rangeKey, onPointSelect, 
               <circle
                 cx={x}
                 cy={y}
-                r={isActive ? "5" : isSelected ? "5" : "3.5"}
+                r="3.5"
                 fill={isActive ? "#a78bfa" : "#a78bfa"}
-                stroke="#0f172a"
-                strokeWidth="1.5"
+                stroke={isActive ? "#0f172a" : "none"}
+                strokeWidth="2.5"
                 opacity="0.95"
                 className="pointer-events-none"
               />
@@ -830,7 +845,7 @@ const WaveChart = ({ data, width = 1000, height = 320, rangeKey, onPointSelect, 
               <line x1={x} y1={padding.t + innerH} x2={x} y2={padding.t + innerH + 4} stroke="var(--soc-border)" />
               <text
                 x={x}
-                y={padding.t + innerH + 16}
+                y={padding.t + innerH + 14}
                 textAnchor={i === 0 ? "start" : i === data.length - 1 ? "end" : "middle"}
                 fontSize="8"
                 fill="#64748b"
@@ -863,13 +878,13 @@ const ConfidenceBadge = ({ score }) => {
   const val = typeof score === 'number' ? score : parseFloat(score);
   if (isNaN(val)) return <span className="text-slate-400">-</span>;
   const pct = Math.round(val * 100);
-  
+
   let bg = 'bg-red-900/30';
   let text = 'text-red-400';
   if (pct >= 80) { bg = 'bg-green-900/30'; text = 'text-green-400'; }
   else if (pct >= 60) { bg = 'bg-yellow-900/30'; text = 'text-yellow-400'; }
   else if (pct >= 40) { bg = 'bg-orange-900/30'; text = 'text-orange-400'; }
-  
+
   return (
     <span className={`text-[9px] md:text-[10px] px-1.5 py-0.5 rounded border font-semibold inline-block ${bg} ${text}`}>
       {pct}%
@@ -880,11 +895,10 @@ const ConfidenceBadge = ({ score }) => {
 const PredictionBadge = ({ label }) => {
   const isBenign = String(label).toLowerCase().includes('benign');
   return (
-    <span className={`text-[9px] md:text-[10px] px-1.5 py-0.5 rounded-full border font-semibold ${
-      isBenign
+    <span className={`text-[9px] md:text-[10px] px-1.5 py-0.5 rounded-full border font-semibold ${isBenign
         ? 'bg-green-900/30 text-green-400 border-green-700/50'
         : 'bg-red-900/30 text-red-400 border-red-700/50'
-    }`}>
+      }`}>
       {label || 'unknown'}
     </span>
   );
@@ -897,7 +911,6 @@ export default function MlDashboard() {
   const urlRange = searchParams.get("rangeKey");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [usingMockData, setUsingMockData] = useState(false);
   const [dataNotice, setDataNotice] = useState('');
 
   const [predictions, setPredictions] = useState([]);
@@ -974,7 +987,7 @@ export default function MlDashboard() {
           : 0;
 
       if (predictionsResult.status !== 'fulfilled') {
-        notices.push('Predictions list gagal dimuat dari endpoint utama.');
+        notices.push('Predictions list failed to load from the primary endpoint.');
       } else {
         const firstPagePagination = predictionsResult.value?.pagination || {};
         const totalPages = Math.max(
@@ -1008,7 +1021,7 @@ export default function MlDashboard() {
 
           if (failedPages.length > 0) {
             responseTotalPredictions = preds.length;
-            notices.push(`Sebagian data predictions gagal dimuat pada page ${failedPages.join(', ')}.`);
+            notices.push(`Some predictions data failed to load on page ${failedPages.join(', ')}.`);
           }
         }
       }
@@ -1022,14 +1035,12 @@ export default function MlDashboard() {
       } else {
         nextTimeline = buildTimelineFromPredictions(preds, minutes, start, end);
 
-        if (nextTimeline.length > 0) {
+        if (nextTimeline.length > 0 && preds.length > 0) {
           if (timelineResult.status === 'fulfilled') {
-            notices.push('Timeline dibentuk dari data prediksi real karena endpoint timeline tidak mengembalikan bucket.');
+            notices.push('Timeline built from real prediction data because the timeline endpoint did not return buckets.');
           } else {
-            notices.push('Timeline dibentuk dari data prediksi real karena endpoint timeline gagal.');
+            notices.push('Timeline built from real prediction data because the timeline endpoint failed.');
           }
-        } else if (timelineResult.status === 'fulfilled') {
-          notices.push('Tidak ada data ML real pada range waktu yang dipilih.');
         }
       }
 
@@ -1038,71 +1049,28 @@ export default function MlDashboard() {
         setTotalPredictionsCount(responseTotalPredictions);
         setStats(nextStats);
         setTimeline(nextTimeline);
-        setUsingMockData(false);
         setLastUpdated(new Date().toISOString());
         if (!preds.length && !nextTimeline.length) {
-          notices.push('Tidak ada data ML pada range yang dipilih.');
+          notices.push('No ML data exists for the selected range.');
         }
         setDataNotice(notices.join(' '));
         return;
       }
 
-      throw new Error('Real ML data is unavailable, using mock fallback.');
+      setPredictions([]);
+      setTotalPredictionsCount(0);
+      setStats(null);
+      setTimeline([]);
+      setError(new Error('Real ML data is not available.'));
+      setDataNotice('Real ML data is not available. Check the connection to the backend.');
     } catch (err) {
       console.error('ML API error:', err);
-      setUsingMockData(true);
-      setError(null);
-      setDataNotice('ML dashboard sementara memakai fallback mock karena data real tidak tersedia.');
-
-      const genMockPredictions = (limit = 120) => {
-        const labels = ['benign', 'malicious', 'suspicious'];
-        const services = ['HTTP', 'HTTPS', 'DNS', 'SSH', 'FTP'];
-        const ips = ['192.168.1.100', '192.168.1.101', '10.0.0.5', '172.16.0.1', '10.1.2.3'];
-        const now = Date.now();
-        const out = [];
-        for (let i = 0; i < limit; i++) {
-          out.push({
-            id: `mock-${i}`,
-            timestamp: new Date(now - i * 60000).toISOString(),
-            predictedLabel: labels[i % labels.length],
-            confidence: Number((0.6 + Math.random() * 0.4).toFixed(2)),
-            sourceIp: ips[i % ips.length],
-            destinationIp: ips[(i + 1) % ips.length],
-            service: services[i % services.length],
-            zeekUid: `uid-mock-${i}`,
-          });
-        }
-        return out;
-      };
-
-      const genMockStats = () => ({
-        totalPredictions: 1200,
-        overallAvgConfidence: 0.78,
-        labels: [
-          { label: 'benign', count: 800, avgConfidence: 0.81 },
-          { label: 'malicious', count: 300, avgConfidence: 0.74 },
-          { label: 'suspicious', count: 100, avgConfidence: 0.65 },
-        ]
-      });
-
-      const genMockTimeline = (minutes = 60) => {
-        const data = [];
-        const now = Date.now();
-        const step = minutes <= 60 ? 5 * 60 * 1000 : 30 * 60 * 1000;
-        const range = minutes * 60 * 1000;
-        for (let t = now - range; t <= now; t += step) {
-          const v = Math.max(0, Math.floor(Math.random() * 8 + (Math.floor(t / step) % 5)));
-          data.push({ timestamp: new Date(t).toISOString(), total: v, labels: [ { label: 'benign', count: Math.floor(v * 0.6) }, { label: 'malicious', count: Math.ceil(v * 0.4) } ] });
-        }
-        return data;
-      };
-
-      const mockPreds = genMockPredictions(200);
-      setPredictions(mockPreds);
-      setTotalPredictionsCount(mockPreds.length);
-      setStats(genMockStats());
-      setTimeline(genMockTimeline(RANGE_TO_MINUTES[timeRange] || RANGE_TO_MINUTES[DEFAULT_TIME_RANGE]));
-      setLastUpdated(new Date().toISOString());
+      setPredictions([]);
+      setTotalPredictionsCount(0);
+      setStats(null);
+      setTimeline([]);
+      setError(err);
+      setDataNotice(`An error occurred while loading ML data: ${err?.message || 'unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -1237,14 +1205,22 @@ export default function MlDashboard() {
   }, [predictions]);
 
   const waveData = useMemo(() => {
-    if (!timeline || timeline.length === 0) {
-      return [];
-    }
-
     const minutes = filterMode === "custom"
       ? getDateRangeMinutes(getIsoDateRange(normalizeDateRange(customDateRange)))
       : (RANGE_TO_MINUTES[timeRange] || RANGE_TO_MINUTES[DEFAULT_TIME_RANGE]);
+    const range = filterMode === "custom"
+      ? getIsoDateRange(normalizeDateRange(customDateRange))
+      : getRangeWindow(timeRange);
     const bucketMs = getTimelineBucketMs(minutes);
+
+    const buildEmptySeries = () => buildTimelineFromPredictions([], minutes, range.start, range.end)
+      .map((point) => createTimelineBucketPoint(getTimestampMs(point.timestamp), 0, point.bucketMs))
+      .filter(Boolean);
+
+    if (!timeline || timeline.length === 0) {
+      return buildEmptySeries();
+    }
+
     const map = new Map();
 
     for (const t of timeline) {
@@ -1257,10 +1233,12 @@ export default function MlDashboard() {
       map.set(bucketStartMs, (map.get(bucketStartMs) || 0) + (Number.isFinite(count) ? count : 0));
     }
 
-    return Array.from(map.entries())
+    const result = Array.from(map.entries())
       .sort(([a], [b]) => a - b)
       .map(([bucketStartMs, count]) => createTimelineBucketPoint(bucketStartMs, count, bucketMs))
       .filter(Boolean);
+
+    return result.length > 0 ? result : buildEmptySeries();
   }, [timeline, timeRange, filterMode, customDateRange]);
 
   const handleTimelinePointSelect = (pointData) => {
@@ -1309,106 +1287,104 @@ export default function MlDashboard() {
   }
 
   return (
-    <div className="p-4 md:p-5 flex flex-col gap-4 w-full">
-        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-3 md:p-4 shadow-lg">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-4">
-            <div>
-              <h1 className="text-base font-bold text-white flex items-center gap-2">
-                <BrainCircuit className="h-5 w-5 text-violet-400" />
-                ML Predictions Dashboard
-              </h1>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Real-time machine learning traffic prediction and threat classification
-              </p>
+    <div className="soc-page-shell soc-fluid-page flex flex-col gap-3 sm:gap-4 w-full min-w-0">
+      <div className="soc-page-heading bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-3 md:p-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-4">
+          <div>
+            <h1 className="soc-page-title flex items-center gap-2">
+              <BrainCircuit className="h-4 w-4 sm:h-5 sm:w-5 text-violet-400" />
+              ML Predictions Dashboard
+            </h1>
+            <p className="soc-page-subtitle">
+              Real-time machine learning traffic prediction and threat classification
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-2 md:p-4 flex flex-col gap-3 md:gap-4">
+        <div className="soc-data-toolbar flex flex-row flex-wrap items-center justify-between gap-2">
+            <div className="rows-selector flex items-center gap-2 min-w-0 flex-shrink-0">
+              <label className="hidden items-center gap-1 text-[10px] text-slate-400 sm:flex whitespace-nowrap">
+                <span>Rows</span>
+              </label>
+            <div className="relative flex items-center bg-[var(--soc-card)] rounded border border-[var(--soc-border)]">
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPage(1);
+                  setPageSize(Number(e.target.value));
+                }}
+                className="appearance-none bg-transparent py-1.5 pl-2 pr-5 text-left text-[11px] font-medium leading-tight text-slate-100 focus:outline-none"
+              >
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size} className="bg-white text-black">{size}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
             </div>
+          </div>
+
+          <div className="soc-filter-toolbar ml-auto flex flex-wrap items-center gap-2">
+            <RangeFilter
+              rangeKey={timeRange}
+              onRangeChange={handleRangeChange}
+              dimmed={filterMode === "custom"}
+              options={TIME_RANGE_OPTIONS}
+            />
+            <DateRangeFilter
+              value={customDateRange}
+              onChange={(range) => {
+                setPage(1);
+                setSelectedTimelinePoint(null);
+                setCustomDateRange(range);
+                setFilterMode("custom");
+              }}
+              className={filterMode === "range" ? "opacity-50" : ""}
+            />
+            <span className="hidden lg:flex items-center gap-1 text-[11px] text-slate-600">
+              <CalendarRange className="h-3 w-3" />
+              {filterMode === "custom"
+                ? new Date(getIsoDateRange(normalizeDateRange(customDateRange)).start).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }) +
+                " - " +
+                new Date(getIsoDateRange(normalizeDateRange(customDateRange)).end).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+                : timeRange}
+            </span>
           </div>
         </div>
 
-        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-2 md:p-4 shadow-lg flex flex-col gap-3 md:gap-4">
-          <div className="flex flex-col items-start gap-1 md:flex-row md:items-center md:justify-between md:gap-2">
-            <div className="flex items-center gap-2">
-              <span className="hidden text-[11px] text-slate-400 whitespace-nowrap sm:block">Rows</span>
-              <div className="relative flex items-center bg-[var(--soc-card)] rounded border border-[var(--soc-border)]">
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPage(1);
-                    setPageSize(Number(e.target.value));
-                  }}
-                  className="appearance-none bg-transparent py-1.5 pl-2 pr-5 text-left text-[11px] font-medium leading-tight text-slate-100 focus:outline-none"
-                >
-                  {PAGE_SIZE_OPTIONS.map((size) => (
-                    <option key={size} value={size} className="bg-white text-black">{size}</option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
-              </div>
-            </div>
-
-            <div className="ml-auto flex items-center gap-2">
-              <RangeFilter
-                rangeKey={timeRange}
-                onRangeChange={handleRangeChange}
-                dimmed={filterMode === "custom"}
-                options={TIME_RANGE_OPTIONS}
-              />
-              <DateRangeFilter
-                value={customDateRange}
-                onChange={(range) => {
-                  setPage(1);
-                  setSelectedTimelinePoint(null);
-                  setCustomDateRange(range);
-                  setFilterMode("custom");
-                }}
-                className={filterMode === "range" ? "opacity-50" : ""}
-              />
-              <span className="hidden lg:flex items-center gap-1 text-[11px] text-slate-600">
-                <CalendarRange className="h-3 w-3" />
-                {filterMode === "custom"
-                  ? new Date(getIsoDateRange(normalizeDateRange(customDateRange)).start).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }) +
-                    " - " +
-                    new Date(getIsoDateRange(normalizeDateRange(customDateRange)).end).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })
-                  : timeRange}
-              </span>
-            </div>
+        <div className="soc-kpi-grid">
+          <div className="bg-sky-500/10 border border-sky-500/30 rounded p-2 md:p-3">
+            <div className="text-[8px] md:text-[10px] text-sky-400 uppercase font-semibold">Predictions</div>
+            <div className="text-sm md:text-lg font-black text-sky-300 mt-0.5 md:mt-1">{totalPredictionsCount || predictions.length}</div>
+            <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">total in range</div>
           </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
-            <div className="bg-sky-500/10 border border-sky-500/30 rounded p-2 md:p-3">
-              <div className="text-[8px] md:text-[10px] text-sky-400 uppercase font-semibold">Predictions</div>
-              <div className="text-sm md:text-lg font-black text-sky-300 mt-0.5 md:mt-1">{totalPredictionsCount || predictions.length}</div>
-              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">total in range</div>
-            </div>
-            <div className="bg-violet-500/10 border border-violet-500/30 rounded p-2 md:p-3">
-              <div className="text-[8px] md:text-[10px] text-violet-400 uppercase font-semibold">Filtered</div>
-              <div className="text-sm md:text-lg font-black text-violet-300 mt-0.5 md:mt-1">{filtered.length}</div>
-              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">matching current filters</div>
-            </div>
-            <div className="bg-red-500/10 border border-red-500/30 rounded p-2 md:p-3">
-              <div className="text-[8px] md:text-[10px] text-red-400 uppercase font-semibold">Suspicious / Attacks</div>
-              <div className="text-sm md:text-lg font-black text-red-300 mt-0.5 md:mt-1">{suspiciousCount}</div>
-              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">{suspiciousPercentage}% of filtered</div>
-            </div>
-            <div className="bg-amber-500/10 border border-amber-500/30 rounded p-2 md:p-3">
-              <div className="text-[8px] md:text-[10px] text-amber-400 uppercase font-semibold">Avg Confidence</div>
-              <div className="text-sm md:text-lg font-black text-amber-300 mt-0.5 md:mt-1">{avgConfidence.toFixed(0)}%</div>
-              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">overall model confidence</div>
-            </div>
+          <div className="bg-violet-500/10 border border-violet-500/30 rounded p-2 md:p-3">
+            <div className="text-[8px] md:text-[10px] text-violet-400 uppercase font-semibold">Filtered</div>
+            <div className="text-sm md:text-lg font-black text-violet-300 mt-0.5 md:mt-1">{filtered.length}</div>
+            <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">matching current filters</div>
           </div>
-          {dataNotice && (
-            <div className={`rounded-lg border px-2.5 md:px-3 py-2 text-[10px] md:text-[11px] ${
-              usingMockData
-                ? 'border-amber-500/30 bg-amber-500/10 text-amber-100'
-                : 'border-sky-500/20 bg-sky-500/10 text-sky-100'
-            }`}>
-              {dataNotice}
-            </div>
-          )}
+          <div className="bg-red-500/10 border border-red-500/30 rounded p-2 md:p-3">
+            <div className="text-[8px] md:text-[10px] text-red-400 uppercase font-semibold">Suspicious / Attacks</div>
+            <div className="text-sm md:text-lg font-black text-red-300 mt-0.5 md:mt-1">{suspiciousCount}</div>
+            <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">{suspiciousPercentage}% of filtered</div>
+          </div>
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded p-2 md:p-3">
+            <div className="text-[8px] md:text-[10px] text-amber-400 uppercase font-semibold">Avg Confidence</div>
+            <div className="text-sm md:text-lg font-black text-amber-300 mt-0.5 md:mt-1">{avgConfidence.toFixed(0)}%</div>
+            <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">overall model confidence</div>
+          </div>
+        </div>
+        {dataNotice && (
+          <div className="rounded-lg border border-sky-500/20 bg-sky-500/10 px-2.5 md:px-3 py-2 text-[10px] md:text-[11px] text-sky-100">
+            {dataNotice}
+          </div>
+        )}
 
         {/* Timeline Wave Chart + Top Source IPs */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch">
-          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-6 flex flex-col h-full overflow-visible">
-            <div className="flex justify-between items-center mb-4 md:mb-6 gap-2">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch">
+          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full overflow-visible">
+            <div className="flex justify-between items-center mb-4 md:mb-4 gap-2">
               <div>
                 <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
                   <BarChart3 className="h-3 md:h-4 w-3 md:w-4 text-violet-400" />
@@ -1421,23 +1397,19 @@ export default function MlDashboard() {
                 <div className="text-[11px] text-slate-600">Updated {formatLiveTimestamp(lastUpdated)}</div>
               </div>
             </div>
-            <div className="flex-1 min-h-[240px] md:min-h-[280px] min-w-0 p-2 md:p-4 overflow-visible">
+            <div className="flex-1 min-h-0 min-w-0 soc-chart--ml p-2 md:p-4 overflow-visible">
               <div className="min-w-0 h-full overflow-visible">
-              {waveData.length === 0 ? (
-                <div className="h-48 flex items-center justify-center text-slate-500">No timeline data</div>
-              ) : (
-                <WaveChart 
-                  data={waveData} 
-                  rangeKey={timeRange} 
+                <WaveChart
+                  data={waveData}
+                  rangeKey={timeRange}
                   onPointSelect={handleTimelinePointSelect}
                   activePointKey={selectedTimelinePoint?.key ?? null}
                 />
-              )}
               </div>
             </div>
           </div>
 
-          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-6 h-full">
+          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 h-full">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
                 <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
@@ -1452,7 +1424,7 @@ export default function MlDashboard() {
               </div>
             </div>
             {topSourceIps.length === 0 ? (
-              <div className="h-48 flex items-center justify-center text-slate-500">No data</div>
+              <div className="h-48 flex items-center justify-center text-xs text-slate-600">No data</div>
             ) : (
               <TopSourceIpsCard sourceIps={topSourceIps} />
             )}
@@ -1467,7 +1439,7 @@ export default function MlDashboard() {
                 <span className="text-xs font-semibold text-slate-300">Label Distribution</span>
               </div>
             </div>
-            <div className="flex flex-1 flex-col items-stretch gap-3 py-1 w-full min-h-0">
+            <div className="flex flex-1 flex-col items-stretch gap-3 py-1 w-full min-h-0 soc-chart">
               <CategoryLineChart items={distribution} totalLabel="predictions" />
             </div>
           </div>
@@ -1487,7 +1459,7 @@ export default function MlDashboard() {
               </div>
             </div>
             {topDestIps.length === 0 ? (
-              <div className="h-48 flex items-center justify-center text-slate-500">No data</div>
+              <div className="h-48 flex items-center justify-center text-xs text-slate-600">No data</div>
             ) : (
               <TopSourceIpsCard sourceIps={topDestIps} colors={TOP_DEST_IPS_COLORS} />
             )}
@@ -1498,9 +1470,10 @@ export default function MlDashboard() {
 
         {/* Filter & Table Section */}
         <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl shadow-lg overflow-hidden">
-          {selectedTimelinePoint && (
-            <div className="p-3 border-b border-[var(--soc-border)] bg-slate-800/60 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="text-xs text-orange-300">
+          <div className="p-3 md:p-4 border-b border-[var(--soc-border)] bg-[var(--soc-card)]">
+            {selectedTimelinePoint && (
+              <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="text-xs text-violet-300">
                 Timeline filter: {formatTimelineBucketLabel(selectedTimelinePoint, timeRange)}
               </div>
               <button
@@ -1508,14 +1481,14 @@ export default function MlDashboard() {
                   setSelectedTimelinePoint(null);
                   setPage(1);
                 }}
-                className="rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs font-medium text-orange-200 transition-colors hover:bg-orange-500/20"
+                className="shrink-0 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-xs font-medium text-violet-200 transition-colors hover:bg-violet-500/20"
               >
                 Reset Time Filter
               </button>
-            </div>
-          )}
-          {/* Filter Bar */}
-          <div className="border-b border-[var(--soc-border)] p-2 md:p-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              </div>
+            )}
+            {/* Filter Bar */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <div className="relative flex-1 min-w-0">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
               <input
@@ -1554,61 +1527,61 @@ export default function MlDashboard() {
               </select>
               <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             </div>
+            </div>
           </div>
 
           {/* Table */}
           <div className="overflow-x-auto" ref={predictionsTableRef}>
-            {filtered.length === 0 ? (
-              <div className="p-8 text-center text-slate-500">
-                <div className="text-sm">No predictions match current filters.</div>
-              </div>
-            ) : (
-              <table className="w-full text-[10px] md:text-[11px] text-left whitespace-nowrap">
-                <thead>
-                  <tr className="border-b border-slate-800 bg-slate-800/70">
-                    <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Timestamp</th>
-                    <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Label</th>
-                    <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Source IP</th>
-                    <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Destination IP</th>
-                    <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Service</th>
-                    <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Confidence</th>
-                    <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Meaning</th>
+            <table className="w-full text-[10px] md:text-[11px] text-left whitespace-nowrap">
+              <thead>
+                <tr className="border-b border-slate-800 bg-slate-800/70">
+                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Timestamp</th>
+                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Label</th>
+                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Source IP</th>
+                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Destination IP</th>
+                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Service</th>
+                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Confidence</th>
+                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Meaning</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-xs text-slate-500">
+                      No predictions match current filters.
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {pageItems.map((p, idx) => (
-                    <tr
-                      key={p.id || p.zeekUid || idx}
-                      className={`border-b border-slate-800/60 hover:bg-slate-800/40 transition-colors ${
-                        idx % 2 !== 0 ? 'bg-slate-900/60' : ''
+                ) : pageItems.map((p, idx) => (
+                  <tr
+                    key={p.id || p.zeekUid || idx}
+                    className={`border-b border-slate-800/60 hover:bg-slate-800/40 transition-colors ${idx % 2 !== 0 ? 'bg-slate-900/60' : ''
                       }`}
-                    >
-                      <td className="px-2 md:px-4 py-1.5 md:py-2 text-slate-500 text-[10px] md:text-[11px] whitespace-nowrap">
-                        {formatTime(p.timestamp)}
-                      </td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-2">
-                        <PredictionBadge label={p.predictedLabel} />
-                      </td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-2 text-emerald-400 font-mono text-[10px] md:text-[11px]">
-                        {p.sourceIp || '-'}
-                      </td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-2 text-violet-400 font-mono text-[10px] md:text-[11px]">
-                        {p.destinationIp || '-'}
-                      </td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-2 text-slate-300 text-[10px] md:text-[11px]">
-                        {p.service || '-'}
-                      </td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-2">
-                        <ConfidenceBadge score={p.confidence} />
-                      </td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-2 text-[10px] md:text-[11px] text-slate-400">
-                        {getConfidenceMeaning(p.predictedLabel, p.confidence)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                  >
+                    <td className="px-2 md:px-4 py-1.5 md:py-2 text-slate-500 text-[10px] md:text-[11px] whitespace-nowrap">
+                      {formatTime(p.timestamp)}
+                    </td>
+                    <td className="px-2 md:px-4 py-1.5 md:py-2">
+                      <PredictionBadge label={p.predictedLabel} />
+                    </td>
+                    <td className="px-2 md:px-4 py-1.5 md:py-2 text-emerald-400 font-mono text-[10px] md:text-[11px]">
+                      {p.sourceIp || '-'}
+                    </td>
+                    <td className="px-2 md:px-4 py-1.5 md:py-2 text-violet-400 font-mono text-[10px] md:text-[11px]">
+                      {p.destinationIp || '-'}
+                    </td>
+                    <td className="px-2 md:px-4 py-1.5 md:py-2 text-slate-300 text-[10px] md:text-[11px]">
+                      {p.service || '-'}
+                    </td>
+                    <td className="px-2 md:px-4 py-1.5 md:py-2">
+                      <ConfidenceBadge score={p.confidence} />
+                    </td>
+                    <td className="px-2 md:px-4 py-1.5 md:py-2 text-[10px] md:text-[11px] text-slate-400">
+                      {getConfidenceMeaning(p.predictedLabel, p.confidence)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
           {/* Pagination */}

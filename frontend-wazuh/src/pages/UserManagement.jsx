@@ -178,15 +178,15 @@ const UserManagement = () => {
 
   return (
     <>
-    <div className="p-4 md:p-5 flex flex-col gap-4 w-full">
-          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-3 md:p-4 shadow-lg">
+    <div className="soc-page-shell flex flex-col gap-3 sm:gap-4 w-full min-w-0">
+          <div className="soc-page-heading bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-3 md:p-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
-                <h1 className="text-base font-bold text-white flex items-center gap-2">
-                  <Users className="h-4 w-4 text-sky-400" />
+                <h1 className="soc-page-title flex items-center gap-2">
+                  <Users className="h-4 w-4 sm:h-5 sm:w-5 text-sky-400" />
                   User Management
                 </h1>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="soc-page-subtitle">
                   Manage user accounts and monitor admin login activity
                 </p>
               </div>
@@ -216,7 +216,7 @@ const UserManagement = () => {
               <div className="text-[11px] md:text-xs font-semibold text-slate-300 p-3 md:p-4 border-b border-[var(--soc-border)]">
                 Account Overview
               </div>
-              <div className="grid grid-cols-3 gap-2 md:gap-3 p-3 md:p-4 border-b border-[var(--soc-border)]">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-3 p-3 md:p-4 border-b border-[var(--soc-border)]">
                 <div className="bg-sky-500/10 border border-sky-500/30 rounded p-2 md:p-3">
                   <div className="text-[8px] md:text-[10px] text-sky-400 uppercase font-semibold">Total Accounts</div>
                   <div className="text-sm md:text-lg font-black text-sky-300 mt-0.5 md:mt-1">{userStats.total}</div>
@@ -235,11 +235,11 @@ const UserManagement = () => {
               </div>
               <div className="overflow-x-auto">
               {loading ? (
-                <div className="flex justify-center items-center py-12">
+                <div className="flex justify-center items-center py-10">
                   <div className="animate-spin rounded-full h-8 w-8 border-2 border-sky-400 border-t-transparent" />
                 </div>
               ) : users.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="flex flex-col items-center justify-center py-10 text-center">
                   <p className="text-sm text-slate-400 font-medium">No users found</p>
                 </div>
               ) : (

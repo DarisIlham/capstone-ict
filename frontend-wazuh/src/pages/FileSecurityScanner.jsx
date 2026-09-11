@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 
 const API_ROOT = `${API_BASE_URL}/api`;
-const DEFAULT_PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 25;
 
 const rangeToMinutes = {
   "1h": 60,
@@ -72,6 +72,62 @@ const severityColors = {
   LOW: "text-blue-400 bg-blue-500/20",
   INFO: "text-slate-300 bg-slate-500/20",
 };
+
+const INDICATOR_SEVERITY_RULES = [
+  {
+    severity: "CRITICAL",
+    keywords: [
+      "eval_call",
+      "php_eval",
+      "combo_php_eval",
+      "combo_remote_loader",
+      "web_shell",
+      "webshell",
+      "php_webshell",
+      "shell_exec",
+      "system_call",
+      "passthru",
+      "backdoor",
+      "reverse_shell",
+      "obfuscated",
+    ],
+  },
+  {
+    severity: "HIGH",
+    keywords: [
+      "php_open_tag",
+      "file_get_contents_remote",
+      "remote_url",
+      "remote_code",
+      "remote_include",
+      "deserialization",
+      "sql_injection",
+      "command_injection",
+      "path_traversal",
+    ],
+  },
+  {
+    severity: "MEDIUM",
+    keywords: ["short_url", "url_redirect", "base64_encoded", "suspicious_header", "suspicious_metadata", "credit_card", "api_key"],
+  },
+  {
+    severity: "LOW",
+    keywords: ["large_file", "unusual_extension", "exif_edit", "metadata_only"],
+  },
+];
+
+function severityFromIndicator(indicator = "") {
+  const key = String(indicator).toLowerCase();
+  if (!key) return null;
+
+  for (const rule of INDICATOR_SEVERITY_RULES) {
+    if (rule.keywords.some((kw) => key === kw || key.includes(kw))) {
+      return rule.severity;
+    }
+  }
+
+  return null;
+}
 
 function getDirectory(filePath = "") {
   if (!filePath) return "-";
@@ -190,7 +246,10 @@ function normalizeFinding(finding, index) {
 
   return {
     name,
-    severity: normalizeSeverity(raw.severity || raw.risk || raw.level, "HIGH"),
+    severity: normalizeSeverity(
+      raw.severity || raw.risk || raw.level || severityFromIndicator(raw.indicator || raw.pattern || raw.keyword || name),
+      "HIGH"
+    ),
     desc: typeof desc === "object" ? JSON.stringify(desc) : String(desc),
     type: raw.type || raw.category || raw.source || "content_indicator",
   };
@@ -242,7 +301,7 @@ function normalizeFileScan(item) {
   };
 }
 
-function buildTimelineFallback(items, rangeKey) {
+function buildTimelineFallback(items, rangeKey, startIso, endIso) {
   const bucketMs = getBucketMsForRange(rangeKey);
   const buckets = new Map();
 
@@ -254,9 +313,23 @@ function buildTimelineFallback(items, rangeKey) {
     buckets.set(bucket, (buckets.get(bucket) || 0) + 1);
   });
 
+  const startMs = new Date(startIso).getTime();
+  const endMs = new Date(endIso).getTime();
+  if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs) {
+    const firstBucket = Math.floor(startMs / bucketMs) * bucketMs;
+    const lastBucket = Math.floor(endMs / bucketMs) * bucketMs;
+    const series = [];
+
+    for (let t = firstBucket; t <= lastBucket; t += bucketMs) {
+      series.push({ t, v: buckets.get(t) || 0, bucketMs });
+    }
+
+    return series;
+  }
+
   return Array.from(buckets.entries())
     .sort((a, b) => a[0] - b[0])
-    .map(([t, v]) => ({ t, v }));
+    .map(([t, v]) => ({ t, v, bucketMs }));
 }
 
 async function fetchJson(url) {
@@ -287,7 +360,26 @@ const WaveChart = ({
   onPointSelect = null,
 }) => {
   const [selectedPoint, setSelectedPoint] = useState(null);
-  const width = 800;
+  const rootRef = useRef(null);
+  const [size, setSize] = useState({ width: 800, height });
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setSize({ width: Math.max(rect.width, 200), height: Math.max(rect.height, 40) });
+      }
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const width = size.width;
+  height = size.height;
   const padding = { l: 28, r: 10, t: 8, b: 24 };
   const innerW = width - padding.l - padding.r;
   const innerH = height - padding.t - padding.b;
@@ -333,7 +425,7 @@ const WaveChart = ({
   const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
 
   return (
-    <div className="relative h-full w-full" onMouseLeave={() => setSelectedPoint(null)}>
+    <div ref={rootRef} className="relative h-full w-full" onMouseLeave={() => setSelectedPoint(null)}>
       <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block w-full h-full">
         {gridLines.map((grid) => (
           <g key={`grid-${grid.ratio}`}>
@@ -378,24 +470,13 @@ const WaveChart = ({
 
           return (
             <g key={`point-${pointKey}`}>
-              {isActive && (
-                <circle
-                  cx={x}
-                  cy={y}
-                  r="7.5"
-                  fill="transparent"
-                  stroke={activeColor}
-                  strokeWidth="1.5"
-                  opacity="0.85"
-                  className="pointer-events-none"
-                />
-              )}
               <circle
                 cx={x}
                 cy={y}
                 r={isHighlighted ? "7" : "10"}
                 fill="transparent"
-                className="cursor-pointer"
+                className="cursor-pointer focus:outline-none"
+                style={{ outline: "none" }}
                 role="button"
                 tabIndex={0}
                 aria-label={`Filter file detections for ${formatDetailedTimestamp(pointData.start)}`}
@@ -414,10 +495,10 @@ const WaveChart = ({
               <circle
                 cx={x}
                 cy={y}
-                r={isHighlighted ? "5" : "3.5"}
+                r="3.5"
                 fill={isActive ? activeColor : color}
-                stroke="#0f172a"
-                strokeWidth="1.5"
+                stroke={isActive ? "#0f172a" : "none"}
+                strokeWidth="2.5"
                 opacity="0.95"
                 className="pointer-events-none"
               />
@@ -541,7 +622,7 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items" }) =
   const height = size.height;
   if (!items || items.length === 0) {
     return (
-      <div className="flex min-h-24 items-center justify-center text-[11px] text-slate-500">
+      <div className="flex h-full min-h-24 w-full items-center justify-center text-[11px] text-slate-500">
         No data available
       </div>
     );
@@ -657,7 +738,7 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items" }) =
 const CompactBarChart = ({ items, emptyLabel = "No data available" }) => {
   if (!items || items.length === 0) {
     return (
-      <div className="flex min-h-24 items-center justify-center text-[11px] text-slate-500">
+      <div className="flex h-full items-center justify-center text-xs text-slate-600">
         {emptyLabel}
       </div>
     );
@@ -896,11 +977,11 @@ const FileSecurityScanner = () => {
         filterMode === "custom"
           ? getIsoDateRange(normalizeDateRange(customDateRange))
           : (() => {
-              const minutes = rangeToMinutes[rangeKey] || 1440;
-              const end = new Date();
-              const start = new Date(end.getTime() - minutes * 60000);
-              return { start: start.toISOString(), end: end.toISOString() };
-            })();
+            const minutes = rangeToMinutes[rangeKey] || 1440;
+            const end = new Date();
+            const start = new Date(end.getTime() - minutes * 60000);
+            return { start: start.toISOString(), end: end.toISOString() };
+          })();
       const minutes =
         filterMode === "custom"
           ? getDateRangeMinutes(getIsoDateRange(normalizeDateRange(customDateRange)))
@@ -955,7 +1036,7 @@ const FileSecurityScanner = () => {
       setTimeline(
         mappedTimeline.length > 0
           ? mappedTimeline
-          : buildTimelineFallback(normalizedSuspicious, rangeKey)
+          : buildTimelineFallback(normalizedSuspicious, rangeKey, filterDateRange.start, filterDateRange.end)
       );
 
       setPagination(
@@ -1045,18 +1126,18 @@ const FileSecurityScanner = () => {
     const fileTypeSource =
       (stats?.fileTypes || []).length > 0
         ? (stats.fileTypes || []).map((item) => ({
-            label: item.fileType || "unknown",
-            value: item.count || 0,
-          }))
+          label: item.fileType || "unknown",
+          value: item.count || 0,
+        }))
         : Array.from(
-            files.reduce((map, file) => {
-              const fileType = file.fileType || "unknown";
-              map.set(fileType, (map.get(fileType) || 0) + 1);
-              return map;
-            }, new Map()).entries()
-          )
-            .map(([label, value]) => ({ label, value }))
-            .sort((a, b) => b.value - a.value);
+          files.reduce((map, file) => {
+            const fileType = file.fileType || "unknown";
+            map.set(fileType, (map.get(fileType) || 0) + 1);
+            return map;
+          }, new Map()).entries()
+        )
+          .map(([label, value]) => ({ label, value }))
+          .sort((a, b) => b.value - a.value);
 
     const fileTypes = fileTypeSource
       .map((item, i) => ({
@@ -1173,25 +1254,27 @@ const FileSecurityScanner = () => {
 
   return (
     <>
-    <div className="p-4 md:p-5 flex flex-col gap-4 w-full">
-        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-3 md:p-4 shadow-lg">
+      <div className="soc-page-shell soc-fluid-page flex flex-col gap-3 sm:gap-4 w-full min-w-0">
+        <div className="soc-page-heading bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-3 md:p-4">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-4">
             <div>
-              <h1 className="text-base font-bold text-white flex items-center gap-2">
-                <Bug className="h-5 w-5 text-red-400" />
+              <h1 className="soc-page-title flex items-center gap-2">
+                <Bug className="h-4 w-4 sm:h-5 sm:w-5 text-red-400" />
                 File Content Scanner
               </h1>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="soc-page-subtitle">
                 Real-time file content scanning and suspicious file detection
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-2 md:p-4 shadow-lg flex flex-col gap-3 md:gap-4">
-          <div className="flex flex-col items-start gap-1 md:flex-row md:items-center md:justify-between md:gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-slate-400 whitespace-nowrap">Rows</span>
+        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-2 md:p-4 flex flex-col gap-3 md:gap-4">
+          <div className="soc-data-toolbar flex flex-row flex-wrap items-center justify-between gap-2">
+            <div className="rows-selector flex items-center gap-2 min-w-0 flex-shrink-0">
+              <label className="hidden items-center gap-1 text-[10px] text-slate-400 sm:flex whitespace-nowrap">
+                <span>Rows</span>
+              </label>
               <div className="relative flex items-center bg-[var(--soc-card)] rounded border border-[var(--soc-border)]">
                 <select
                   value={pageSize}
@@ -1201,7 +1284,7 @@ const FileSecurityScanner = () => {
                   }}
                   className="appearance-none bg-transparent py-1.5 pl-2 pr-5 text-left text-[11px] font-medium leading-tight text-slate-100 focus:outline-none"
                 >
-                  {[10, 20, 50, 100].map((size) => (
+                  {[10, 25, 50, 100].map((size) => (
                     <option key={size} value={size} className="bg-white text-black">{size}</option>
                   ))}
                 </select>
@@ -1209,7 +1292,7 @@ const FileSecurityScanner = () => {
               </div>
             </div>
 
-            <div className="ml-auto flex items-center gap-2">
+            <div className="soc-filter-toolbar ml-auto flex flex-wrap items-center gap-2">
               <RangeFilter
                 rangeKey={rangeKey}
                 onRangeChange={handleRangeChange}
@@ -1229,8 +1312,8 @@ const FileSecurityScanner = () => {
                 <CalendarRange className="h-3 w-3" />
                 {filterMode === "custom"
                   ? new Date(getIsoDateRange(normalizeDateRange(customDateRange)).start).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }) +
-                    " - " +
-                    new Date(getIsoDateRange(normalizeDateRange(customDateRange)).end).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+                  " - " +
+                  new Date(getIsoDateRange(normalizeDateRange(customDateRange)).end).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })
                   : rangeKey}
               </span>
             </div>
@@ -1242,7 +1325,7 @@ const FileSecurityScanner = () => {
             </div>
           )}
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+          <div className="soc-kpi-grid">
             <div className="bg-sky-500/10 border border-sky-500/30 rounded p-2 md:p-3">
               <div className="text-[8px] md:text-[10px] text-sky-400 uppercase font-semibold">Total Events</div>
               <div className="text-sm md:text-lg font-black text-sky-300 mt-0.5 md:mt-1">{stats?.totalEvents ?? 0}</div>
@@ -1280,7 +1363,7 @@ const FileSecurityScanner = () => {
                   <div className="text-[11px] text-slate-600">Updated {formatLiveTimestamp(lastUpdated)}</div>
                 </div>
               </div>
-              <div className="flex-1 min-h-[240px] md:min-h-[280px] min-w-0 rounded-lg bg-[var(--soc-card)] p-2 md:p-4 overflow-visible">
+              <div className="flex-1 min-h-0 min-w-0 soc-chart--fim rounded-lg bg-[var(--soc-card)] p-2 md:p-4 overflow-visible">
                 <div className="min-w-0 h-full">
                   <WaveChart
                     data={timeline}
@@ -1296,7 +1379,7 @@ const FileSecurityScanner = () => {
               </div>
             </div>
 
-            <div ref={topAgentsPanelRef} className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-6 h-full">
+            <div ref={topAgentsPanelRef} className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 h-full flex flex-col min-w-0">
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
                   <div className="text-[11px] md:text-xs font-semibold text-slate-300">Top 5 Agents</div>
@@ -1307,45 +1390,70 @@ const FileSecurityScanner = () => {
                   <div className="text-xs font-black text-emerald-300">{analytics.uniqueAgents}</div>
                 </div>
               </div>
-              <TopAgentsCard agents={analytics.topAgents} />
+              <div className="flex-1 flex flex-col">
+                <TopAgentsCard agents={analytics.topAgents} />
+              </div>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col h-full min-h-[260px]">
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col h-full">
               <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-2 w-full">File Type Distribution</div>
-              <div className="flex-1 min-h-0 w-full">
+              <div className="flex-1 min-h-0 w-full soc-chart overflow-hidden">
                 <CategoryLineChart items={analytics.fileTypes} color="#ef4444" totalLabel="files" />
               </div>
             </div>
 
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col h-full min-h-[260px]">
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col h-full">
               <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-2 w-full">Severity Distribution</div>
-              <div className="flex-1 min-h-0 w-full">
+              <div className="flex-1 min-h-0 w-full soc-chart">
                 <CategoryLineChart items={analytics.severities} color="#ef4444" totalLabel="files" />
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4">
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4">
-              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-4">
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 min-w-0 flex flex-col">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-4 flex items-center gap-2 flex-shrink-0">
                 Top Scanner Sources
               </div>
-              <CompactBarChart items={analytics.topScanners} emptyLabel="No scanner source data found" />
+              <div className="w-full flex-1 min-h-[120px] md:min-h-[150px]">
+                <CompactBarChart items={analytics.topScanners} emptyLabel="No scanner source data found" />
+              </div>
             </div>
 
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4">
-              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-4">
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 min-w-0 flex flex-col">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-4 flex items-center gap-2 flex-shrink-0">
                 Top Scanned Folders
               </div>
-              <CompactBarChart items={analytics.topFolders} emptyLabel="No folder data found" />
+              <div className="w-full flex-1 min-h-[120px] md:min-h-[150px]">
+                <CompactBarChart items={analytics.topFolders} emptyLabel="No folder data found" />
+              </div>
             </div>
           </div>
         </div>
 
         <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl shadow-lg overflow-hidden">
-          <div className="p-2 md:p-3 border-b border-[var(--soc-border)] flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <div ref={filesTableRef} className="p-3 md:p-4 border-b border-[var(--soc-border)] bg-[var(--soc-card)]">
+            {selectedTimelinePoint && (
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="text-xs text-red-300">
+                  Timeline filter: {formatDetailedTimestamp(selectedTimelinePoint.start)}
+                  {selectedTimelinePoint.end ? ` - ${formatDetailedTimestamp(selectedTimelinePoint.end)}` : ""}
+                </div>
+                <button
+                  onClick={() => {
+                    setSelectedTimelinePoint(null);
+                    setPage(1);
+                  }}
+                  className="shrink-0 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-200 transition-colors hover:bg-red-500/20"
+                >
+                  Reset Time Filter
+                </button>
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <div className="relative flex-1 min-w-0">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
               <input
@@ -1378,96 +1486,80 @@ const FileSecurityScanner = () => {
               </select>
               <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             </div>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
-            {selectedTimelinePoint && (
-              <div className="flex flex-col items-start justify-between gap-3 border-b border-[var(--soc-border)] bg-[var(--soc-elevated)] p-3 sm:flex-row sm:items-center">
-                <div className="text-xs text-red-300">
-                  Timeline filter: {formatDetailedTimestamp(selectedTimelinePoint.start)}
-                  {selectedTimelinePoint.end ? ` - ${formatDetailedTimestamp(selectedTimelinePoint.end)}` : ""}
-                </div>
-                <button
-                  onClick={() => {
-                    setSelectedTimelinePoint(null);
-                    setPage(1);
-                  }}
-                  className="rounded border border-slate-700 bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-slate-300 transition-colors hover:border-red-400/50 hover:text-red-300"
-                >
-                  Clear filter
-                </button>
-              </div>
-            )}
-                <table className="w-full text-[10px] md:text-[11px]">
-                  <thead>
-                    <tr className="border-b border-slate-800 bg-slate-800/70">
-                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">File</th>
-                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Agent</th>
-                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Type</th>
-                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Scanner</th>
-                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">File Path</th>
-                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Severity</th>
-                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Findings</th>
-                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Detected</th>
-                      <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading ? (
-                      <EmptyState message="Loading file scan data from backend..." />
-                    ) : filteredFiles.length === 0 ? (
-                      <EmptyState message="No suspicious file scan data found on this page." />
-                    ) : (
-                      filteredFiles.map((file, idx) => {
-                        const maxSeverity = file.findings.reduce(
-                          (max, finding) => (severityOrder[finding.severity] > severityOrder[max.severity] ? finding : max),
-                          file.findings[0]
-                        );
+            <table className="w-full text-[10px] md:text-[11px]">
+              <thead>
+                <tr className="border-b border-slate-800 bg-slate-800/70">
+                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">File</th>
+                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Agent</th>
+                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Type</th>
+                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Scanner</th>
+                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">File Path</th>
+                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Severity</th>
+                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Findings</th>
+                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Detected</th>
+                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <EmptyState message="Loading file scan data from backend..." />
+                ) : filteredFiles.length === 0 ? (
+                  <EmptyState message="No suspicious file scan data found on this page." />
+                ) : (
+                  filteredFiles.map((file, idx) => {
+                    const maxSeverity = file.findings.reduce(
+                      (max, finding) => (severityOrder[finding.severity] > severityOrder[max.severity] ? finding : max),
+                      file.findings[0]
+                    );
 
-                        return (
-                          <tr key={file.id} className={`border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors ${idx % 2 !== 0 ? "bg-slate-900/30" : ""}`}>
-                            <td className="px-2 md:px-4 py-1.5 md:py-2">
-                              <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 bg-slate-700 rounded flex items-center justify-center text-xs font-bold text-slate-300">
-                                  {String(file.fileType || "?").charAt(0).toUpperCase()}
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="font-mono text-sky-300 text-[10px] md:text-[11px] truncate max-w-xs">{file.fileName}</div>
-                                  <div className="text-[9px] md:text-[10px] text-slate-500">{file.sizeLabel}</div>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-2 md:px-4 py-1.5 md:py-2">
-                              <div className="min-w-[140px]">
-                                <div className="truncate text-[10px] md:text-[11px] font-semibold text-slate-200">{file.agentName || "Unknown agent"}</div>
-                              </div>
-                            </td>
-                            <td className="px-2 md:px-4 py-1.5 md:py-2 text-[10px] md:text-[11px] text-slate-400">{file.fileType}</td>
-                            <td className="px-2 md:px-4 py-1.5 md:py-2 text-[10px] md:text-[11px] text-slate-400 font-mono">{file.scanner}</td>
-                            <td className="px-2 md:px-4 py-1.5 md:py-2 max-w-[300px]">
-                              <div className="font-mono text-[10px] md:text-[11px] text-amber-300 truncate" title={file.filePath}>{file.filePath || "-"}</div>
-                            </td>
-                            <td className="px-2 md:px-4 py-1.5 md:py-2"><RiskIndicator severity={maxSeverity?.severity || "HIGH"} /></td>
-                            <td className="px-2 md:px-4 py-1.5 md:py-2 text-[10px] md:text-[11px]"><span className="text-slate-300 font-mono">{file.findingsCount} found</span></td>
-                            <td className="px-2 md:px-4 py-1.5 md:py-2 text-[10px] md:text-[11px] text-slate-400">
-                              {file.timestamp ? new Date(file.timestamp).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}
-                            </td>
-                            <td className="px-2 md:px-4 py-1.5 md:py-2">
-                              <button
-                                onClick={() => setSelectedFile(file)}
-                                className="px-3 py-1.5 rounded text-[10px] md:text-[11px] font-medium transition-colors flex items-center gap-1 bg-red-500/10 text-red-300 hover:bg-red-500/20"
-                              >
-                                <FileText className="h-3.5 w-3.5" />
-                                Detail
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    return (
+                      <tr key={file.id} className={`border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors ${idx % 2 !== 0 ? "bg-slate-900/30" : ""}`}>
+                        <td className="px-2 md:px-4 py-1.5 md:py-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-slate-700 rounded flex items-center justify-center text-xs font-bold text-slate-300">
+                              {String(file.fileType || "?").charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-mono text-sky-300 text-[10px] md:text-[11px] truncate max-w-xs">{file.fileName}</div>
+                              <div className="text-[9px] md:text-[10px] text-slate-500">{file.sizeLabel}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-2 md:px-4 py-1.5 md:py-2">
+                          <div className="min-w-[140px]">
+                            <div className="truncate text-[10px] md:text-[11px] font-semibold text-slate-200">{file.agentName || "Unknown agent"}</div>
+                          </div>
+                        </td>
+                        <td className="px-2 md:px-4 py-1.5 md:py-2 text-[10px] md:text-[11px] text-slate-400">{file.fileType}</td>
+                        <td className="px-2 md:px-4 py-1.5 md:py-2 text-[10px] md:text-[11px] text-slate-400 font-mono">{file.scanner}</td>
+                        <td className="px-2 md:px-4 py-1.5 md:py-2 max-w-[300px]">
+                          <div className="font-mono text-[10px] md:text-[11px] text-amber-300 truncate" title={file.filePath}>{file.filePath || "-"}</div>
+                        </td>
+                        <td className="px-2 md:px-4 py-1.5 md:py-2"><RiskIndicator severity={maxSeverity?.severity || "HIGH"} /></td>
+                        <td className="px-2 md:px-4 py-1.5 md:py-2 text-[10px] md:text-[11px]"><span className="text-slate-300 font-mono">{file.findingsCount} found</span></td>
+                        <td className="px-2 md:px-4 py-1.5 md:py-2 text-[10px] md:text-[11px] text-slate-400">
+                          {file.timestamp ? new Date(file.timestamp).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}
+                        </td>
+                        <td className="px-2 md:px-4 py-1.5 md:py-2">
+                          <button
+                            onClick={() => setSelectedFile(file)}
+                            className="px-3 py-1.5 rounded text-[10px] md:text-[11px] font-medium transition-colors flex items-center gap-1 bg-red-500/10 text-red-300 hover:bg-red-500/20"
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                            Detail
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
 
           <PaginationControls pagination={pagination} page={page} pageSize={pageSize} loading={loading} onPageChange={setPage} />
         </div>

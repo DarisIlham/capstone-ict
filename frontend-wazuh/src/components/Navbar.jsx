@@ -14,24 +14,22 @@ import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import ThemeToggle from "./ThemeToggle";
-import logo from "../assets/Undip.svg";
+import logo from "../assets/UndipCyber.png";
 
 const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, setTransitionLoading } = useAuth();
+  const { user, logout } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
 
   const handleNavigation = (href) => {
-    setTransitionLoading(true);
     setIsMenuOpen(false);
     navigate(href);
   };
 
   const handleLogout = () => {
     logout();
-    setTransitionLoading(true);
     navigate("/login");
   };
 
@@ -69,7 +67,7 @@ const Navbar = () => {
               <div className="flex items-center gap-3">
                 <img src={logo} alt="Logo" className="h-20 w-20 object-contain" />
                 <div>
-                  <h2 className="text-white font-bold text-xl mb-2">Cyber Monitoring Dashboard</h2>
+                  <h2 className="text-white font-bold text-xl mb-2">SOC UNDIP</h2>
                   <div className="flex items-center gap-2">
                     <span className="bg-slate-800/80 text-slate-300 px-2.5 py-0.5 rounded-full text-[9px] border border-slate-600">
                       File Integrity Monitoring

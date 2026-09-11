@@ -2,7 +2,7 @@ import pool from "../config/pg.js";
 
 export const createAdminLoginNotification = async ({ name, email }) => {
   const displayName = name || email || "Admin";
-  const desc = `Admin login berhasil: ${displayName}${email ? ` (${email})` : ""}`;
+  const desc = `Admin login successful: ${displayName}${email ? ` (${email})` : ""}`;
 
   const q = `INSERT INTO notifikasi (deskripsi, timestamp) VALUES ($1, NOW()) RETURNING *`;
   const r = await pool.query(q, [desc]);

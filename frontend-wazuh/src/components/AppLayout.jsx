@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import ThemeToggle from "./ThemeToggle";
-import logo from "../assets/Undip.svg";
+import logo from "../assets/UndipCyber.png";
 
 const NAV_GROUPS = [
   {
@@ -46,22 +46,26 @@ const NAV_GROUPS = [
 export default function AppLayout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, setTransitionLoading } = useAuth();
-  const [collapsed, setCollapsed] = useState(false);
+  const { user, logout } = useAuth();
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem("sidebar-collapsed") === "1"
+  );
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem("sidebar-collapsed", collapsed ? "1" : "0");
+  }, [collapsed]);
 
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
 
   const handleNav = (href) => {
-    setTransitionLoading(true);
     navigate(href);
   };
 
   const handleLogout = () => {
     logout();
-    setTransitionLoading(true);
     navigate("/login");
   };
 
@@ -71,15 +75,30 @@ export default function AppLayout({ children }) {
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div
-        className={`flex items-center ${isMobile ? "gap-2 px-3 h-12" : "gap-3 px-4 h-14"} border-b border-slate-700/50 shrink-0 ${
+        className={`flex items-center ${isMobile ? "gap-2 px-3 h-14" : "gap-2.5 px-4 h-16"} border-b border-slate-700/50 shrink-0 ${
           collapsed && !isMobile ? "justify-center px-0" : ""
         }`}
       >
-        <img src={logo} alt="Logo" className={`${isMobile ? "h-7 w-7" : "h-8 w-8"} shrink-0`} />
+        <div
+          className={`flex items-center justify-center shrink-0 ${
+            isMobile ? "w-8 h-8" : "w-9 h-9"
+          }`}
+        >
+          <img
+            src={logo}
+            alt="Logo"
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+              display: "block",
+            }}
+          />
+        </div>
         {(!collapsed || isMobile) && (
           <div className="min-w-0">
-            <div className={`${isMobile ? "text-[11px]" : "text-xs"} font-bold text-[var(--soc-text-primary)] truncate`}>Cyber Monitoring Dashboard</div>
-            {!isMobile && <div className="text-[10px] text-slate-500 truncate">Capstone ICT</div>}
+            <div className={`${isMobile ? "text-[11px]" : "text-xs"} font-bold text-[var(--soc-text-primary)] truncate`}>SOC UNDIP</div>
+            {!isMobile && <div className="text-[10px] text-slate-500 truncate">Security Operations Center UNDIP</div>}
           </div>
         )}
       </div>
@@ -192,8 +211,8 @@ export default function AppLayout({ children }) {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Bar */}
-        <header className="flex items-center justify-between h-12 px-4 bg-[var(--soc-surface)] border-b border-[var(--soc-border)] shrink-0">
-          <div className="flex items-center gap-3">
+        <header className="soc-topbar flex items-center justify-between h-12 px-3 sm:px-4 bg-[var(--soc-surface)] border-b border-[var(--soc-border)] shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               onClick={() => {
                 if (window.innerWidth < 1024) {
@@ -202,7 +221,7 @@ export default function AppLayout({ children }) {
                   setCollapsed(!collapsed);
                 }
               }}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors shrink-0"
             >
               {mobileOpen ? (
                 <X className="h-5 w-5" />
@@ -212,24 +231,35 @@ export default function AppLayout({ children }) {
                 <ChevronLeft className="h-5 w-5" />
               )}
             </button>
-            <div className="hidden sm:block text-xs text-slate-500">
-              {new Date().toLocaleDateString("en-US", {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })}
+            <div className="block min-w-0 truncate whitespace-nowrap text-[9.5px] min-[390px]:text-[10px] min-[550px]:text-[10.5px] md:text-xs text-slate-500">
+              <span className="soc-topbar-date-full">
+                {new Date().toLocaleDateString("en-US", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </span>
+              <span className="soc-topbar-date-short">
+                {new Date().toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <ThemeToggle compact className="!border-slate-700/50 !bg-slate-800/40" />
           </div>
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto">
-          {children}
+        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
+          <div className="soc-container py-3 sm:py-3.5">
+            {children}
+          </div>
         </main>
       </div>
     </div>

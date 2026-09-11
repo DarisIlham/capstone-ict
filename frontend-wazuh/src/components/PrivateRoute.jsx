@@ -1,20 +1,10 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { useEffect } from "react";
 
 const PrivateRoute = ({ children, requiredRole = null }) => {
-  const { isAuthenticated, user, loading, pageLoading, setTransitionLoading } = useAuth();
+  const { isAuthenticated, user, loading } = useAuth();
 
-  useEffect(() => {
-    // Set loading ke false setelah component render
-    const timer = setTimeout(() => {
-      setTransitionLoading(false);
-    }, 100);
-
-    return () => clearTimeout(timer);
-  }, [children, setTransitionLoading]);
-
-  if (loading || pageLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--soc-bg)]">
         <div className="text-center">
@@ -35,7 +25,7 @@ const PrivateRoute = ({ children, requiredRole = null }) => {
       <div className="min-h-screen flex items-center justify-center bg-[var(--soc-bg)]">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-red-500 mb-4">Access Denied</h1>
-          <p className="text-slate-400 mb-6">Anda tidak memiliki akses ke halaman ini</p>
+          <p className="text-slate-400 mb-6">You do not have access to this page</p>
         </div>
       </div>
     );

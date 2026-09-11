@@ -410,23 +410,13 @@ function createEmptyDashboardData(dateRange = createDefaultDateRange()) {
   };
 }
 
-async function fetchMlTimeline(minutes, dateRange) {
+function fetchMlTimeline(minutes, dateRange) {
   const params = new URLSearchParams({
     minutes: String(minutes),
     ...getIsoDateRange(dateRange),
   });
 
-  try {
-    return await fetchJson(`${API_ROOT}/ml/predictions/timeline?${params.toString()}`);
-  } catch (error) {
-    const fallback = await fetchJson(
-      `${API_ROOT}/ml/predictions/timeline-mock?minutes=${minutes}`
-    );
-    return {
-      ...fallback,
-      fallbackNotice: "ML timeline menggunakan fallback mock karena endpoint real-time gagal.",
-    };
-  }
+  return fetchJson(`${API_ROOT}/ml/predictions/timeline?${params.toString()}`);
 }
 
 function buildWarningMessage(key, error) {
@@ -498,9 +488,6 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
     if (result.status === "fulfilled") {
       responses[key] = result.value;
       successCount += 1;
-      if (result.value?.fallbackNotice) {
-        warnings.push(result.value.fallbackNotice);
-      }
       return;
     }
 

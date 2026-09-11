@@ -72,7 +72,7 @@ export const requireRole = (allowedRoles) => {
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
-        message: `Hanya ${roles.join(", ")} yang dapat mengakses endpoint ini`,
+        message: `Only ${roles.join(", ")} can access this endpoint`,
       });
     }
 

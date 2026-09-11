@@ -7,7 +7,7 @@ const NON_HTML_EXTENSIONS = /\.(?:jpg|jpeg|png|gif|svg|webp|ico|pdf|zip|rar|7z|m
 function normalizeEndpoint(endpoint = "") {
   const trimmed = String(endpoint).trim();
   if (!trimmed) {
-    throw new Error("Endpoint kosong");
+    throw new Error("Endpoint is empty");
   }
 
   return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;

@@ -10,16 +10,22 @@
 /* ----- DARK THEME (default): lighter navy ----- */
 :root,
 :root[data-theme="dark"] {
-  font-size: 24px;
+  font-size: 16px;
   color-scheme: dark;
 
   /* Surfaces */
-  --soc-bg: #0B1220;            /* page background          */
-  --soc-surface: #0F172A;       /* secondary background     */
-  --soc-card: #111C2E;          /* card / panel             */
-  --soc-elevated: #162235;      /* elevated panel           */
-  --soc-border: #22324A;        /* visible border           */
-  --soc-border-strong: #2E4060; /* hover / selected border  */
+  --soc-bg: #0B1220;
+  /* page background          */
+  --soc-surface: #0F172A;
+  /* secondary background     */
+  --soc-card: #111C2E;
+  /* card / panel             */
+  --soc-elevated: #162235;
+  /* elevated panel           */
+  --soc-border: #22324A;
+  /* visible border           */
+  --soc-border-strong: #2E4060;
+  /* hover / selected border  */
 
   /* Text */
   --soc-text-primary: #E2E8F0;
@@ -163,104 +169,789 @@
   --color-rose-300: #be123c;
 }
 
-:root[data-theme="light"] body {
-  background: var(--soc-bg);
+/* Keep the time text and calendar icon close within datetime inputs,
+   with a small controlled breathing gap. */
+.soc-date-time-input::-webkit-datetime-edit {
+  padding-right: 0;
+  min-width: 0;
+}
+
+.soc-date-time-input::-webkit-datetime-edit-fields-wrapper {
+  padding: 0;
+  margin: 0;
+}
+
+/* Progressively compact the calendar icon on narrower viewports. */
+.soc-date-time-input::-webkit-calendar-picker-indicator {
+  width: 9px;
+  height: 9px;
+}
+
+@media (min-width: 500px) and (max-width: 699px) {
+  .soc-date-time-input::-webkit-calendar-picker-indicator {
+    width: 10px;
+    height: 10px;
+  }
+}
+
+@media (min-width: 700px) and (max-width: 899px) {
+  .soc-date-time-input::-webkit-calendar-picker-indicator {
+    width: 11px;
+    height: 11px;
+  }
+}
+
+@media (min-width: 900px) and (max-width: 1199px) {
+  .soc-date-time-input::-webkit-calendar-picker-indicator {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+@media (min-width: 1200px) {
+  .soc-date-time-input::-webkit-calendar-picker-indicator {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+:root[data-theme="dark"] .soc-date-time-input::-webkit-calendar-picker-indicator,
+:root[data-theme="light"] .soc-date-time-input::-webkit-calendar-picker-indicator {
+  margin-left: -5px;
+  margin-right: 0;
+}
+
+/* The From field needs a little more breathing room so both date fields
+   have the same visual distance between the time and calendar icon. */
+:root[data-theme="dark"] .soc-date-time-input--from::-webkit-calendar-picker-indicator,
+:root[data-theme="light"] .soc-date-time-input--from::-webkit-calendar-picker-indicator {
+  margin-left: -1px;
+}
+
+:root[data-theme="dark"] .soc-date-time-input--to::-webkit-calendar-picker-indicator,
+:root[data-theme="light"] .soc-date-time-input--to::-webkit-calendar-picker-indicator {
+  margin-left: -9px;
+}
+
+/* Main dashboard page header: the title stays LEFT and the filter toolbar
+   stays RIGHT at every width, on a single horizontal row. Compact filter
+   controls (range dropdown + date-range button + short clock) replace the
+   full desktop controls below 700px, so the row never wraps. */
+.soc-page-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 4px 12px;
+}
+
+.soc-page-title-group {
+  justify-self: start;
+  text-align: left;
+  min-width: 0;
+}
+
+.soc-page-header .dashboard-page-title {
+  white-space: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.soc-page-header .dashboard-filter-toolbar {
+  justify-self: end;
+  align-self: start;
+  min-width: 0;
+  max-width: 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+/* Tight 6px rhythm between the range dropdown, the From-To row and the
+   clock (never more than 8px) beats the generic toolbar's 3px override. */
+@media (min-width: 500px) {
+  .soc-page-header .dashboard-filter-toolbar {
+    gap: 6px !important;
+  }
+}
+
+/* Single horizontal row for all dashboard filter controls: nothing wraps,
+   and the compact range pill / From-To row stay 24px tall while shrunk. */
+@media (max-width: 699px) {
+
+  .soc-page-header .dashboard-date-filter>div,
+  .soc-page-header .soc-range-compact {
+    height: 24px !important;
+  }
+}
+
+@media (min-width: 600px) and (max-width: 699px) {
+
+  .soc-page-header .dashboard-date-filter label,
+  .soc-page-header .dashboard-date-filter>div>span,
+  .soc-page-header .dashboard-date-filter .soc-date-time-input {
+    font-size: 8px !important;
+  }
+}
+
+/* Compact range dropdown: the closed pill keeps the themed text, but the
+   option list uses black text on the light native dropdown panel so every
+   range stays clearly readable no matter the theme. */
+.soc-page-header .soc-range-compact select,
+.soc-filter-toolbar .soc-range-compact select {
   color: var(--soc-text-primary);
+  background: transparent;
 }
 
-/* =============================================
-   Light-mode tuning that the variable palette
-   cannot express (overlay backdrops and colored
-   buttons that must keep white label text).
-   ============================================= */
-
-:root[data-theme="light"] [class~="bg-black/40"] { background-color: rgba(15, 23, 42, 0.18) !important; }
-:root[data-theme="light"] [class~="bg-black/60"] { background-color: rgba(248, 251, 255, 0.94) !important; }
-:root[data-theme="light"] [class~="bg-black/70"],
-:root[data-theme="light"] [class~="bg-black/80"] { background-color: rgba(15, 23, 42, 0.26) !important; }
-
-/* Default: white text becomes dark so headings/titles are readable on
-   light surfaces across all pages. */
-:root[data-theme="light"] .text-white { color: var(--soc-text-primary) !important; }
-
-/* Colored buttons keep white label text */
-:root[data-theme="light"] [class~="bg-sky-600"][class~="text-white"],
-:root[data-theme="light"] [class~="bg-sky-700"][class~="text-white"],
-:root[data-theme="light"] [class~="bg-sky-500"][class~="text-white"],
-:root[data-theme="light"] [class~="bg-blue-600"][class~="text-white"],
-:root[data-theme="light"] [class~="bg-blue-700"][class~="text-white"],
-:root[data-theme="light"] [class~="bg-cyan-600"][class~="text-white"],
-:root[data-theme="light"] [class~="bg-red-600"][class~="text-white"],
-:root[data-theme="light"] [class~="bg-red-700"][class~="text-white"],
-:root[data-theme="light"] [class~="from-blue-600"][class~="text-white"],
-:root[data-theme="light"] [class~="from-sky-600"][class~="text-white"] { color: #ffffff !important; }
-
-/* =============================================
-   Light-mode fixes for chart SVG that still uses
-   hardcoded hex fills (existing team pages). The
-   centralized --color-slate-* variables already flip
-   all `bg-|text-|border-slate-*` utilities.
-   ============================================= */
-
-:root[data-theme="light"] svg text[fill="#f1f5f9"],
-:root[data-theme="light"] svg text[fill="#e2e8f0"],
-:root[data-theme="light"] svg text[fill="#cbd5e1"],
-:root[data-theme="light"] svg text[fill="#E2E8F0"],
-:root[data-theme="light"] svg text[fill="#CBD5E1"] {
-  fill: #334155 !important;
-}
-:root[data-theme="light"] svg text[fill="#94a3b8"],
-:root[data-theme="light"] svg text[fill="#64748b"],
-:root[data-theme="light"] svg text[fill="#94A3B8"],
-:root[data-theme="light"] svg text[fill="#64748B"] {
-  fill: #64748b !important;
-}
-:root[data-theme="light"] svg text[fill="#22324a"],
-:root[data-theme="light"] svg text[fill="#22324A"] {
-  fill: #94a3b8 !important;
+.soc-range-compact select option {
+  color: #000;
+  background-color: #fff;
 }
 
-:root[data-theme="light"] svg rect[fill="#1e293b"],
-:root[data-theme="light"] svg rect[fill="#1E293B"],
-:root[data-theme="light"] svg rect[fill="#0f172a"],
-:root[data-theme="light"] svg rect[fill="#0F172A"],
-:root[data-theme="light"] svg circle[fill="#1e293b"],
-:root[data-theme="light"] svg circle[fill="#1E293B"] {
-  fill: #eef4fb !important;
+.soc-range-compact select option:hover,
+.soc-range-compact select option:focus {
+  background-color: #e2e8f0;
+  color: #000;
 }
 
-:root[data-theme="light"] svg rect[fill="#111c2e"],
-:root[data-theme="light"] svg rect[fill="#111C2E"] {
-  fill: #ffffff !important;
+/* Progressive title sizing so it never wraps and never crowds the filters. */
+@media (min-width: 700px) and (max-width: 749px) {
+  .soc-page-header .dashboard-page-title {
+    font-size: 15px !important;
+  }
 }
 
-/* Grid / axis lines in the new lighter-navy palette */
-:root[data-theme="light"] svg line[stroke="#22324a"],
-:root[data-theme="light"] svg line[stroke="#22324A"],
-:root[data-theme="light"] svg line[stroke="#1e293b"],
-:root[data-theme="light"] svg line[stroke="#1E293B"],
-:root[data-theme="light"] svg circle[stroke="#1e293b"],
-:root[data-theme="light"] svg circle[stroke="#1E293B"],
-:root[data-theme="light"] svg rect[stroke="#334155"] {
-  stroke: #d3dbe6 !important;
+@media (min-width: 550px) and (max-width: 599px) {
+  .soc-page-header .dashboard-page-title {
+    font-size: 12.5px !important;
+  }
+
+  .soc-page-header .dashboard-page-title svg {
+    width: 12px;
+    height: 12px;
+  }
 }
 
-/* Word cloud / distribution backgrounds */
-:root[data-theme="light"] .command-keywords-distribution-box {
-  background-color: #eef4fb !important;
+@media (max-width: 549px) {
+  .soc-page-header .dashboard-page-title {
+    font-size: 12px !important;
+  }
+
+  .soc-page-header .dashboard-page-title svg {
+    width: 11px;
+    height: 11px;
+  }
 }
-:root[data-theme="light"] .command-word-cloud-bg {
-  fill: #eef4fb !important;
+
+/* The subtitle is secondary; hide it once the header row needs the room. */
+@media (max-width: 619px) {
+  .dashboard-page-subtitle {
+    display: none;
+  }
 }
 
-/* Fallback for any hardcoded rounded-tooltip backgrounds */
-:root[data-theme="light"] [class~="bg-black/80"][class~="text-white"] { background-color: #ffffff !important; }
+/* Tighter gutter between the title and the compact filters under 700px. */
+@media (max-width: 699px) {
+  .soc-page-header {
+    gap: 4px 8px;
+  }
+}
+
+/* Only below 430px is a true side-by-side row physically impossible;
+   fall back to a single column while keeping alignment left/right. */
+@media (max-width: 429px) {
+  .soc-page-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* At <=620px the dashboard header stacks: Title, Subtitle, then the filter
+   toolbar — all LEFT aligned on single rows. Above 620px the title stays
+   LEFT and the filters stay RIGHT exactly as before. Desktop cards, charts,
+   and grid are untouched. */
+@media (max-width: 620px) {
+  .soc-page-header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+    gap: 8px 8px;
+  }
+
+  .soc-page-header .dashboard-page-title {
+    font-size: 13px !important;
+  }
+
+  .soc-page-header .dashboard-page-subtitle {
+    display: block;
+    margin-top: 4px;
+    font-size: 8px !important;
+  }
+
+  .soc-page-header .dashboard-filter-toolbar {
+    justify-self: start;
+    align-self: flex-start;
+    justify-content: flex-start;
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    width: fit-content;
+    max-width: 100%;
+    min-width: 0;
+    gap: 4px !important;
+  }
+
+  /* Time-range options stay directly visible as segmented buttons (no
+     dropdown) and are shrunk so [1h][24h][7d][30d] fits on the row. */
+  .soc-page-header .dashboard-range-filter>div {
+    height: 23px;
+    padding: 1px;
+    gap: 2px;
+  }
+
+  .soc-page-header .dashboard-range-filter button {
+    height: 21px;
+    padding-inline: 4px;
+    font-size: 7.5px;
+    line-height: 1;
+  }
+
+  .soc-page-header .dashboard-date-filter .soc-date-compact summary {
+    font-size: 8px;
+  }
+
+  .soc-page-header .dashboard-current-time {
+    font-size: 8px;
+    white-space: nowrap;
+  }
+
+  .soc-page-header .dashboard-current-time svg {
+    width: 9px;
+    height: 9px;
+  }
+
+  /* Only the compact date control is shown on this row; the verbose inline
+     From/To inputs are hidden so there is exactly one date-range control. */
+  .soc-page-header .dashboard-date-filter .soc-date-field-row {
+    display: none !important;
+  }
+
+  .soc-page-header .dashboard-date-filter .soc-date-compact {
+    display: inline-flex;
+  }
+
+  .soc-page-header .soc-range-compact,
+  .soc-page-header .soc-date-compact {
+    height: 22px !important;
+  }
+}
+
+/* 500px-600px refinement: slightly larger title/subtitle, more breathing
+   room before and between the filters, and looser card spacing/gaps so the
+   dashboard reads clearly without touching any other breakpoint. */
+@media (min-width: 500px) and (max-width: 599px) {
+  .soc-page-header .dashboard-page-title {
+    font-size: 14.5px !important;
+    font-weight: 700;
+  }
+
+  .soc-page-header .dashboard-page-subtitle {
+    margin-top: 4px;
+    font-size: 8.5px !important;
+  }
+
+  .soc-page-header {
+    gap: 10px 8px;
+  }
+
+  .soc-page-header .dashboard-filter-toolbar {
+    gap: 6px !important;
+  }
+
+  .soc-page-header .dashboard-range-filter>div {
+    height: 24px;
+    padding: 1px;
+    gap: 4px;
+  }
+
+  .soc-page-header .dashboard-range-filter button {
+    height: 22px;
+    padding-inline: 5px;
+    font-size: 8px;
+    line-height: 1;
+  }
+
+  .soc-page-header .dashboard-date-filter .soc-date-compact {
+    height: 24px !important;
+  }
+
+  .soc-page-header .dashboard-date-filter .soc-date-compact summary {
+    font-size: 8.5px;
+  }
+
+  .soc-page-header .dashboard-current-time {
+    font-size: 8px;
+  }
+
+  .soc-page-header .dashboard-current-time svg {
+    width: 10px;
+    height: 10px;
+  }
+
+  .dashboard-page {
+    padding: 10px 12px;
+  }
+
+  .dashboard-kpi-grid {
+    gap: 8px;
+  }
+
+  .dashboard-kpi-grid>div {
+    padding: 10px;
+  }
+
+  .dashboard-analytics-grid {
+    gap: 9px;
+  }
+
+  .dashboard-analytics-grid>div {
+    padding: 10px;
+  }
+}
+
+/* 700px-769px: the full controls plus the dated clock still overflow the
+   header, clipping the clock. Slim the From/To inputs to values only and
+   shrink the range buttons / clock so the date always stays visible. */
+@media (min-width: 700px) and (max-width: 769px) {
+  .soc-page-header .dashboard-date-filter .soc-date-field-row label>span {
+    display: none;
+  }
+
+  .soc-page-header .dashboard-date-filter .soc-date-field-row {
+    gap: 4px;
+  }
+
+  .soc-page-header .dashboard-range-filter button {
+    padding-inline: 4px;
+    font-size: 8px;
+  }
+
+  .soc-page-header .dashboard-current-time {
+    font-size: 8px;
+    white-space: nowrap;
+  }
+}
+
+/* Narrow-tablet dashboard filter tuning only. Keep the desktop toolbar
+   unchanged while making the controls fit beside the page title. */
+@media (min-width: 700px) and (max-width: 850px) {
+  .dashboard-filter-toolbar {
+    min-width: 0;
+    max-width: 100%;
+    flex-wrap: nowrap;
+    gap: 4px !important;
+  }
+
+  .dashboard-filter-toolbar>div:first-child,
+  .dashboard-date-filter {
+    min-width: 0;
+    flex-shrink: 1;
+  }
+
+  .dashboard-filter-toolbar .dashboard-range-filter {
+    height: 26px;
+    min-width: 0;
+    gap: 2px;
+    padding: 2px;
+  }
+
+  .dashboard-filter-toolbar .dashboard-range-filter button {
+    min-width: 0;
+    padding: 2px 5px;
+    font-size: 8.5px;
+    line-height: 1.1;
+  }
+
+  .dashboard-date-filter>div {
+    height: 26px;
+    min-width: 0;
+    max-width: 100%;
+    padding: 2px;
+  }
+
+  .dashboard-date-filter label {
+    min-width: 0;
+    flex-shrink: 1;
+    gap: 2px;
+    padding-inline: 5px;
+    font-size: 8px;
+  }
+
+  .dashboard-date-filter>div>span {
+    flex-shrink: 0;
+    font-size: 8px;
+  }
+
+  .dashboard-date-filter .soc-date-time-input {
+    min-width: 0;
+    flex-shrink: 1;
+    width: fit-content;
+    padding: 2px 0 2px 2px;
+    font-size: 8px;
+  }
+
+  .dashboard-date-filter .soc-date-time-input::-webkit-calendar-picker-indicator {
+    width: 10px;
+    height: 10px;
+  }
+
+  .dashboard-current-time {
+    min-width: 0;
+    gap: 2px;
+    font-size: 8px;
+    white-space: nowrap;
+  }
+
+  .dashboard-current-time svg {
+    width: 9px;
+    height: 9px;
+    flex-shrink: 0;
+  }
+}
+
+/* Shared page-header/filter compaction for narrow tablets. These rules only
+   affect 600px-849px; cards, charts, and desktop sizing remain unchanged. */
+@media (min-width: 750px) and (max-width: 849px) {
+
+  .soc-page-title,
+  .dashboard-page-title {
+    font-size: 15.5px !important;
+  }
+
+  .soc-page-title>svg,
+  .dashboard-page-title>svg {
+    width: 15px !important;
+    height: 15px !important;
+  }
+
+  .soc-page-subtitle,
+  .dashboard-page-subtitle {
+    font-size: 9px !important;
+  }
+}
+
+@media (min-width: 650px) and (max-width: 749px) {
+
+  .soc-page-title,
+  .dashboard-page-title {
+    font-size: 14.5px !important;
+  }
+
+  .soc-page-title>svg,
+  .dashboard-page-title>svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+
+  .soc-page-subtitle,
+  .dashboard-page-subtitle {
+    font-size: 8.5px !important;
+  }
+}
+
+@media (min-width: 600px) and (max-width: 649px) {
+
+  .soc-page-title,
+  .dashboard-page-title {
+    font-size: 13.5px !important;
+  }
+
+  .soc-page-title>svg,
+  .dashboard-page-title>svg {
+    width: 13px !important;
+    height: 13px !important;
+  }
+
+  .soc-page-subtitle,
+  .dashboard-page-subtitle {
+    font-size: 8px !important;
+  }
+}
+
+@media (min-width: 750px) and (max-width: 849px),
+(min-width: 650px) and (max-width: 749px),
+(min-width: 600px) and (max-width: 649px) {
+  .soc-filter-toolbar {
+    min-width: 0;
+    max-width: 100%;
+    flex-shrink: 1;
+    flex-wrap: wrap;
+    gap: 3px !important;
+  }
+
+  .soc-filter-toolbar .soc-range-filter,
+  .soc-filter-toolbar .soc-date-filter {
+    min-width: 0;
+    flex-shrink: 1;
+  }
+
+  .soc-filter-toolbar .soc-range-filter>div {
+    min-width: 0;
+    gap: 2px;
+    padding: 2px;
+  }
+
+  .soc-filter-toolbar .soc-date-filter>div {
+    min-width: 0;
+    max-width: 100%;
+    padding: 2px;
+  }
+
+  .soc-filter-toolbar .soc-date-filter label {
+    min-width: 0;
+    flex-shrink: 1;
+    white-space: nowrap;
+    gap: 2px;
+    padding-inline: 4px;
+  }
+
+  .soc-filter-toolbar .soc-date-filter .soc-date-time-input {
+    min-width: 0;
+    width: fit-content;
+    flex-shrink: 1;
+    padding-left: 2px;
+    padding-right: 0;
+  }
+
+  .soc-filter-toolbar>span {
+    min-width: 0;
+    flex-shrink: 1;
+    gap: 2px;
+    white-space: nowrap;
+  }
+
+  .soc-filter-toolbar>span svg,
+  .soc-filter-toolbar .dashboard-current-time svg {
+    flex-shrink: 0;
+  }
+}
+
+@media (min-width: 750px) and (max-width: 849px) {
+
+  .soc-filter-toolbar .soc-range-filter>div,
+  .soc-filter-toolbar .soc-date-filter>div {
+    height: 26px;
+  }
+
+  .soc-filter-toolbar .soc-range-filter button {
+    padding-inline: 5px;
+    padding-block: 2px;
+    font-size: 8.5px;
+    line-height: 1.1;
+  }
+
+  .soc-filter-toolbar .soc-date-filter label,
+  .soc-filter-toolbar .soc-date-filter>div>span,
+  .soc-filter-toolbar .soc-date-time-input,
+  .soc-filter-toolbar .dashboard-current-time {
+    font-size: 8px;
+  }
+
+  .soc-filter-toolbar .soc-date-filter .soc-date-time-input::-webkit-calendar-picker-indicator {
+    width: 10px;
+    height: 10px;
+  }
+
+  .soc-filter-toolbar .dashboard-current-time svg,
+  .soc-filter-toolbar>span svg {
+    width: 10px;
+    height: 10px;
+  }
+}
+
+@media (min-width: 650px) and (max-width: 749px) {
+
+  .soc-filter-toolbar .soc-range-filter>div,
+  .soc-filter-toolbar .soc-date-filter>div {
+    height: 24px;
+  }
+
+  .soc-filter-toolbar .soc-range-filter button {
+    padding-inline: 4px;
+    padding-block: 1px;
+    font-size: 8px;
+    line-height: 1.05;
+  }
+
+  .soc-filter-toolbar .soc-date-filter label,
+  .soc-filter-toolbar .soc-date-filter>div>span,
+  .soc-filter-toolbar .soc-date-time-input,
+  .soc-filter-toolbar .dashboard-current-time {
+    font-size: 7.5px;
+  }
+
+  .soc-filter-toolbar .soc-date-filter .soc-date-time-input::-webkit-calendar-picker-indicator {
+    width: 9px;
+    height: 9px;
+  }
+
+  .soc-filter-toolbar .dashboard-current-time svg,
+  .soc-filter-toolbar>span svg {
+    width: 9px;
+    height: 9px;
+  }
+}
+
+/* .dashboard-page negative-margin hacks removed — .soc-page-shell already
+   enforces margin-inline: 0 !important so these rules had no effect. */
+
+.soc-chart--tall {
+  height: clamp(220px, 38vh, 460px);
+}
+
+/* Main Dashboard timeline charts (Command Activity, File Security Scanner,
+   File Integrity Monitoring, ML Threat Detection): wide but compact.
+   Height scales gently with viewport height and is hard-capped so ultrawide
+   monitors grow charts horizontally, never vertically. */
+.soc-chart--dash {
+  width: 100%;
+  min-width: 0;
+  height: clamp(160px, 20vh, 190px);
+}
+
+@media (min-width: 700px) {
+  .soc-chart--dash {
+    height: clamp(180px, 22vh, 210px);
+  }
+}
+
+@media (min-width: 900px) and (max-width: 1399px) {
+  .soc-chart--dash {
+    height: clamp(170px, 20vh, 190px);
+  }
+}
+
+@media (min-width: 1400px) {
+  .soc-chart--dash {
+    height: clamp(220px, 26vh, 250px);
+  }
+}
+
+.soc-chart--short {
+  height: clamp(130px, 22vh, 240px);
+}
+
+/* Let the surrounding grid row determine the word-cloud height. This keeps
+   it aligned with the adjacent chart instead of forcing empty space. */
+.soc-payload-distribution-card {
+  min-height: 0;
+}
+
+/* Host Monitoring "Command Timeline" chart wrapper:
+   same gauge as the FIM "FIM Timeline" wrapper (.soc-chart--fim)
+   so the charts share the same visual size. */
+.soc-chart--timeline {
+  width: 100%;
+  min-width: 0;
+  height: clamp(230px, 22vh, 250px);
+  min-height: 0;
+  flex: 1 1 auto;
+  position: relative;
+}
+
+.soc-chart--timeline>* {
+  height: 100%;
+  min-height: 0;
+}
 
 
-/* =============================================
-   Global Layout Styles
-   ============================================= */
+/* ML Monitoring "ML Predictions Timeline" chart wrapper:
+   compact desktop row (~300-340px total) so the Top 5 Source IPs
+   card next to it is not stretched into a huge blank area.
+   Height is bounded, grows horizontally (never to 400px+) via flex. */
+.soc-chart--ml {
+  width: 100%;
+  min-width: 0;
+  height: clamp(200px, 23vh, 240px);
+  min-height: 0;
+  flex: 1 1 auto;
+  position: relative;
+}
 
+.soc-chart--ml>* {
+  height: 100%;
+  min-height: 0;
+}
+
+/* FIM "FIM Timeline" chart wrapper: compact desktop row (~300-330px
+   total) so the Top 5 Agents card is not stretched into a huge blank
+   area. Mobile stacks with a slightly taller chart for readability. */
+.soc-chart--fim {
+  width: 100%;
+  min-width: 0;
+  height: clamp(230px, 22vh, 250px);
+  min-height: 0;
+  flex: 1 1 auto;
+  position: relative;
+}
+
+.soc-chart--fim>* {
+  height: 100%;
+  min-height: 0;
+}
+
+/* Scroll-guarded table wrapper so wide tables never push the page. */
+.soc-table-scroll {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Responsive page- and section-level titles. */
+.soc-page-title {
+  font-size: clamp(1.05rem, 1.6vw, 1.5rem);
+  font-weight: 700;
+  color: var(--soc-text-primary);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.soc-page-subtitle {
+  font-size: clamp(0.72rem, 0.9vw, 0.875rem);
+  color: var(--soc-text-muted);
+  margin-top: 2px;
+}
+
+.soc-section-title {
+  font-size: clamp(0.8rem, 1vw, 0.95rem);
+  font-weight: 600;
+  color: var(--soc-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.soc-metric-value {
+  font-size: clamp(1.25rem, 1.8vw, 1.75rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Page-level filter/toolbar row — wraps gracefully on small screens. */
+.soc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: clamp(8px, 1vw, 14px);
+  width: 100%;
+  min-width: 0;
+}
+
+/* Full-width, border-box friendly */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--soc-border) transparent;
@@ -291,41 +982,109 @@
   border-radius: 4px;
 }
 
+/* Interactive FIM chart focus handling:
+   suppress browser default black boxes on click, keep keyboard :focus-visible */
+.fim-donut-seg:focus,
+.fim-legend-item:focus,
+.fim-payload-span:focus {
+  outline: none;
+}
+
+.fim-donut-seg,
+.fim-legend-item,
+.fim-payload-span {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.fim-donut-seg:focus-visible,
+.fim-legend-item:focus-visible,
+.fim-payload-span:focus-visible {
+  outline: 2px solid var(--soc-accent);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
 /* =============================================
    Animations
    ============================================= */
 
 @layer utilities {
   @keyframes blob {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    25% { transform: translate(20px, -50px) scale(1.1); }
-    50% { transform: translate(-20px, 20px) scale(0.9); }
-    75% { transform: translate(50px, 50px) scale(1.05); }
+
+    0%,
+    100% {
+      transform: translate(0, 0) scale(1);
+    }
+
+    25% {
+      transform: translate(20px, -50px) scale(1.1);
+    }
+
+    50% {
+      transform: translate(-20px, 20px) scale(0.9);
+    }
+
+    75% {
+      transform: translate(50px, 50px) scale(1.05);
+    }
   }
 
   @keyframes slide-in-right {
-    from { transform: translateX(400px); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
+    from {
+      transform: translateX(400px);
+      opacity: 0;
+    }
+
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
   }
 
   @keyframes slide-in-left {
-    from { transform: translateX(-280px); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
+    from {
+      transform: translateX(-280px);
+      opacity: 0;
+    }
+
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
   }
 
   @keyframes fade-in {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
   }
 
   @keyframes fade-in-up {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   @keyframes pulse-dot {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.4;
+    }
   }
 
   .animate-blob {
@@ -373,27 +1132,25 @@
   border-radius: 8px;
 }
 
-.soc-section-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--soc-text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.soc-severity-critical {
+  color: var(--soc-critical);
 }
 
-.soc-metric-value {
-  font-size: 24px;
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
+.soc-severity-high {
+  color: var(--soc-high);
 }
 
-.soc-severity-critical { color: var(--soc-critical); }
-.soc-severity-high { color: var(--soc-high); }
-.soc-severity-medium { color: var(--soc-warning); }
-.soc-severity-low { color: var(--soc-success); }
-.soc-severity-info { color: var(--soc-accent); }
+.soc-severity-medium {
+  color: var(--soc-warning);
+}
+
+.soc-severity-low {
+  color: var(--soc-success);
+}
+
+.soc-severity-info {
+  color: var(--soc-accent);
+}
 
 /* =============================================
    Password Input Override
@@ -414,4 +1171,3135 @@ input[type="password"]::-webkit-textfield-decoration-wrapper {
 input[type="password"] {
   -webkit-appearance: none;
   appearance: none;
+}
+
+/* =============================================
+   Login Page - layout shell
+   Fluid full-viewport shell. On tall/normal
+   devices the composition centers; on short
+   screens it flows from the top and scrolls
+   naturally instead of clipping.
+   ============================================= */
+
+.login-page-shell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+@media (max-height: 640px) {
+  .login-page-shell {
+    justify-content: flex-start;
+  }
+}
+
+/* =============================================
+   Login Page - reCAPTCHA sizing
+   Native size on desktop; gentle shrink only on
+   narrow mobile screens so the widget never
+   overflows the card or dictates card width.
+   Functionality unchanged.
+   ============================================= */
+
+.login-recaptcha-wrap {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  background: transparent;
+  border-radius: 8px;
+}
+
+.login-recaptcha-wrap>div {
+  display: flex;
+  justify-content: center;
+  max-width: 100%;
+}
+
+.login-recaptcha-wrap iframe {
+  border: 0;
+  max-width: 100%;
+}
+
+/* Dark-mode reCAPTCHA: Google still paints a light edge border around its
+   dark widget (cross-origin iframe, cannot be styled from inside).
+   Neutralize it with a dark slot backdrop and a 2px-narrower frame so only
+   dark pixels flank the widget. Light theme is untouched. */
+:root[data-theme="dark"] .login-recaptcha-wrap .g-recaptcha > div {
+  background: #222 !important;
+  border-radius: 4px !important;
+  line-height: 0 !important;
+}
+
+:root[data-theme="dark"] .login-recaptcha-wrap .g-recaptcha iframe {
+  display: block !important;
+  border: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: #222 !important;
+  /* Crop 1.5px tepi luar iframe (tempat garis terang Google berada).
+     Tidak menyentuh checkbox/logo di dalam; tanpa overlay; tanpa invert. */
+  clip-path: inset(1.5px) !important;
+  border-radius: 4px !important;
+}
+
+/* Captcha scale is driven proportionally from JS (see LoginPage
+   captchaZoom), so no stepped breakpoint zoom is needed here. */
+
+/* Secure note: one line when it fits; graceful centered wrap on phones
+   (never clipped, never overflows). Shorter sentence on tiny screens. */
+.login-secure-note .login-note-short {
+  display: none;
+}
+
+@media (max-width: 389px) {
+  /* One forced row: shrink proportionally, never wrap. */
+  .login-secure-note {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 4px !important;
+    padding-top: 0 !important;
+    font-size: clamp(8px, 2.6vw, 11px) !important;
+    line-height: 1.3 !important;
+  }
+
+  .login-secure-note svg {
+    width: 12px !important;
+    height: 12px !important;
+  }
+
+  .login-secure-note > span {
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+}
+
+@media (max-width: 280px) {
+  .login-secure-note .login-note-full {
+    display: none;
+  }
+
+  .login-secure-note .login-note-short {
+    display: inline;
+  }
+}
+
+
+
+/* ---------------------------------------------------------------------------
+   Security Alerts Center - medium-width refinements only.
+   ---------------------------------------------------------------------------
+
+   Below 1000px: stack the header (Title / Subtitle / filters) with everything
+   LEFT aligned. At 1000px+ the filter stays RIGHT beside the title. */
+@media (max-width: 999px) {
+  .alert-page-header {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .alert-page-header .soc-filter-toolbar {
+    justify-content: flex-start;
+    align-self: flex-start;
+    width: fit-content;
+    max-width: 100%;
+    min-width: 0;
+    gap: 6px;
+  }
+}
+
+/* 1200px-1280px: keep the four severity cards (CRITICAL/HIGH/MEDIUM/INFO)
+   in ONE row by making the 4-column grid start at 1200px, and shave their
+   internal padding / label spacing so they stay clean and balanced. */
+@media (min-width: 1200px) and (max-width: 1279px) {
+  .alert-summary-grid>button {
+    padding: 10px 12px;
+  }
+
+  .alert-summary-grid>button>div:first-child {
+    font-size: 9px;
+  }
+
+  .alert-summary-grid>button>div:last-child {
+    font-size: 20px;
+    margin-top: 2px;
+  }
+}
+
+/* Below the lg breakpoint the Alerts header stacks (Title / Subtitle /
+   filters) with everything LEFT aligned down to 300px; never centered. */
+@media (max-width: 1023px) {
+  .alert-page-header {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .alert-page-header .soc-filter-toolbar {
+    justify-content: flex-start;
+    align-self: flex-start;
+    width: fit-content;
+    max-width: 100%;
+    min-width: 0;
+    gap: 6px;
+  }
+}
+
+/* Desktop: Alerts header behaves like Main Dashboard — title block LEFT,
+   filter toolbar RIGHT, both vertically centered in the row. The last
+   filter item (calendar icon + selected range) is centered against the
+   toolbar so it never sits high/low versus the Range + Date controls. */
+@media (min-width: 1024px) {
+  .alert-page-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .alert-page-header .soc-filter-toolbar {
+    align-self: center;
+    align-items: center;
+    justify-content: flex-end;
+    margin-left: auto;
+  }
+
+  .alert-page-header .soc-filter-toolbar>span:last-child {
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+/* The 4 summary cards hold ONE row from 550px up; on split widths they are
+   compacted (smaller padding/font) so CRITICAL/HIGH/MEDIUM/INFO never wrap
+   into two rows before 550px. */
+@media (min-width: 550px) {
+  .alert-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 550px) and (max-width: 899px) {
+  .alert-summary-grid>button {
+    padding: 8px 6px;
+  }
+
+  .alert-summary-grid>button>div:first-child {
+    font-size: 8.5px;
+  }
+
+  .alert-summary-grid>button>div:last-child {
+    font-size: 16px;
+    margin-top: 2px;
+  }
+}
+
+/* =============================================
+   Responsive UI foundation
+   Shared layout primitives used by every monitoring route. These final rules
+   replace the earlier one-off toolbar sizing with content-led sizing that
+   keeps controls readable without widening the page.
+   ============================================= */
+
+.soc-container {
+  width: 100%;
+  /* Fill all available content area (sidebar already constrains the parent). */
+  max-width: 100%;
+  margin-inline: 0;
+  padding-inline: clamp(12px, 1.5vw, 28px);
+}
+
+/* Standardized card system — consistent radius, padding, border, shadow */
+.soc-card {
+  background: var(--soc-card);
+  border: 1px solid var(--soc-border);
+  border-radius: 12px;
+  min-width: 0;
+}
+
+.soc-card--pad {
+  padding: clamp(12px, 1.6vw, 20px);
+}
+
+.soc-card--compact {
+  padding: clamp(8px, 1.2vw, 14px);
+}
+
+/* Consistent section gap rhythm */
+.soc-section-gap {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 1.2vw, 18px);
+}
+
+/* Standardized page shell */
+.soc-page-shell,
+.dashboard-page {
+  width: 100% !important;
+  min-width: 0;
+  margin-inline: 0 !important;
+  padding: 0 !important;
+}
+
+.soc-page-shell {
+  gap: clamp(10px, 1.1vw, 18px) !important;
+}
+
+.soc-page-shell>*,
+.dashboard-page>* {
+  min-width: 0;
+}
+
+button,
+label,
+span {
+  overflow-wrap: normal;
+}
+
+.soc-page-heading {
+  min-width: 0;
+  padding: clamp(12px, 1.3vw, 20px) !important;
+}
+
+.soc-page-heading>div {
+  min-width: 0;
+  align-items: flex-start !important;
+  text-align: left;
+}
+
+.soc-page-title,
+.dashboard-page-title {
+  font-size: 14px !important;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.soc-page-title>svg,
+.dashboard-page-title>svg {
+  width: 13px !important;
+  height: 13px !important;
+  flex: 0 0 auto;
+}
+
+.soc-page-subtitle,
+.dashboard-page-subtitle {
+  display: block;
+  margin-top: 3px;
+  font-size: 8px !important;
+  line-height: 1.4;
+}
+
+.soc-data-toolbar {
+  min-width: 0;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.soc-data-toolbar>* {
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .soc-data-toolbar {
+    align-items: center;
+  }
+}
+
+/* Shared four-up dashboard KPI rhythm. Two columns remain comfortable on
+   phones and tablets; four columns begin when the available content width
+   can actually keep short labels and metrics readable. */
+.soc-kpi-grid {
+  display: grid;
+  min-width: 0;
+  gap: clamp(8px, 1vw, 16px);
+}
+
+@media (min-width: 430px) {
+  .soc-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* 768px: sidebar is hidden on mobile/tablet so the full viewport width is
+   available — 4 columns = ~192px each which is comfortable for KPI cards.
+   At 1024px+ with the sidebar (240px), content ≈ 784px → 196px per card. */
+@media (min-width: 768px) {
+  .soc-kpi-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.soc-filter-toolbar {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px !important;
+}
+
+.soc-filter-toolbar .soc-range-filter,
+.soc-filter-toolbar .soc-date-filter {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.soc-date-field-row {
+  max-width: 100%;
+}
+
+.soc-date-time-input {
+  inline-size: 9.75rem;
+  max-inline-size: 100%;
+}
+
+.soc-date-time-input::-webkit-calendar-picker-indicator,
+:root[data-theme="dark"] .soc-date-time-input::-webkit-calendar-picker-indicator,
+:root[data-theme="light"] .soc-date-time-input::-webkit-calendar-picker-indicator {
+  margin-left: 3px;
+  margin-right: 0;
+}
+
+.soc-date-time-input--from::-webkit-calendar-picker-indicator,
+.soc-date-time-input--to::-webkit-calendar-picker-indicator {
+  margin-left: 3px;
+}
+
+.dashboard-current-time {
+  min-width: 0;
+  flex: 0 1 auto;
+  gap: 4px !important;
+  font-size: 9px !important;
+  white-space: nowrap;
+}
+
+.dashboard-current-time svg {
+  width: 10px !important;
+  height: 10px !important;
+  flex: 0 0 auto;
+}
+
+.soc-dashboard-header {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.soc-dashboard-header .soc-page-title-group {
+  min-width: 0;
+}
+
+.soc-dashboard-header .dashboard-filter-toolbar {
+  justify-content: flex-end;
+}
+
+.soc-chart {
+  height: clamp(180px, 25vh, 300px);
+}
+
+/* Single clamp replaces five stepped media-query heights.
+   Scales gently with viewport height; hard cap keeps ultrawide compact. */
+.soc-dashboard-category-chart {
+  min-height: clamp(155px, 18vh, 220px);
+  height: clamp(155px, 18vh, 220px);
+}
+
+@media (max-width: 639px) {
+  .soc-page-heading {
+    padding: 12px !important;
+  }
+
+  .soc-data-toolbar {
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+
+  .soc-data-toolbar .soc-filter-toolbar {
+    align-self: stretch;
+    margin-left: 0;
+  }
+
+  .soc-filter-toolbar {
+    gap: 4px !important;
+  }
+
+  .dashboard-current-time {
+    font-size: 8px !important;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 649px) {
+
+  .soc-page-title,
+  .dashboard-page-title {
+    font-size: 14px !important;
+  }
+
+  .soc-page-subtitle,
+  .dashboard-page-subtitle {
+    font-size: 8px !important;
+  }
+
+  .soc-filter-toolbar {
+    gap: 3px !important;
+  }
+
+  .soc-range-filter>div {
+    height: 22px !important;
+  }
+
+  .soc-range-filter button {
+    padding-inline: 3px !important;
+    font-size: 7.5px !important;
+  }
+
+  .soc-date-field-row {
+    height: 22px !important;
+  }
+
+  .soc-date-field-row label,
+  .soc-date-time-input,
+  .soc-date-field-row>span,
+  .dashboard-current-time {
+    font-size: 7px !important;
+  }
+
+  .soc-date-time-input {
+    inline-size: 8.5rem;
+  }
+}
+
+@media (min-width: 650px) and (max-width: 749px) {
+
+  .soc-page-title,
+  .dashboard-page-title {
+    font-size: 15px !important;
+  }
+
+  .soc-page-title>svg,
+  .dashboard-page-title>svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+
+  .soc-page-subtitle,
+  .dashboard-page-subtitle {
+    font-size: 8.5px !important;
+  }
+
+  .soc-filter-toolbar {
+    gap: 3px !important;
+  }
+
+  .soc-range-filter>div,
+  .soc-date-field-row {
+    height: 24px !important;
+  }
+
+  .soc-range-filter button {
+    padding-inline: 4px !important;
+    font-size: 8px !important;
+  }
+
+  .soc-date-field-row label,
+  .soc-date-time-input,
+  .soc-date-field-row>span,
+  .dashboard-current-time {
+    font-size: 7.5px !important;
+  }
+
+  .soc-date-time-input {
+    inline-size: 9rem;
+  }
+}
+
+@media (min-width: 750px) and (max-width: 849px) {
+
+  .soc-page-title,
+  .dashboard-page-title {
+    font-size: 16px !important;
+  }
+
+  .soc-page-title>svg,
+  .dashboard-page-title>svg {
+    width: 15px !important;
+    height: 15px !important;
+  }
+
+  .soc-page-subtitle,
+  .dashboard-page-subtitle {
+    font-size: 9px !important;
+  }
+
+  .soc-filter-toolbar {
+    gap: 4px !important;
+  }
+
+  .soc-range-filter>div,
+  .soc-date-field-row {
+    height: 26px !important;
+  }
+
+  .soc-range-filter button {
+    padding-inline: 5px !important;
+    font-size: 8.5px !important;
+  }
+
+  .soc-date-field-row label,
+  .soc-date-time-input,
+  .soc-date-field-row>span,
+  .dashboard-current-time {
+    font-size: 8px !important;
+  }
+
+  .soc-date-time-input {
+    inline-size: 9.5rem;
+  }
+}
+
+@media (min-width: 850px) {
+
+  .soc-page-title,
+  .dashboard-page-title {
+    font-size: clamp(18px, 1.45vw, 24px) !important;
+  }
+
+  .soc-page-title>svg,
+  .dashboard-page-title>svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  .soc-page-subtitle,
+  .dashboard-page-subtitle {
+    font-size: clamp(11px, 0.85vw, 14px) !important;
+  }
+}
+
+@media (max-width: 899px) {
+  .soc-dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .soc-dashboard-header .dashboard-filter-toolbar {
+    justify-content: flex-start;
+  }
+}
+
+/* Alert page: 4-column severity grid stays 4-col, no change needed */
+
+/* ==========================================================================
+   Security Alerts Center — COMPACT DESKTOP 1024px–1156px ONLY.
+   Goal: keep [Title+Subtitle] LEFT and [QuickFilter+DateRange+Indicator]
+   RIGHT on ONE horizontal header row. Shrink proportionally, never stack,
+   never overlap, never horizontal-scroll. No effect outside this range.
+   ========================================================================== */
+@media (min-width: 1024px) and (max-width: 1156px) {
+  /* ---- Sidebar: reclaim ~40px for main content, logo/menu stay readable. */
+  aside.w-60 {
+    width: 12.5rem !important; /* 200px instead of 240px */
+  }
+
+  /* ---- Main content density: information-dense SOC look. */
+  .soc-container {
+    padding-inline: 16px !important;
+  }
+
+  .soc-page-shell {
+    gap: clamp(10px, 1vw, 14px) !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: clip !important;
+  }
+
+  /* ---- 2. HEADER LAYOUT: natural flex, no fixed widths, no absolute. */
+  .alert-page-header {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: flex-start !important;
+    justify-content: space-between !important;
+    gap: clamp(8px, 1vw, 12px) !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .alert-page-header .alert-title-block {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* ---- 7. FILTER GROUP: single right-aligned unit. */
+  .alert-page-header .soc-filter-toolbar {
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: auto !important;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    align-self: flex-start !important;
+    margin-left: 0 !important;
+    gap: clamp(5px, 0.7vw, 8px) !important;
+  }
+
+  .alert-page-header .soc-filter-toolbar .soc-range-filter,
+  .alert-page-header .soc-filter-toolbar .soc-date-filter {
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex-shrink: 1 !important;
+  }
+
+  /* ---- 3. TITLE: compact only in this range. */
+  .alert-page-header .soc-page-title {
+    font-size: clamp(17px, 1.55vw, 19px) !important;
+    line-height: 1.2 !important;
+    gap: clamp(7px, 0.7vw, 9px) !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    min-width: 0 !important;
+  }
+
+  .alert-page-header .soc-page-title > svg {
+    width: clamp(15px, 1.4vw, 18px) !important;
+    height: clamp(15px, 1.4vw, 18px) !important;
+    flex: 0 0 auto !important;
+  }
+
+  /* ---- 4. SUBTITLE: stays under title, readable, no clipping. */
+  .alert-page-header .soc-page-subtitle {
+    font-size: clamp(10px, 0.95vw, 11.5px) !important;
+    line-height: 1.35 !important;
+    margin-top: 2px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 100% !important;
+  }
+
+  /* ---- 5. QUICK TIME FILTER: proportionally smaller. */
+  .alert-page-header .soc-range-filter > div {
+    height: clamp(28px, 2.7vw, 32px) !important;
+    min-height: clamp(28px, 2.7vw, 32px) !important;
+    gap: 2px !important;
+    padding: 2px !important;
+    flex-wrap: nowrap !important;
+  }
+
+  .alert-page-header .soc-range-filter button {
+    font-size: clamp(10px, 0.95vw, 11px) !important;
+    line-height: 1 !important;
+    padding: 4px clamp(8px, 0.8vw, 10px) !important;
+    height: auto !important;
+    min-height: 0 !important;
+    white-space: nowrap !important;
+    flex: 0 0 auto !important;
+  }
+
+  /* ---- 6. DATE RANGE: narrower, smaller font/icon/gaps. */
+  .alert-page-header .soc-date-field-row {
+    height: clamp(28px, 2.7vw, 32px) !important;
+    min-height: clamp(28px, 2.7vw, 32px) !important;
+    width: clamp(320px, 34vw, 390px) !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    flex: 0 1 auto !important;
+    flex-wrap: nowrap !important;
+    gap: 2px !important;
+    padding: 2px 4px !important;
+  }
+
+  .alert-page-header .soc-date-field-row label {
+    font-size: clamp(10px, 0.95vw, 11px) !important;
+    gap: 3px !important;
+    padding-inline: 4px !important;
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+    white-space: nowrap !important;
+  }
+
+  .alert-page-header .soc-date-field-row > span {
+    font-size: clamp(10px, 0.95vw, 11px) !important;
+    padding-inline: 1px !important;
+    flex: 0 0 auto !important;
+  }
+
+  .alert-page-header .soc-date-time-input {
+    font-size: clamp(10px, 0.95vw, 11px) !important;
+    inline-size: clamp(6.8rem, 8.5vw, 8.4rem) !important;
+    max-inline-size: 100% !important;
+    min-width: 0 !important;
+    padding: 2px 0 2px 2px !important;
+  }
+
+  .alert-page-header .soc-date-time-input::-webkit-calendar-picker-indicator {
+    width: clamp(12px, 1.1vw, 14px) !important;
+    height: clamp(12px, 1.1vw, 14px) !important;
+    margin-left: 2px !important;
+    margin-right: 0 !important;
+    flex: 0 0 auto !important;
+  }
+
+  /* ---- 24h indicator: always visible, never pushes viewport. */
+  .alert-page-header .soc-filter-toolbar > span:last-child {
+    font-size: 10px !important;
+    gap: 4px !important;
+    white-space: nowrap !important;
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .alert-page-header .soc-filter-toolbar > span:last-child svg {
+    width: 11px !important;
+    height: 11px !important;
+    flex: 0 0 auto !important;
+  }
+
+  /* ---- 9. KPI CARDS: force ONE row of 4, compact padding/type. */
+  .alert-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: clamp(8px, 0.9vw, 10px) !important;
+  }
+
+  .alert-summary-grid > button {
+    padding: clamp(10px, 1.1vw, 13px) !important;
+    min-width: 0 !important;
+    min-height: clamp(70px, 6.8vw, 82px) !important;
+    overflow: hidden !important;
+  }
+
+  .alert-summary-grid > button > div:first-child {
+    font-size: clamp(9px, 0.85vw, 10px) !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .alert-summary-grid > button > div:last-child {
+    font-size: clamp(20px, 1.9vw, 23px) !important;
+    margin-top: 2px !important;
+    line-height: 1.1 !important;
+  }
+
+  /* ---- 10. SEARCH + SOURCE FILTER: search flexes, buttons stay compact. */
+  .alert-search-row {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    gap: clamp(6px, 0.7vw, 8px) !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .alert-search-row > div:first-child {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+  }
+
+  .alert-search-row input {
+    height: clamp(30px, 2.9vw, 34px) !important;
+    font-size: clamp(10px, 0.95vw, 11px) !important;
+  }
+
+  .alert-source-filters {
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    gap: clamp(6px, 0.7vw, 8px) !important;
+    overflow-x: auto !important;
+    scrollbar-width: none !important;
+  }
+
+  .alert-source-filters::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .alert-source-filters > button {
+    font-size: clamp(10px, 0.95vw, 11px) !important;
+    height: clamp(30px, 2.9vw, 34px) !important;
+    padding-inline: clamp(8px, 0.9vw, 10px) !important;
+    padding-block: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
+  }
+
+  /* ---- 11. EMPTY STATE / FEED PANEL: avoid excessive vertical space. */
+  .alert-feed-panel {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .alert-empty-state {
+    min-height: clamp(150px, 15vw, 190px) !important;
+    padding-block: 20px !important;
+    padding-inline: 16px !important;
+  }
+}
+
+/* ==========================================================================
+   Security Alerts Center — SMALL → TABLET REFINEMENT 300px–899px ONLY.
+   Rules:
+   - From/To STAYS as real datetime inputs on EVERY width. The compact
+     dropdown summary ([09/10/26 - 09/11/26 v]) is NEVER used here.
+   - Title stays the dominant heading; subtitle stays readable.
+   - Only presentation is changed. No API/state/logic touched.
+   - Nothing here applies at >=900px or to other pages.
+   ========================================================================== */
+
+/* ---- Base for all 300–899px: vertical header, real date row, wrap fix. */
+@media (max-width: 899px) {
+  .alert-page-header {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+    text-align: left !important;
+    gap: 8px !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .alert-page-header .alert-title-block {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .alert-page-header .soc-page-title {
+    font-weight: 700 !important;
+    line-height: 1.25 !important;
+    letter-spacing: 0 !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .alert-page-header .soc-page-title > svg {
+    flex: 0 0 auto !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Subtitle stays readable + wraps (never nowrap on narrow screens). */
+  .alert-page-header .soc-page-subtitle {
+    display: block !important;
+    margin-top: 3px !important;
+    line-height: 1.4 !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    overflow-wrap: break-word !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* Filter toolbar stacks left-aligned and may wrap to extra rows. */
+  .alert-page-header .soc-filter-toolbar {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    align-self: stretch !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    margin-left: 0 !important;
+    gap: 8px !important;
+  }
+
+  .alert-page-header .soc-filter-toolbar .soc-range-filter,
+  .alert-page-header .soc-filter-toolbar .soc-date-filter {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* Quick filter hugs its own content, never stretches. */
+  .alert-page-header .soc-filter-toolbar .soc-range-filter {
+    flex: 0 0 auto !important;
+  }
+
+  /* A. RULE: From–To NEVER becomes a dropdown on the Alerts page.
+     CONTENT-HUGGING: width follows content, never fills remaining space. */
+  .alert-page-header .soc-date-filter {
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    width: fit-content !important;
+    max-width: 100% !important;
+  }
+
+  .alert-page-header .soc-date-filter .soc-date-field-row {
+    display: inline-flex !important;
+    visibility: visible !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    width: fit-content !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 0 1 auto !important;
+  }
+
+  .alert-page-header .soc-date-filter .soc-date-compact {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Calendar icon is always kept. */
+  .alert-page-header .soc-date-time-input::-webkit-calendar-picker-indicator {
+    flex: 0 0 auto !important;
+    margin-right: 0 !important;
+  }
+
+  /* Search row + source buttons: no clipping, wrap when needed. */
+  .alert-search-row {
+    gap: 8px !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .alert-search-row > div:first-child {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .alert-source-filters {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    overflow: visible !important;
+    overflow-x: visible !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    gap: 6px !important;
+  }
+
+  .alert-source-filters > button {
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
+    min-width: 0 !important;
+  }
+
+  .alert-feed-panel,
+  .alert-summary-grid {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .alert-summary-grid > button {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+  }
+}
+
+/* ---- Quick-period segmented buttons stay visible from 390px up.
+        Below 390px the existing compact selector is kept (allowed). */
+@media (min-width: 390px) and (max-width: 899px) {
+  .alert-page-header .soc-range-filter > div:first-child {
+    display: flex !important;
+    visibility: visible !important;
+  }
+
+  .alert-page-header .soc-range-filter .soc-range-compact {
+    display: none !important;
+    visibility: hidden !important;
+  }
+}
+
+@media (max-width: 389px) {
+  .alert-page-header .soc-range-filter .soc-range-compact {
+    height: 30px !important;
+  }
+
+  .alert-page-header .soc-range-filter .soc-range-compact select {
+    font-size: 10px !important;
+  }
+}
+
+/* ---- 700–899px: compact tablet/desktop. Title 19–21, subtitle 11–12.
+        Quick + date share one row when they fit, else date wraps below. */
+@media (min-width: 700px) and (max-width: 899px) {
+  .alert-page-header .soc-page-title {
+    font-size: 20px !important;
+  }
+
+  .alert-page-header .soc-page-title > svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  .alert-page-header .soc-page-subtitle {
+    font-size: 11.5px !important;
+  }
+
+  .alert-page-header .soc-filter-toolbar {
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+  }
+
+  .alert-page-header .soc-range-filter > div:first-child {
+    height: 32px !important;
+    gap: 2px !important;
+    padding: 2px !important;
+  }
+
+  .alert-page-header .soc-range-filter button {
+    font-size: 11px !important;
+    line-height: 1 !important;
+    padding: 6px 10px !important;
+    white-space: nowrap !important;
+  }
+
+  .alert-page-header .soc-date-filter {
+    flex: 0 1 auto !important;
+    width: fit-content !important;
+    max-width: 100% !important;
+  }
+
+  .alert-page-header .soc-date-field-row {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    flex-wrap: nowrap !important;
+    height: auto !important;
+    min-height: 32px !important;
+    width: fit-content !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 0 1 auto !important;
+    gap: 6px !important;
+    padding: 3px 8px !important;
+  }
+
+  .alert-page-header .soc-date-field-row label {
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 5px !important;
+    font-size: 11px !important;
+    white-space: nowrap !important;
+  }
+
+  .alert-page-header .soc-date-field-row > span {
+    flex: 0 0 auto !important;
+    font-size: 11px !important;
+    padding-inline: 2px !important;
+  }
+
+  .alert-page-header .soc-date-time-input {
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+    width: auto !important;
+    inline-size: auto !important;
+    font-size: 11px !important;
+    padding: 4px 2px !important;
+  }
+
+  .alert-page-header .soc-date-time-input::-webkit-calendar-picker-indicator {
+    width: 14px !important;
+    height: 14px !important;
+    margin-left: 4px !important;
+  }
+
+  /* KPI: 4 in one row. */
+  .alert-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .alert-summary-grid > button {
+    padding: 10px 12px !important;
+  }
+
+  .alert-summary-grid > button > div:first-child {
+    font-size: 9px !important;
+  }
+
+  .alert-summary-grid > button > div:last-child {
+    font-size: 20px !important;
+    margin-top: 2px !important;
+    line-height: 1.1 !important;
+  }
+}
+
+/* ---- 550–699px: title 18–20, subtitle 10.5–11.5.
+        Quick on its row; From/To side-by-side on the next row. */
+@media (min-width: 550px) and (max-width: 699px) {
+  .alert-page-header .soc-page-title {
+    font-size: 19px !important;
+  }
+
+  .alert-page-header .soc-page-title > svg {
+    width: 17px !important;
+    height: 17px !important;
+  }
+
+  .alert-page-header .soc-page-subtitle {
+    font-size: 11px !important;
+  }
+
+  .alert-page-header .soc-range-filter > div:first-child {
+    height: 32px !important;
+    gap: 2px !important;
+    padding: 2px !important;
+  }
+
+  .alert-page-header .soc-range-filter button {
+    font-size: 10.5px !important;
+    line-height: 1 !important;
+    padding: 6px 9px !important;
+    white-space: nowrap !important;
+  }
+
+  .alert-page-header .soc-date-filter {
+    flex: 0 1 auto !important;
+    width: fit-content !important;
+    max-width: 100% !important;
+  }
+
+  .alert-page-header .soc-date-field-row {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    flex-wrap: nowrap !important;
+    height: auto !important;
+    min-height: 34px !important;
+    width: fit-content !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 0 1 auto !important;
+    gap: 6px !important;
+    padding: 4px 8px !important;
+  }
+
+  .alert-page-header .soc-date-field-row label {
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 5px !important;
+    font-size: 10.5px !important;
+    white-space: nowrap !important;
+  }
+
+  .alert-page-header .soc-date-field-row > span {
+    flex: 0 0 auto !important;
+    font-size: 10.5px !important;
+    padding-inline: 2px !important;
+  }
+
+  .alert-page-header .soc-date-time-input {
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+    width: auto !important;
+    inline-size: auto !important;
+    font-size: 10.5px !important;
+    padding: 4px 2px !important;
+  }
+
+  .alert-page-header .soc-date-time-input::-webkit-calendar-picker-indicator {
+    width: 13px !important;
+    height: 13px !important;
+    margin-left: 3px !important;
+  }
+}
+
+/* ---- 390–549px: title 17–19, subtitle 10–11. Date stacks full-width. */
+@media (min-width: 390px) and (max-width: 549px) {
+  .alert-page-header .soc-page-title {
+    font-size: 18px !important;
+  }
+
+  .alert-page-header .soc-page-title > svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+
+  .alert-page-header .soc-page-subtitle {
+    font-size: 10.5px !important;
+  }
+
+  .alert-page-header .soc-range-filter > div:first-child {
+    height: 31px !important;
+    gap: 2px !important;
+    padding: 2px !important;
+    max-width: 100% !important;
+    flex-wrap: wrap !important;
+  }
+
+  .alert-page-header .soc-range-filter button {
+    font-size: 10px !important;
+    line-height: 1 !important;
+    padding: 6px 8px !important;
+    white-space: nowrap !important;
+  }
+
+  .alert-page-header .soc-date-filter {
+    flex: 0 1 auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  /* From + To ALWAYS side-by-side: stable 2-column grid, never wraps.
+     Height = content + small padding. */
+  .alert-page-header .soc-date-field-row {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    align-items: center !important;
+    height: auto !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 0 1 auto !important;
+    gap: 5px !important;
+    padding-block: 4px !important;
+    padding-inline: 6px !important;
+  }
+
+  .alert-page-header .soc-date-field-row > span {
+    display: none !important;
+  }
+
+  .alert-page-header .soc-date-field-row label {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    justify-content: center !important;
+    gap: 1px !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: 1 1 0 !important;
+    font-size: 9px !important;
+    line-height: 1.15 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+  }
+
+  .alert-page-header .soc-date-time-input {
+    min-width: 0 !important;
+    width: 100% !important;
+    inline-size: 100% !important;
+    max-width: 100% !important;
+    flex: 1 1 auto !important;
+    font-size: 10px !important;
+    line-height: 1.2 !important;
+    padding: 2px 0 !important;
+  }
+
+  .alert-page-header .soc-date-time-input::-webkit-calendar-picker-indicator {
+    width: 13px !important;
+    height: 13px !important;
+    margin-left: 2px !important;
+    flex-shrink: 0 !important;
+  }
+}
+
+/* ---- 300–389px: title 16–18, subtitle 9.5–10.5.
+        [period ▼][From | To] share ONE compact row; height hugs content. */
+@media (max-width: 389px) {
+  .alert-page-header .soc-page-title {
+    font-size: 17px !important;
+  }
+
+  .alert-page-header .soc-page-title > svg {
+    width: 15px !important;
+    height: 15px !important;
+  }
+
+  .alert-page-header .soc-page-subtitle {
+    font-size: 10px !important;
+  }
+
+  /* Single filter row: period left (fixed), date fills the rest. */
+  .alert-page-header .soc-filter-toolbar {
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    gap: 6px !important;
+  }
+
+  .alert-page-header .soc-filter-toolbar .soc-range-filter {
+    flex: 0 0 auto !important;
+    flex-shrink: 0 !important;
+  }
+
+  .alert-page-header .soc-range-filter .soc-range-compact {
+    height: 32px !important;
+    min-height: 32px !important;
+    padding-inline: 7px !important;
+  }
+
+  .alert-page-header .soc-range-filter .soc-range-compact select {
+    font-size: 10.5px !important;
+  }
+
+  .alert-page-header .soc-date-filter {
+    flex: 1 1 auto !important;
+    width: auto !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  /* From + To ALWAYS side-by-side: stable 2-column grid, never wraps.
+     Height = content + small padding (≈34–44px). */
+  .alert-page-header .soc-date-field-row {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    align-items: center !important;
+    height: auto !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 0 1 auto !important;
+    gap: 4px !important;
+    padding-block: 4px !important;
+    padding-inline: 6px !important;
+  }
+
+  .alert-page-header .soc-date-field-row > span {
+    display: none !important;
+  }
+
+  .alert-page-header .soc-date-field-row label {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    justify-content: center !important;
+    gap: 1px !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: 1 1 0 !important;
+    font-size: 8.5px !important;
+    line-height: 1.15 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+  }
+
+  .alert-page-header .soc-date-time-input {
+    min-width: 0 !important;
+    width: 100% !important;
+    inline-size: 100% !important;
+    max-width: 100% !important;
+    flex: 1 1 auto !important;
+    font-size: 9px !important;
+    line-height: 1.2 !important;
+    padding: 1px 0 !important;
+  }
+
+  .alert-page-header .soc-date-time-input::-webkit-calendar-picker-indicator {
+    width: 11px !important;
+    height: 11px !important;
+    margin-left: 2px !important;
+    flex-shrink: 0 !important;
+  }
+}
+
+/* ---- KPI 480–699px: 2x2 (never 3+1). */
+@media (min-width: 480px) and (max-width: 699px) {
+  .alert-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .alert-summary-grid > button {
+    padding: 10px 12px !important;
+  }
+
+  .alert-summary-grid > button > div:first-child {
+    font-size: 9px !important;
+  }
+
+  .alert-summary-grid > button > div:last-child {
+    font-size: 20px !important;
+    margin-top: 2px !important;
+    line-height: 1.1 !important;
+  }
+}
+
+/* ---- KPI 300–479px: ALWAYS 2 columns (2x2), never 1 column. */
+@media (max-width: 479px) {
+  .alert-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+
+  .alert-summary-grid > button {
+    padding: 10px 12px !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 65px !important;
+    max-height: 80px !important;
+    overflow: hidden !important;
+  }
+
+  .alert-summary-grid > button > div:first-child {
+    font-size: 9px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .alert-summary-grid > button > div:last-child {
+    font-size: 18px !important;
+    margin-top: 2px !important;
+    line-height: 1.1 !important;
+  }
+}
+
+/* ---- Search + source + empty-state tuning for all 300–899px. */
+@media (max-width: 899px) {
+  .alert-search-row input {
+    height: 34px !important;
+    font-size: 11px !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+  }
+
+  .alert-search-row input::placeholder {
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+  }
+
+  .alert-search-row > div:first-child svg {
+    width: 15px !important;
+    height: 15px !important;
+    flex: 0 0 auto !important;
+  }
+
+  .alert-source-filters > button {
+    font-size: 10.5px !important;
+    height: 31px !important;
+    padding-inline: 10px !important;
+    padding-block: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+  }
+
+  .alert-empty-state {
+    min-height: 150px !important;
+    max-height: 185px !important;
+    padding: 18px 14px !important;
+    text-align: center !important;
+  }
+
+  .alert-empty-state > svg {
+    width: 28px !important;
+    height: 28px !important;
+    margin-bottom: 8px !important;
+    flex: 0 0 auto !important;
+  }
+
+  .alert-empty-state > p:first-of-type {
+    font-size: 13px !important;
+  }
+
+  .alert-empty-state > p:last-child {
+    font-size: 10.5px !important;
+    line-height: 1.45 !important;
+    white-space: normal !important;
+    overflow-wrap: break-word !important;
+    max-width: 100% !important;
+  }
+}
+
+/* ==========================================================================
+   Security Operations Dashboard — HEADER REFINEMENT 300px–901px.
+   Root causes fixed here:
+   (a) global stepped queries forced a miniature header (title 16px,
+       subtitle 9px, range/date 8–8.5px) — overridden with stable,
+       readable minimums scoped to `.dashboard-page` header only;
+   (b) the 749–900 block peaked at 22px while 901px renders 18px, causing
+       a 901→900 visual jump — 769–901 now uses the 901px sizes as the
+       reference (title 19px ≈ 901px 18px; rest identical);
+   (c) layout breakpoints (KPI columns) are decoupled from typography:
+       header sizes stay ~constant across 768/767 and 749/748.
+   KPI/panels/charts untouched. No global scale. No dropdown date.
+   ========================================================================== */
+@media (min-width: 769px) and (max-width: 901px) {
+  /* ---- Header uses full available width, no fixed caps. */
+  .dashboard-page .soc-dashboard-header {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    gap: 10px !important;
+  }
+
+  .dashboard-page .soc-page-title-group {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  /* ---- Page title: stable 19px ≈ 901px reference (18px). */
+  .dashboard-page .dashboard-page-title {
+    font-size: 19px !important;
+    font-weight: 700 !important;
+    line-height: 1.2 !important;
+    gap: 8px !important;
+    align-items: center !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* ---- Shield icon matches the title, never squashed. */
+  .dashboard-page .dashboard-page-title > svg {
+    width: 18px !important;
+    height: 18px !important;
+    flex: 0 0 auto !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* ---- Subtitle readable, still secondary to the title. */
+  .dashboard-page .dashboard-page-subtitle {
+    font-size: 11.5px !important;
+    line-height: 1.4 !important;
+    margin-top: 4px !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* ---- 11. Filter row: one row when it fits, controlled wrap if not.
+           Never miniature, never arbitrary margins. */
+  .dashboard-page .dashboard-filter-toolbar {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    gap: 8px !important;
+  }
+
+  /* ---- 6/7. Quick filter: compact but readable, active state untouched. */
+  .dashboard-page .dashboard-range-filter {
+    flex: 0 0 auto !important;
+    flex-shrink: 0 !important;
+    min-width: 0 !important;
+  }
+
+  .dashboard-page .dashboard-range-filter > div {
+    height: 30px !important;
+    min-height: 30px !important;
+    gap: 2px !important;
+    padding: 2px !important;
+    flex-wrap: nowrap !important;
+  }
+
+  .dashboard-page .dashboard-range-filter button {
+    font-size: 11px !important;
+    line-height: 1 !important;
+    padding: 4px 10px !important;
+    white-space: nowrap !important;
+    flex: 0 0 auto !important;
+  }
+
+  /* ---- 8/9. Date range: larger text + icon, stays a real From–To row. */
+  .dashboard-page .dashboard-date-filter {
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .dashboard-page .dashboard-date-filter .soc-date-field-row {
+    display: inline-flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    flex-wrap: nowrap !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    width: fit-content !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 0 1 auto !important;
+    gap: 6px !important;
+    padding: 2px 8px !important;
+  }
+
+  .dashboard-page .dashboard-date-filter label {
+    min-width: 0 !important;
+    flex: 0 0 auto !important;
+    gap: 5px !important;
+    font-size: 11px !important;
+    white-space: nowrap !important;
+  }
+
+  .dashboard-page .dashboard-date-filter .soc-date-field-row > span {
+    flex: 0 0 auto !important;
+    font-size: 11px !important;
+    padding-inline: 2px !important;
+  }
+
+  .dashboard-page .dashboard-date-filter .soc-date-time-input {
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+    width: auto !important;
+    inline-size: auto !important;
+    font-size: 11px !important;
+    padding: 3px 2px !important;
+  }
+
+  .dashboard-page .dashboard-date-filter .soc-date-time-input::-webkit-calendar-picker-indicator {
+    width: 13px !important;
+    height: 13px !important;
+    margin-left: 3px !important;
+    margin-right: 0 !important;
+    flex: 0 0 auto !important;
+  }
+
+  /* Guard: never show the compact dropdown variant in this range. */
+  .dashboard-page .dashboard-date-filter .soc-date-compact {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* ---- 10. Timestamp stays readable, may use leftover space. */
+  .dashboard-page .dashboard-current-time {
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    font-size: 10px !important;
+    gap: 4px !important;
+    white-space: nowrap !important;
+  }
+
+  .dashboard-page .dashboard-current-time svg {
+    width: 12px !important;
+    height: 12px !important;
+    flex: 0 0 auto !important;
+  }
+}
+
+/* ---- Dashboard 550–768px: one step down, then STOP shrinking.
+        Same toolbar/From–To structure; KPI grid change does NOT move type. */
+@media (min-width: 550px) and (max-width: 768px) {
+  .dashboard-page .soc-dashboard-header {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    gap: 10px !important;
+  }
+
+  .dashboard-page .soc-page-title-group {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .dashboard-page .dashboard-page-title {
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    line-height: 1.2 !important;
+    gap: 7px !important;
+    align-items: center !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .dashboard-page .dashboard-page-title > svg {
+    width: 17px !important;
+    height: 17px !important;
+    flex: 0 0 auto !important;
+    flex-shrink: 0 !important;
+  }
+
+  .dashboard-page .dashboard-page-subtitle {
+    font-size: 11px !important;
+    line-height: 1.4 !important;
+    margin-top: 4px !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .dashboard-page .dashboard-filter-toolbar {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    gap: 8px !important;
+  }
+
+  .dashboard-page .dashboard-range-filter {
+    flex: 0 0 auto !important;
+    flex-shrink: 0 !important;
+    min-width: 0 !important;
+  }
+
+  .dashboard-page .dashboard-range-filter > div:first-child {
+    display: flex !important;
+    visibility: visible !important;
+    height: 29px !important;
+    min-height: 29px !important;
+    gap: 2px !important;
+    padding: 2px !important;
+    flex-wrap: nowrap !important;
+  }
+
+  .dashboard-page .dashboard-range-filter button {
+    font-size: 10.5px !important;
+    line-height: 1 !important;
+    padding: 4px 9px !important;
+    white-space: nowrap !important;
+    flex: 0 0 auto !important;
+  }
+
+  .dashboard-page .dashboard-range-filter .soc-range-compact {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  .dashboard-page .dashboard-date-filter {
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    width: fit-content !important;
+    max-width: 100% !important;
+  }
+
+  .dashboard-page .dashboard-date-filter .soc-date-field-row {
+    display: inline-flex !important;
+    visibility: visible !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    flex-wrap: nowrap !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    width: fit-content !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 0 1 auto !important;
+    gap: 6px !important;
+    padding: 2px 8px !important;
+  }
+
+  .dashboard-page .dashboard-date-filter label {
+    min-width: 0 !important;
+    flex: 0 0 auto !important;
+    gap: 5px !important;
+    font-size: 10.5px !important;
+    white-space: nowrap !important;
+  }
+
+  .dashboard-page .dashboard-date-filter .soc-date-field-row > span {
+    flex: 0 0 auto !important;
+    font-size: 10.5px !important;
+    padding-inline: 2px !important;
+  }
+
+  .dashboard-page .dashboard-date-filter .soc-date-time-input {
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+    width: auto !important;
+    inline-size: auto !important;
+    font-size: 10.5px !important;
+    padding: 3px 2px !important;
+  }
+
+  .dashboard-page .dashboard-date-filter .soc-date-time-input::-webkit-calendar-picker-indicator {
+    width: 13px !important;
+    height: 13px !important;
+    margin-left: 3px !important;
+    margin-right: 0 !important;
+    flex: 0 0 auto !important;
+  }
+
+  .dashboard-page .dashboard-date-filter .soc-date-compact {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  .dashboard-page .dashboard-current-time {
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    font-size: 10px !important;
+    gap: 4px !important;
+    white-space: nowrap !important;
+  }
+
+  .dashboard-page .dashboard-current-time svg {
+    width: 12px !important;
+    height: 12px !important;
+    flex: 0 0 auto !important;
+  }
+}
+
+/* ---- Dashboard 390–549px: reflow (wrap), not miniature type. */
+@media (min-width: 390px) and (max-width: 549px) {
+  .dashboard-page .soc-dashboard-header {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    gap: 8px !important;
+  }
+
+  .dashboard-page .soc-page-title-group {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .dashboard-page .dashboard-page-title {
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    line-height: 1.25 !important;
+    gap: 7px !important;
+    align-items: center !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .dashboard-page .dashboard-page-title > svg {
+    width: 16px !important;
+    height: 16px !important;
+    flex: 0 0 auto !important;
+    flex-shrink: 0 !important;
+  }
+
+  .dashboard-page .dashboard-page-subtitle {
+    font-size: 10.5px !important;
+    line-height: 1.4 !important;
+    margin-top: 3px !important;
+    white-space: normal !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .dashboard-page .dashboard-filter-toolbar {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    gap: 8px !important;
+  }
+
+  .dashboard-page .dashboard-range-filter {
+    flex: 0 0 auto !important;
+    flex-shrink: 0 !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .dashboard-page .dashboard-range-filter > div:first-child {
+    display: flex !important;
+    visibility: visible !important;
+    height: 28px !important;
+    min-height: 28px !important;
+    gap: 2px !important;
+    padding: 2px !important;
+    flex-wrap: nowrap !important;
+    max-width: 100% !important;
+  }
+
+  .dashboard-page .dashboard-range-filter button {
+    font-size: 10px !important;
+    line-height: 1 !important;
+    padding: 4px 8px !important;
+    white-space: nowrap !important;
+    flex: 0 0 auto !important;
+  }
+
+  .dashboard-page .dashboard-range-filter .soc-range-compact {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  .dashboard-page .dashboard-date-filter {
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    width: fit-content !important;
+    max-width: 100% !important;
+  }
+
+  .dashboard-page .dashboard-date-filter .soc-date-field-row {
+    display: inline-flex !important;
+    visibility: visible !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    flex-wrap: nowrap !important;
+    height: 28px !important;
+    min-height: 28px !important;
+    width: fit-content !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 0 1 auto !important;
+    gap: 5px !important;
+    padding: 2px 8px !important;
+  }
+
+  .dashboard-page .dashboard-date-filter label {
+    min-width: 0 !important;
+    flex: 0 0 auto !important;
+    gap: 4px !important;
+    font-size: 10px !important;
+    white-space: nowrap !important;
+  }
+
+  .dashboard-page .dashboard-date-filter .soc-date-field-row > span {
+    flex: 0 0 auto !important;
+    font-size: 10px !important;
+    padding-inline: 2px !important;
+  }
+
+  .dashboard-page .dashboard-date-filter .soc-date-time-input {
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+    width: auto !important;
+    inline-size: auto !important;
+    font-size: 10px !important;
+    padding: 3px 2px !important;
+  }
+
+  .dashboard-page .dashboard-date-filter .soc-date-time-input::-webkit-calendar-picker-indicator {
+    width: 12px !important;
+    height: 12px !important;
+    margin-left: 3px !important;
+    margin-right: 0 !important;
+    flex: 0 0 auto !important;
+  }
+
+  .dashboard-page .dashboard-date-filter .soc-date-compact {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  .dashboard-page .dashboard-current-time {
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    font-size: 9.5px !important;
+    gap: 4px !important;
+    white-space: nowrap !important;
+  }
+
+  .dashboard-page .dashboard-current-time svg {
+    width: 12px !important;
+    height: 12px !important;
+    flex: 0 0 auto !important;
+  }
+}
+
+/* ---- Dashboard 300–389px: floor reached — compact layout, never smaller.
+        Title stops at 17px; filters wrap/stack instead of shrinking. */
+@media (max-width: 389px) {
+  .dashboard-page .soc-dashboard-header {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    gap: 8px !important;
+  }
+
+  .dashboard-page .soc-page-title-group {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .dashboard-page .dashboard-page-title {
+    font-size: 17px !important;
+    font-weight: 700 !important;
+    line-height: 1.25 !important;
+    gap: 6px !important;
+    align-items: center !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .dashboard-page .dashboard-page-title > svg {
+    width: 15px !important;
+    height: 15px !important;
+    flex: 0 0 auto !important;
+    flex-shrink: 0 !important;
+  }
+
+  .dashboard-page .dashboard-page-subtitle {
+    font-size: 10px !important;
+    line-height: 1.4 !important;
+    margin-top: 3px !important;
+    white-space: normal !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* One compact control row: [quick ▼] [date-range ▼], then timestamp. */
+  .dashboard-page .dashboard-filter-toolbar {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    gap: 6px !important;
+  }
+
+  /* Quick period uses its compact select ([30d ▼]), same height as date. */
+  .dashboard-page .dashboard-range-filter {
+    flex: 0 0 auto !important;
+    flex-shrink: 0 !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .dashboard-page .dashboard-range-filter > div:first-child {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  .dashboard-page .dashboard-range-filter .soc-range-compact {
+    display: flex !important;
+    visibility: visible !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    align-items: center !important;
+    padding-inline: 8px !important;
+  }
+
+  .dashboard-page .dashboard-range-filter .soc-range-compact select {
+    font-size: 10.5px !important;
+    line-height: 1 !important;
+  }
+
+  .dashboard-page .dashboard-range-filter .soc-range-compact svg {
+    width: 11px !important;
+    height: 11px !important;
+    flex: 0 0 auto !important;
+  }
+
+  /* Date uses its compact dropdown trigger ([📅 12/08/26 – 11/09/26 ▼]).
+     Same state + handlers as desktop; only the representation changes. */
+  .dashboard-page .dashboard-date-filter {
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    width: fit-content !important;
+    max-width: 100% !important;
+  }
+
+  .dashboard-page .dashboard-date-filter .soc-date-field-row {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Collapsed trigger hugs its content: no empty space inside the box. */
+  .dashboard-page .dashboard-date-filter .soc-date-compact {
+    display: block !important;
+    visibility: visible !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: fit-content !important;
+    flex: 0 1 auto !important;
+  }
+
+  .dashboard-page .dashboard-date-filter .soc-date-compact summary {
+    display: inline-flex !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    width: fit-content !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    align-items: center !important;
+    gap: 5px !important;
+    padding-block: 4px !important;
+    padding-inline: 8px !important;
+    font-size: 10px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+  }
+
+  .dashboard-page .dashboard-date-filter .soc-date-compact summary > span {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .dashboard-page .dashboard-date-filter .soc-date-compact summary > svg:first-child {
+    width: 13px !important;
+    height: 13px !important;
+    flex: 0 0 auto !important;
+  }
+
+  .dashboard-page .dashboard-date-filter .soc-date-compact summary > svg:last-child {
+    width: 11px !important;
+    height: 11px !important;
+    flex: 0 0 auto !important;
+  }
+
+  /* Opened state: structured popover panel anchored under the trigger.
+     Absolute overlay (no layout shift), opaque, above cards, in-viewport. */
+  .dashboard-page .dashboard-date-filter .soc-date-compact > div {
+    position: absolute !important;
+    top: calc(100% + 6px) !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    z-index: 50 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    width: min(260px, calc(100vw - 16px)) !important;
+    max-width: calc(100vw - 16px) !important;
+    min-width: 0 !important;
+    padding: 10px 12px !important;
+    background-color: var(--soc-card) !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  .dashboard-page .dashboard-date-filter .soc-date-compact label {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+    gap: 3px !important;
+    height: auto !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    font-size: 9.5px !important;
+    text-align: left !important;
+  }
+
+  .dashboard-page .dashboard-date-filter .soc-date-compact .soc-date-time-input {
+    width: 100% !important;
+    inline-size: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    height: 32px !important;
+    font-size: 10.5px !important;
+  }
+
+  /* Timestamp takes its own left-aligned row below the controls. */
+  .dashboard-page .dashboard-current-time {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    font-size: 9.5px !important;
+    gap: 4px !important;
+    white-space: nowrap !important;
+  }
+
+  .dashboard-page .dashboard-current-time svg {
+    width: 12px !important;
+    height: 12px !important;
+    flex: 0 0 auto !important;
+  }
+}
+
+/* ==========================================================================
+   TINY TOPBAR 215px–309px (shared top navigation, all pages).
+   Keeps [back] [date] [Light] on one row without overlap. Short date
+   ("Sep 11, 2026") replaces the full date only below 280px; same data.
+   ========================================================================== */
+.soc-topbar .soc-topbar-date-short {
+  display: none;
+}
+
+@media (max-width: 309px) {
+  .soc-topbar {
+    padding-inline: 10px !important;
+    gap: 6px !important;
+  }
+
+  .soc-topbar > div:first-child {
+    gap: 5px !important;
+  }
+
+  .soc-topbar > div:first-child > button {
+    padding: 5px !important;
+  }
+
+  .soc-topbar > div:first-child > button > svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+
+  .soc-topbar .soc-topbar-date-full,
+  .soc-topbar .soc-topbar-date-short {
+    font-size: 9px !important;
+  }
+
+  .soc-topbar button:has(> svg + span) {
+    font-size: 9.5px !important;
+    padding-inline: 7px !important;
+    padding-block: 5px !important;
+    gap: 4px !important;
+  }
+
+  .soc-topbar button:has(> svg + span) > svg {
+    width: 12px !important;
+    height: 12px !important;
+  }
+}
+
+@media (max-width: 279px) {
+  .soc-topbar .soc-topbar-date-full {
+    display: none !important;
+  }
+
+  .soc-topbar .soc-topbar-date-short {
+    display: inline !important;
+  }
+
+  .soc-topbar {
+    padding-inline: 8px !important;
+  }
+}
+
+/* ==========================================================================
+   Security Alerts Center — EXTREME NARROW 215px–309px.
+   Principle: compact + wrap + shorten presentation (never global scale,
+   never shrink below readable minimums). Everything stays visible:
+   title (may wrap), subtitle, quick + date in one row, KPI 2x2,
+   search, source buttons, empty state. No horizontal overflow.
+   ========================================================================== */
+@media (max-width: 309px) {
+  .alert-page-header {
+    gap: 7px !important;
+  }
+
+  /* Title stays prominent and may wrap; icon pins to the first line. */
+  .alert-page-header .soc-page-title {
+    align-items: flex-start !important;
+    overflow-wrap: break-word !important;
+    word-break: break-word !important;
+  }
+
+  .alert-page-header .soc-page-title > svg {
+    flex-shrink: 0 !important;
+    margin-top: 2px !important;
+  }
+
+  /* One-row filter bar is already nowrap from the <=389 block; tighten. */
+  .alert-page-header .soc-filter-toolbar {
+    gap: 4px !important;
+  }
+
+  .alert-page-header .soc-range-filter .soc-range-compact {
+    height: 29px !important;
+    min-height: 29px !important;
+    padding-inline: 7px !important;
+  }
+
+  .alert-page-header .soc-range-filter .soc-range-compact select {
+    font-size: 9.5px !important;
+  }
+
+  .alert-page-header .soc-date-field-row {
+    gap: 4px !important;
+    padding-block: 3px !important;
+    padding-inline: 5px !important;
+  }
+
+  .alert-page-header .soc-date-field-row label {
+    font-size: 8.5px !important;
+  }
+
+  .alert-page-header .soc-date-time-input {
+    font-size: 9px !important;
+  }
+
+  /* KPI stays 2x2 with tighter rhythm. */
+  .alert-summary-grid {
+    gap: 6px !important;
+  }
+
+  .alert-summary-grid > button {
+    padding: 9px 10px !important;
+  }
+
+  /* Search + source stay compact but readable. */
+  .alert-search-row input {
+    height: 30px !important;
+    font-size: 9.5px !important;
+  }
+
+  .alert-search-row > div:first-child svg {
+    width: 13px !important;
+    height: 13px !important;
+  }
+
+  .alert-source-filters {
+    gap: 4px !important;
+  }
+
+  .alert-source-filters > button {
+    font-size: 9px !important;
+    height: 29px !important;
+    padding-inline: 7px !important;
+  }
+
+  /* Empty state scales down proportionally, content-based height. */
+  .alert-empty-state {
+    min-height: 140px !important;
+    max-height: none !important;
+    padding: 14px 10px !important;
+  }
+
+  .alert-empty-state > svg {
+    width: 24px !important;
+    height: 24px !important;
+  }
+
+  .alert-empty-state > p:first-of-type {
+    font-size: 12px !important;
+  }
+
+  .alert-empty-state > p:last-child {
+    font-size: 9px !important;
+    overflow-wrap: break-word !important;
+  }
+}
+
+/* ---- 240–279px: reclaim horizontal space, minimums hold. */
+@media (max-width: 279px) {
+  .soc-container:has(.alert-page-header) {
+    padding-inline: 9px !important;
+  }
+
+  .alert-summary-grid {
+    gap: 5px !important;
+  }
+
+  .alert-summary-grid > button {
+    padding: 8px !important;
+  }
+}
+
+/* ---- 215–239px: floor values; wrap/reflow instead of more shrinking. */
+@media (max-width: 239px) {
+  .soc-container:has(.alert-page-header) {
+    padding-inline: 7px !important;
+  }
+
+  .alert-page-header .soc-page-subtitle {
+    font-size: 9px !important;
+  }
+
+  .alert-page-header .soc-range-filter .soc-range-compact {
+    height: 28px !important;
+    min-height: 28px !important;
+  }
+
+  .alert-page-header .soc-range-filter .soc-range-compact select {
+    font-size: 9px !important;
+  }
+
+  .alert-page-header .soc-date-time-input {
+    font-size: 8.5px !important;
+  }
+
+  .alert-summary-grid {
+    gap: 4px !important;
+  }
+
+  .alert-summary-grid > button {
+    padding: 7px !important;
+  }
+
+  .alert-summary-grid > button > div:first-child {
+    font-size: 8px !important;
+  }
+
+  .alert-summary-grid > button > div:last-child {
+    font-size: 17px !important;
+  }
+
+  .alert-search-row input {
+    height: 28px !important;
+    font-size: 9px !important;
+  }
+}
+
+/* ==========================================================================
+   HOST MONITORING — FLUID RESPONSIVE SYSTEM (attack-page).
+   Every size below is a clamp(MIN, cqw-fluid, MAX) tied to the MAIN CONTENT
+   width (container query units), not the viewport, so the sidebar never
+   skews sizing. Drag-resizing interpolates continuously; media/container
+   queries exist ONLY for structural reflow (columns, dropdown swaps).
+   Minimums stop all shrinking; reflow takes over below them.
+   No transform/zoom scaling anywhere. No logic touched (hooks are classes).
+   ========================================================================== */
+
+/* Sidebar-aware container: content width drives cqw + column reflow.
+   No max-width cap here — the content must always fill the available
+   width edge-to-edge (only the global page padding remains). */
+.soc-container:has(.attack-page, .soc-fluid-page) {
+  container-type: inline-size;
+  max-width: 100%;
+  margin-inline: 0;
+}
+
+/* Fluid design tokens: true linear interpolation across content width.
+   Formula per token: clamp(MIN, MIN + SPREAD * (100cqw - 300px) / 1200, MAX)
+   so every pixel of drag moves every component; MIN/MAX are hard floors
+   and ceilings. Calibrated so large screens match previous stepped values.
+   Shared by Host Monitoring (.attack-page) and the FIM / File Security /
+   ML pages (.soc-fluid-page). */
+.attack-page,
+.soc-fluid-page {
+  --ap-section-gap: clamp(10px, calc(10px + 6 * (100cqw - 300px) / 1200), 16px);
+  --ap-card-gap: clamp(8px, calc(8px + 8 * (100cqw - 300px) / 1200), 16px);
+  --ap-card-pad: clamp(10px, calc(10px + 6 * (100cqw - 300px) / 1200), 16px);
+  --ap-panel-pad: clamp(12px, calc(12px + 8 * (100cqw - 300px) / 1200), 20px);
+  --ap-filter-gap: clamp(6px, calc(6px + 4 * (100cqw - 300px) / 1200), 10px);
+  --ap-title: clamp(17px, calc(17px + 7 * (100cqw - 300px) / 1200), 24px);
+  --ap-subtitle: clamp(10px, calc(10px + 3 * (100cqw - 300px) / 1200), 13px);
+  --ap-filter: clamp(9.5px, calc(9.5px + 2.5 * (100cqw - 300px) / 1200), 12px);
+  --ap-control-h: clamp(28px, calc(28px + 6 * (100cqw - 300px) / 1200), 34px);
+  --ap-kpi-label: clamp(8.5px, calc(8.5px + 2 * (100cqw - 300px) / 1200), 10.5px);
+  --ap-kpi-value: clamp(16px, calc(16px + 4 * (100cqw - 300px) / 1200), 20px);
+  --ap-card-title: clamp(11px, calc(11px + 2 * (100cqw - 300px) / 1200), 13px);
+  --ap-body: clamp(9.5px, calc(9.5px + 2.5 * (100cqw - 300px) / 1200), 12px);
+  --ap-icon: clamp(13px, calc(13px + 5 * (100cqw - 300px) / 1200), 18px);
+  --ap-title-icon: clamp(16px, calc(16px + 4 * (100cqw - 300px) / 1200), 20px);
+  --ap-radius: clamp(6px, calc(6px + 4 * (100cqw - 300px) / 1200), 10px);
+  --ap-chart-h: clamp(200px, calc(200px + 170 * (100cqw - 300px) / 1200), 340px);
+  --ap-timeline-h: clamp(150px, calc(150px + 200 * (100cqw - 300px) / 1200), 350px);
+  --ap-panel-min-h: clamp(220px, calc(220px + 140 * (100cqw - 300px) / 1200), 360px);
+  gap: var(--ap-section-gap) !important;
+}
+
+.attack-page > *,
+.attack-filter-card > * {
+  min-width: 0;
+}
+
+/* ---- Page heading: height from content, never fixed. */
+.attack-page .attack-page-heading {
+  padding: var(--ap-panel-pad) !important;
+  border-radius: var(--ap-radius) !important;
+}
+
+.attack-page .soc-page-title {
+  font-size: var(--ap-title) !important;
+  line-height: 1.2 !important;
+  gap: clamp(6px, 0.7cqw, 10px) !important;
+}
+
+.attack-page .soc-page-title > svg {
+  width: var(--ap-title-icon) !important;
+  height: var(--ap-title-icon) !important;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+}
+
+.attack-page .soc-page-subtitle {
+  font-size: var(--ap-subtitle) !important;
+  line-height: 1.4 !important;
+  margin-top: clamp(2px, 0.3cqw, 4px) !important;
+  overflow-wrap: break-word !important;
+}
+
+/* ---- Filter card + toolbar: even control heights, content-hugging. */
+.attack-page .attack-filter-card {
+  padding: var(--ap-card-pad) !important;
+  gap: var(--ap-section-gap) !important;
+  border-radius: var(--ap-radius) !important;
+}
+
+.attack-page .attack-toolbar {
+  gap: var(--ap-filter-gap) !important;
+}
+
+.attack-page .attack-toolbar label {
+  font-size: var(--ap-filter) !important;
+}
+
+.attack-page .attack-toolbar select {
+  font-size: var(--ap-filter) !important;
+  min-height: var(--ap-control-h) !important;
+}
+
+.attack-page .attack-toolbar .soc-filter-toolbar {
+  gap: var(--ap-filter-gap) !important;
+  margin-left: auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+/* Rows label + dropdown are one glued unit: never split across lines. */
+.attack-page .attack-toolbar .rows-selector {
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+  min-width: 0 !important;
+  align-items: center !important;
+}
+
+/* Quick period: fluid but clickable; segmented until space runs out. */
+.attack-page .soc-range-filter > div {
+  min-height: var(--ap-control-h) !important;
+}
+
+.attack-page .soc-range-filter button {
+  font-size: var(--ap-filter) !important;
+  padding: clamp(4px, 0.4cqw, 7px) clamp(6px, 0.7cqw, 11px) !important;
+  line-height: 1.1 !important;
+}
+
+/* Date range hugs content; never a fixed wide block. */
+.attack-page .soc-date-filter {
+  flex: 0 1 auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+.attack-page .soc-date-field-row {
+  min-height: var(--ap-control-h) !important;
+  max-width: 100% !important;
+  gap: clamp(4px, 0.5cqw, 8px) !important;
+}
+
+.attack-page .soc-date-field-row label,
+.attack-page .soc-date-field-row > span,
+.attack-page .soc-date-time-input {
+  font-size: var(--ap-filter) !important;
+}
+
+.attack-page .soc-date-time-input {
+  inline-size: auto !important;
+  min-width: 0 !important;
+}
+
+.attack-page .dashboard-current-time {
+  font-size: var(--ap-filter) !important;
+}
+
+/* ---- KPI: proportional cards; columns reflow ONLY by content width. */
+.attack-page .attack-kpi-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: var(--ap-card-gap) !important;
+}
+
+@container (min-width: 600px) {
+  .attack-page .attack-kpi-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+}
+
+.attack-page .attack-kpi-grid > div {
+  padding: var(--ap-card-pad) !important;
+  border-radius: var(--ap-radius) !important;
+  min-width: 0 !important;
+  height: auto !important;
+}
+
+.attack-page .attack-kpi-grid > div > div:first-child {
+  margin-bottom: clamp(4px, 0.5cqw, 8px) !important;
+}
+
+.attack-page .attack-kpi-grid > div svg {
+  width: var(--ap-icon) !important;
+  height: var(--ap-icon) !important;
+  flex-shrink: 0 !important;
+}
+
+.attack-page .attack-kpi-grid .soc-metric-value,
+.attack-page .attack-kpi-grid > div > div:nth-child(2) {
+  font-size: var(--ap-kpi-value) !important;
+  line-height: 1.1 !important;
+}
+
+/* KPI label / description lines scale together. */
+.attack-page .attack-kpi-grid > div > div:first-child,
+.attack-page .attack-kpi-grid > div > div:last-child {
+  font-size: var(--ap-kpi-label) !important;
+  line-height: 1.3 !important;
+}
+
+/* ---- Panels + charts: fluid padding, titles, heights. */
+.attack-page .attack-panel-grid,
+.attack-page .attack-split-grid {
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: var(--ap-card-gap) !important;
+}
+
+@container (min-width: 760px) {
+  .attack-page .attack-split-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+.attack-page .attack-split-grid > div {
+  padding: var(--ap-card-pad) !important;
+  border-radius: var(--ap-radius) !important;
+  min-width: 0 !important;
+  gap: clamp(8px, calc(8px + 6 * (100cqw - 300px) / 1200), 14px) !important;
+}
+
+.attack-page .attack-split-grid .soc-chart {
+  margin-block: clamp(2px, calc(2px + 4 * (100cqw - 300px) / 1200), 6px) !important;
+}
+
+/* Guarantee the small-chart wrappers keep their fluid height: no flex
+   shrink, explicit min-height, higher specificity than any competing rule. */
+.attack-page .attack-split-grid > div > .soc-chart {
+  height: var(--ap-chart-h) !important;
+  min-height: var(--ap-chart-h) !important;
+  flex: none !important;
+}
+
+/* Top Sessions / Risk Indicators pair: stretch-fill within equal-height
+   cards. The fixed tall gauge is removed; the wrapper grows with its
+   card while the plot below keeps an aspect-ratio base size, so the
+   line stays readable and never stretched at any viewport width. */
+.attack-page .attack-split-grid > div > .soc-chart.soc-chart--category {
+  height: auto !important;
+  min-height: 0 !important;
+  flex: 1 1 auto !important;
+}
+
+/* Category plot: aspect-ratio base size (never a stretched canvas — the
+   SVG viewBox always matches this measured box via ResizeObserver, so
+   glyphs stay proportional). flex-basis auto lets the ratio size it;
+   grow fills leftover card space; clamps bound phones and widescreens. */
+.attack-page .soc-chart--category .cat-chart-plot {
+  flex: 1 1 auto;
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  min-height: 170px;
+  max-height: 280px;
+}
+
+/* CompactBarChart (dangerous commands): fixed 13px rows + 12px gaps
+   dominated phones — fluid sizing keeps rows tight and readable. */
+.attack-page .attack-split-grid .flex.flex-col.gap-3 {
+  gap: clamp(8px, calc(8px + 4 * (100cqw - 300px) / 1200), 12px) !important;
+}
+
+.attack-page .attack-split-grid .flex.flex-col.gap-3 span[class*="text-"] {
+  font-size: clamp(11px, calc(11px + 2 * (100cqw - 300px) / 1200), 13px) !important;
+}
+
+/* CategoryLineChart TOTAL value (fixed 14px) steps down on small screens. */
+.attack-page .attack-split-grid .soc-chart .text-sm {
+  font-size: clamp(12px, calc(12px + 2 * (100cqw - 300px) / 1200), 14px) !important;
+}
+
+/* Main Dashboard category charts (Command Activity, File Security Scanner,
+   File Integrity Monitoring, ML Threat Detection): legend breathing room
+   on small phones so wrapped items never look stacked. Scoped to the
+   dashboard page only — other pages' legends are untouched. */
+@media (max-width: 420px) {
+  .dashboard-page .chart-legend {
+    row-gap: 5px !important;
+    column-gap: 10px !important;
+    margin-top: 8px !important;
+    line-height: 1.5 !important;
+  }
+}
+
+/* Dangerous + keywords pair: equal-height stretched cards. The grid row
+   sets the height; both cards fill it (h-full) so borders align exactly
+   at the top and bottom — no independent arbitrary heights. */
+
+/* Command Keywords payload box: FULL WIDTH + controlled short height.
+   Width is never sacrificed: 100% with no restrictive max-width.
+   Height is an independent fluid clamp (NOT aspect-ratio, NOT flex-grow),
+   so a wider card never changes the box height. Never a stretched canvas
+   — the SVG viewBox always matches this measured box via ResizeObserver
+   with uniform meet scaling, and the cloud re-layouts its words across
+   the full measured width, so glyphs like sudo / inference_worker.py /
+   cat / predictions.jsonl stay proportional. One continuous clamp covers
+   phones through widescreens (small containers naturally get ~190px). */
+.attack-page .soc-payload-distribution-card .command-keywords-distribution-box:not(.is-empty) {
+  flex: none !important;
+  width: 100% !important;
+  max-width: none !important;
+  height: clamp(190px, calc(190px + 100 * (100cqw - 300px) / 1200), 290px) !important;
+  min-height: 0 !important;
+}
+
+/* No word data: hug the compact empty message (centered via m-auto)
+   instead of holding an empty fixed-height canvas. */
+.attack-page .soc-payload-distribution-card .command-keywords-distribution-box.is-empty {
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  flex: 1 1 auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Logs search row: the "Suspicious Only" button was fixed at 13px and
+   dwarfed everything around it on phones — fluid sizing keeps proportion. */
+.attack-page .attack-logs-search > button {
+  font-size: clamp(11px, calc(11px + 2 * (100cqw - 300px) / 1200), 13px) !important;
+  padding: clamp(6px, calc(6px + 2 * (100cqw - 300px) / 1200), 8px) clamp(10px, calc(10px + 6 * (100cqw - 300px) / 1200), 16px) !important;
+}
+
+.attack-page .attack-logs-search input {
+  font-size: clamp(11px, calc(11px + 1 * (100cqw - 300px) / 1200), 12px) !important;
+}
+
+/* Narrow content: let the timeline header breathe instead of squeezing
+   the title against the "Last 24h" meta. Structural wrap only. */
+@container (max-width: 560px) {
+  .attack-page .attack-panel-grid > div:first-child > div:first-child {
+    flex-wrap: wrap !important;
+    row-gap: 2px !important;
+  }
+}
+
+/* Small screens: overall text steps down ~1px so charts stay dominant.
+   Single gentle step — everything else remains fully fluid. */
+@container (max-width: 420px) {
+  .attack-page .soc-page-title {
+    font-size: 16px !important;
+  }
+
+  .attack-page .soc-page-title > svg {
+    width: 15px !important;
+    height: 15px !important;
+  }
+
+  .attack-page .soc-page-subtitle {
+    font-size: 9.5px !important;
+  }
+
+  .attack-page .attack-kpi-grid > div > div:nth-child(2) {
+    font-size: 15px !important;
+  }
+
+  .attack-page .attack-kpi-grid > div > div:first-child,
+  .attack-page .attack-kpi-grid > div > div:last-child {
+    font-size: 8.5px !important;
+  }
+}
+
+/* Legend breathing room so labels never stack against the x-axis. */
+.attack-page .attack-split-grid .soc-chart .justify-center {
+  margin-top: 8px !important;
+  row-gap: 6px !important;
+}
+
+/* Legend text scales down on narrow screens so it stays subordinate
+   to the chart itself. */
+.attack-page .attack-split-grid .soc-chart .justify-center > div {
+  font-size: clamp(9px, calc(9px + 2 * (100cqw - 300px) / 1200), 11px) !important;
+}
+
+@container (min-width: 940px) {
+  .attack-page .attack-panel-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+.attack-page .attack-card {
+  padding: var(--ap-panel-pad) !important;
+  border-radius: var(--ap-radius) !important;
+  gap: clamp(6px, 0.8cqw, 12px) !important;
+}
+
+.attack-page .soc-chart {
+  height: var(--ap-chart-h) !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.attack-page .soc-chart--fim {
+  height: var(--ap-timeline-h) !important;
+  min-height: 0 !important;
+}
+
+.attack-page .min-h-\[280px\] {
+  min-height: var(--ap-panel-min-h) !important;
+}
+
+/* Top-agents rows: fluid type + slim bars that never dominate. */
+.attack-page .attack-card .flex-col.gap-3 > div > div span {
+  font-size: var(--ap-body) !important;
+}
+
+.attack-page .bg-\[var\(--soc-bg\)\].rounded.h-4 {
+  height: clamp(6px, 0.8vw, 12px) !important;
+}
+
+/* Logs table section: fluid type/padding, scroll-guarded as before. */
+.attack-page table {
+  font-size: clamp(10px, calc(10px + 1.5 * (100cqw - 300px) / 1200), 11.5px) !important;
+}
+
+.attack-page table :is(th, td) {
+  padding-inline: clamp(8px, 1.4cqw, 16px) !important;
+}
+
+/* ---- Global companions (capped at current sizes: large screens unchanged).
+        Sidebar glides 240px -> 180px instead of jumping; topbar micro-type
+        eases down only on small viewports. */
+aside.w-60 {
+  width: clamp(180px, 18vw, 240px) !important;
+}
+
+@media (min-width: 310px) {
+  .soc-topbar > div:first-child > button > svg {
+    width: clamp(16px, calc(16px + 4 * (100vw - 310px) / 1130), 20px) !important;
+    height: clamp(16px, calc(16px + 4 * (100vw - 310px) / 1130), 20px) !important;
+  }
+
+  .soc-topbar .soc-topbar-date-full,
+  .soc-topbar .soc-topbar-date-short {
+    font-size: clamp(9.5px, calc(9.5px + 2.5 * (100vw - 310px) / 1130), 12px) !important;
+  }
+}
+
+/* ==========================================================================
+   Dashboard date popover solidity (all widths; visual no-op on desktop).
+   ROOT CAUSE of the see-through popover: MainDashboard dims the whole date
+   filter with `opacity-50` whenever a quick range is active. Opacity
+   multiplies down the tree, so the open popover also rendered at 50% and
+   KPI text (COMMANDS / 145) showed straight through it. z-index was never
+   the problem: no ancestor creates a competing stacking context and the
+   popover is absolutely positioned with z-index 50 over static cards.
+   Fix: keep the container opaque and dim only the closed triggers.
+   Desktop rendering is unchanged (the compact popover never opens there,
+   and the field row keeps its exact 50% dim).
+   ========================================================================== */
+.dashboard-page .dashboard-date-filter.opacity-50 {
+  opacity: 1 !important;
+}
+
+.dashboard-page .dashboard-date-filter.opacity-50 .soc-date-field-row,
+.dashboard-page .dashboard-date-filter.opacity-50 .soc-date-compact > summary {
+  opacity: 0.5;
+}
+
+/* ==========================================================================
+   FLUID SYSTEM — File Integrity / File Security / ML Detection
+   (.soc-fluid-page). Reuses the shared tokens + sidebar-aware container
+   above, so these pages interpolate exactly like Host Monitoring.
+   Headings, filter controls, KPI cards/charts type and table type glide
+   continuously; structural grids keep their existing breakpoints (reflow
+   only). No logic touched.
+   ========================================================================== */
+.soc-fluid-page {
+  gap: var(--ap-section-gap) !important;
+}
+
+.soc-fluid-page > *,
+.soc-fluid-page .soc-data-toolbar > * {
+  min-width: 0;
+}
+
+/* Page heading: content-driven height, fluid type. */
+.soc-fluid-page .soc-page-heading {
+  padding: var(--ap-panel-pad) !important;
+  border-radius: var(--ap-radius) !important;
+}
+
+.soc-fluid-page .soc-page-title {
+  font-size: var(--ap-title) !important;
+  line-height: 1.2 !important;
+  gap: clamp(6px, 0.7cqw, 10px) !important;
+}
+
+.soc-fluid-page .soc-page-title > svg {
+  width: var(--ap-title-icon) !important;
+  height: var(--ap-title-icon) !important;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+}
+
+.soc-fluid-page .soc-page-subtitle {
+  font-size: var(--ap-subtitle) !important;
+  line-height: 1.4 !important;
+  margin-top: clamp(2px, 0.3cqw, 4px) !important;
+  overflow-wrap: break-word !important;
+}
+
+/* Filter rows: glued Rows unit, even control heights, content-hugging date. */
+.soc-fluid-page .soc-data-toolbar {
+  gap: var(--ap-filter-gap) !important;
+}
+
+.soc-fluid-page .rows-selector {
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+  min-width: 0 !important;
+  align-items: center !important;
+}
+
+.soc-fluid-page .soc-data-toolbar label,
+.soc-fluid-page .soc-data-toolbar select {
+  font-size: var(--ap-filter) !important;
+}
+
+.soc-fluid-page .soc-data-toolbar select {
+  min-height: var(--ap-control-h) !important;
+}
+
+.soc-fluid-page .soc-filter-toolbar {
+  gap: var(--ap-filter-gap) !important;
+  margin-left: auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+.soc-fluid-page .soc-range-filter > div {
+  min-height: var(--ap-control-h) !important;
+}
+
+.soc-fluid-page .soc-range-filter button {
+  font-size: var(--ap-filter) !important;
+  padding: clamp(4px, 0.4cqw, 7px) clamp(6px, 0.7cqw, 11px) !important;
+  line-height: 1.1 !important;
+}
+
+.soc-fluid-page .soc-date-filter {
+  flex: 0 1 auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+.soc-fluid-page .soc-date-field-row {
+  min-height: var(--ap-control-h) !important;
+  max-width: 100% !important;
+  gap: clamp(4px, 0.5cqw, 8px) !important;
+}
+
+.soc-fluid-page .soc-date-field-row label,
+.soc-fluid-page .soc-date-field-row > span,
+.soc-fluid-page .soc-date-time-input,
+.soc-fluid-page .dashboard-current-time {
+  font-size: var(--ap-filter) !important;
+}
+
+.soc-fluid-page .soc-date-time-input {
+  inline-size: auto !important;
+  min-width: 0 !important;
+}
+
+/* KPI: identical card anatomy on all three pages; columns reflow ONLY
+   by content width (never 3+1), type glides to readable floors. */
+.soc-fluid-page .soc-kpi-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: var(--ap-card-gap) !important;
+}
+
+@container (min-width: 600px) {
+  .soc-fluid-page .soc-kpi-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+}
+
+.soc-fluid-page .soc-kpi-grid > div {
+  padding: var(--ap-card-pad) !important;
+  border-radius: var(--ap-radius) !important;
+  min-width: 0 !important;
+  height: auto !important;
+}
+
+.soc-fluid-page .soc-kpi-grid > div > div:nth-child(2) {
+  font-size: var(--ap-kpi-value) !important;
+  line-height: 1.1 !important;
+}
+
+.soc-fluid-page .soc-kpi-grid > div > div:first-child,
+.soc-fluid-page .soc-kpi-grid > div > div:last-child {
+  font-size: var(--ap-kpi-label) !important;
+  line-height: 1.3 !important;
+}
+
+/* Charts follow their panels; tables keep fluid type without page scroll. */
+.soc-fluid-page .soc-chart {
+  height: var(--ap-chart-h) !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.soc-fluid-page table {
+  font-size: clamp(10px, calc(10px + 1.5 * (100cqw - 300px) / 1200), 11.5px) !important;
+}
+
+.soc-fluid-page table :is(th, td) {
+  padding-inline: clamp(8px, 1.4cqw, 16px) !important;
+}
+
+/* ==========================================================================
+   Datetime inputs: hug their content so the calendar picker icon sits
+   right after the time text instead of at the far edge of a wide fixed
+   box. Applies to every filter (Alerts, Dashboard, Host Monitoring, FIM,
+   File Security, ML). Native picker behavior and values are untouched.
+   ========================================================================== */
+.soc-date-time-input {
+  inline-size: fit-content !important;
+  max-inline-size: 100% !important;
+  min-width: fit-content !important;
+  flex-shrink: 0 !important;
+}
+
+.soc-date-time-input::-webkit-datetime-edit {
+  padding: 0 2px 0 0 !important;
+}
+
+.soc-date-time-input::-webkit-datetime-edit-fields-wrapper {
+  gap: 0 !important;
+  padding: 0 !important;
+}
+
+.soc-date-time-input::-webkit-datetime-edit-text {
+  padding: 0 1px !important;
+}
+
+.soc-date-time-input::-webkit-calendar-picker-indicator {
+  margin-left: -3px !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* Breathing room inside the date container: space before "From" and
+   after the last calendar icon. Vertical rhythm untouched. */
+.soc-date-field-row {
+  padding-inline: 10px !important;
+}
+
+/* From input only (first label): breathing room between time and icon.
+   The To input keeps its tight spacing. */
+.soc-date-field-row > label:first-child .soc-date-time-input::-webkit-calendar-picker-indicator {
+  margin-left: 5px !important;
 }

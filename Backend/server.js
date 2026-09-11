@@ -30,9 +30,6 @@ app.use("/api/notifications", notificationRouter);
 
 const ENABLE_DB = process.env.ENABLE_DB !== "0";
 
-// Kafka was removed: real-time consumer disabled.
-// Previously this section contained kafkajs consumer setup and run logic.
-
 // =======================
 // KONFIGURASI DATABASE (DIGABUNG DI SINI)
 // =======================
@@ -93,16 +90,9 @@ async function saveToDatabase(event) {
   try {
     await pool.query(query, values);
   } catch (err) {
-    console.error("Gagal simpan ke DB:", err.message);
+    console.error("Failed to save to DB:", err.message);
   }
 }
-
-// =======================
-// KONFIGURASI WAZUH
-// =======================
-// const WAZUH_API_URL = "https://10.104.131.140:55000";
-// const WAZUH_USER = "wazuh";
-// const WAZUH_PASS = "08F6oACn.1CoCX3v.mMs5DJk+WeW1y?+";
 
 // Abaikan SSL self-signed
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
@@ -111,9 +101,9 @@ const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 // KONFIGURASI WAZUH INDEXER
 // =======================
 const INDEXER_URL = process.env.INDEXER_URL;
-const INDEXER_USER = "admin";
-const INDEXER_PASS = "3Hul7FhbSClUQe0AI8J?6CcyoluD36wg";
-const EXCLUDED_AGENT_IDS = ["000"];
+const INDEXER_USER = process.env.INDEXER_USER;
+const INDEXER_PASS = process.env.INDEXER_PASS;
+const EXCLUDED_AGENT_IDS = [];
 // =======================
 // 1) Endpoint FIM Real-time (Disabled - Wazuh API URL not configured)
 // =======================
@@ -390,6 +380,80 @@ function extractDomainsFromHit(hit) {
 app.get("/api/events", handleEventsRequest);
 app.get("/api/events/:agent_id", handleEventsRequest);
 
+// Agents aggregation across the FULL selected range (terms agg, not a
+// paginated sample) so Top Agents never misses agents outside page 1.
+async function handleEventsAgentsRequest(req, res) {
+  try {
+    const agent_id_param = req.params.agent_id;
+    const agent_id =
+      agent_id_param === "all" || !agent_id_param
+        ? undefined
+        : String(agent_id_param).padStart(3, "0");
+
+    const rangeKey = String(req.query.range || "30d").trim();
+    let { start, end } = req.query;
+    if (!start && !end) {
+      const preset = buildPresetRange(rangeKey);
+      start = preset.start;
+      end = preset.end;
+    }
+    const timeRange = buildTimeRange(start, end);
+
+    const queryFilters = [
+      {
+        bool: {
+          should: [
+            { term: { "rule.groups": "syscheck" } },
+            { term: { location: "syscheck" } },
+            { exists: { field: "syscheck.path" } },
+          ],
+          minimum_should_match: 1,
+        },
+      },
+    ];
+    if (agent_id) {
+      queryFilters.push({ term: { "agent.id": agent_id } });
+    }
+    if (timeRange) {
+      queryFilters.push(timeRange);
+    }
+
+    const response = await axios.post(
+      `${INDEXER_URL}/wazuh-alerts-*/_search`,
+      {
+        size: 0,
+        track_total_hits: true,
+        query: {
+          bool: {
+            filter: queryFilters,
+            must_not: [{ terms: { "agent.id": EXCLUDED_AGENT_IDS } }],
+          },
+        },
+        aggs: {
+          by_agent: { terms: { field: "agent.name", size: 20 } },
+        },
+      },
+      {
+        auth: { username: INDEXER_USER, password: INDEXER_PASS },
+        httpsAgent,
+      }
+    );
+
+    const buckets = response?.data?.aggregations?.by_agent?.buckets || [];
+    return res.json({
+      success: true,
+      data: buckets.map((b) => ({ agent: b.key, count: b.doc_count })),
+      applied_range: { rangeKey, start, end },
+    });
+  } catch (error) {
+    console.error("❌ API ERROR (agents):", error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+}
+
+app.get("/api/events/agents/stats", handleEventsAgentsRequest);
+app.get("/api/events/:agent_id/agents/stats", handleEventsAgentsRequest);
+
 
 async function handleDomainSummaryRequest(req, res) {
   try {
@@ -498,14 +562,14 @@ app.get("/api/fim/:agent_id/domains", handleDomainSummaryRequest);
 app.get("/api/db/history", async (req, res) => {
   try {
     if (!pool || !DB_READY) {
-      return res.json({ success: true, data: [], note: "DB tidak aktif di mesin ini" });
+      return res.json({ success: true, data: [], note: "DB not active on this machine" });
     }
 
     const result = await pool.query("SELECT * FROM wazuh_logs ORDER BY timestamp DESC LIMIT 100");
     res.json({ success: true, data: result.rows });
   } catch (err) {
     console.error("DB history error:", err.message);
-    res.status(500).json({ success: false, message: "Gagal mengambil data dari database" });
+    res.status(500).json({ success: false, message: "Failed to fetch data from the database" });
   }
 });
 
@@ -727,7 +791,7 @@ app.get("/api/hunting", async (req, res) => {
     );
     res.status(500).json({
       success: false,
-      message: "Gagal mengambil data hunting dari Indexer",
+      message: "Failed to fetch hunting data from Indexer",
       error: error.message,
     });
   }
@@ -744,11 +808,11 @@ async function autoPullEvents() {
   if (!AUTO_PULL_AGENT_ID) return;
 
   try {
-    // panggil endpoint kamu sendiri supaya logika insert kepakai
+    // call your own endpoint so the insert logic gets used
     await axios.get(`http://127.0.0.1:${PORT}/api/events/${AUTO_PULL_AGENT_ID}`);
     console.log(`[auto-pull] ok agent=${AUTO_PULL_AGENT_ID}`);
   } catch (e) {
-    console.log("[auto-pull] gagal:", e.message);
+    console.log("[auto-pull] failed:", e.message);
   }
 }
 

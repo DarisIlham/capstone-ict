@@ -18,7 +18,7 @@ const verifyCaptcha = async (captchaToken) => {
   }
 
   if (!captchaToken) {
-    throw new Error("CAPTCHA token tidak ditemukan");
+    throw new Error("CAPTCHA token not found");
   }
 
   try {
@@ -37,13 +37,13 @@ const verifyCaptcha = async (captchaToken) => {
 
     // success=true dan score > 0.5 menandakan CAPTCHA valid
     if (!success || score < 0.5) {
-      throw new Error("CAPTCHA verification gagal. Kemungkinan bot terdeteksi.");
+      throw new Error("CAPTCHA verification failed. Possibly a bot was detected.");
     }
 
     return true;
   } catch (error) {
     console.error("CAPTCHA verification error:", error.message);
-    throw new Error("Gagal memverifikasi CAPTCHA: " + error.message);
+    throw new Error("Failed to verify CAPTCHA: " + error.message);
   }
 };
 
@@ -58,7 +58,7 @@ export const register = async (req, res) => {
     if (!email || !password || !name) {
       return res.status(400).json({
         success: false,
-        message: "Email, password, dan nama harus diisi",
+        message: "Email, password, and name are required",
       });
     }
 
@@ -71,7 +71,7 @@ export const register = async (req, res) => {
     const qCheck = 'SELECT id FROM users WHERE email = $1 LIMIT 1';
     const rCheck = await pool.query(qCheck, [email]);
     if (rCheck && rCheck.rows && rCheck.rows.length > 0) {
-      return res.status(409).json({ success: false, message: "Email sudah terdaftar" });
+      return res.status(409).json({ success: false, message: "Email already registered" });
     }
 
     // Hash password
@@ -101,7 +101,7 @@ export const register = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: "Registrasi berhasil",
+      message: "Registration successful",
       token,
       user: {
         id: savedRow.id,
@@ -115,7 +115,7 @@ export const register = async (req, res) => {
     console.error("Register error:", error.message);
     res.status(500).json({
       success: false,
-      message: error.message || "Terjadi kesalahan saat registrasi",
+      message: error.message || "An error occurred during registration",
     });
   }
 };
@@ -131,7 +131,7 @@ export const login = async (req, res) => {
     if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message: "Email dan password harus diisi",
+        message: "Email and password are required",
       });
     }
 
@@ -141,7 +141,7 @@ export const login = async (req, res) => {
     } catch (captchaError) {
       return res.status(403).json({
         success: false,
-        message: "CAPTCHA verification gagal. Silakan coba lagi.",
+        message: "CAPTCHA verification failed. Please try again.",
         isCaptchaError: true,
       });
     }
@@ -151,7 +151,7 @@ export const login = async (req, res) => {
     const q = 'SELECT * FROM users WHERE email = $1 LIMIT 1';
     const result = await pool.query(q, [email]);
     if (!result || !result.rows || result.rows.length === 0) {
-      return res.status(401).json({ success: false, message: "Email atau password salah" });
+      return res.status(401).json({ success: false, message: "Incorrect email or password" });
     }
     // map row to user object
     const row = result.rows[0];
@@ -183,7 +183,7 @@ export const login = async (req, res) => {
         }
         user.password = newHash;
       } else {
-        return res.status(401).json({ success: false, message: "Email atau password salah" });
+return res.status(401).json({ success: false, message: "Incorrect email or password" });
       }
     }
 
@@ -192,7 +192,7 @@ export const login = async (req, res) => {
     if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
-        message: "Email atau password salah",
+        message: "Incorrect email or password",
       });
     }
 
@@ -203,10 +203,10 @@ export const login = async (req, res) => {
 
       if (now < pendingUntil) {
         // Still pending
-        const remainingTime = Math.ceil((pendingUntil - now) / 1000 / 60); // dalam menit
+        const remainingTime = Math.ceil((pendingUntil - now) / 1000 / 60); // in minutes
         return res.status(403).json({
           success: false,
-          message: `Akun sedang dipending sampai ${pendingUntil.toLocaleString("id-ID")} (${remainingTime} menit lagi)`,
+          message: `This account is pending until ${pendingUntil.toLocaleString("en-US")} (${remainingTime} minutes remaining)`,
           isPending: true,
           pendingUntil: pendingUntil.toISOString(),
         });
@@ -220,7 +220,7 @@ export const login = async (req, res) => {
                 ['active', null, user.id]
               );
             } catch (pgUpdateErr) {
-              console.error('Gagal mengupdate status user di Postgres:', pgUpdateErr.message);
+              console.error('Failed to update user status in Postgres:', pgUpdateErr.message);
             }
       }
     }
@@ -243,13 +243,13 @@ export const login = async (req, res) => {
         name: user.name,
         email: user.email,
       }).catch((notificationError) => {
-        console.error("Gagal menyimpan notifikasi login admin:", notificationError.message);
+        console.error("Failed to save admin login notification:", notificationError.message);
       });
     }
 
     res.status(200).json({
       success: true,
-      message: "Login berhasil",
+      message: "Login successful",
       token,
       user: {
         id: user.id,
@@ -263,7 +263,7 @@ export const login = async (req, res) => {
     console.error("Login error:", error.message);
     res.status(500).json({
       success: false,
-      message: error.message || "Terjadi kesalahan saat login",
+      message: error.message || "An error occurred during login",
     });
   }
 };
@@ -279,6 +279,6 @@ export const verifyToken = (token) => {
     );
     return decoded;
   } catch (error) {
-    throw new Error("Token tidak valid");
+    throw new Error("Invalid token");
   }
 };

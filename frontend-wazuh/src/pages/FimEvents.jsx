@@ -36,7 +36,26 @@ const formatDetailedTimestamp = (timestamp) =>
 
 const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey, compact = false, activePointKey = null, onPointSelect = null }) => {
   const [selectedPoint, setSelectedPoint] = useState(null);
-  const width = 800;
+  const rootRef = useRef(null);
+  const [size, setSize] = useState({ width: 800, height });
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setSize({ width: Math.max(rect.width, 200), height: Math.max(rect.height, 40) });
+      }
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const width = size.width;
+  height = size.height;
   const padding = { l: 28, r: 10, t: 8, b: 24 };
   const innerW = width - padding.l - padding.r;
   const innerH = height - padding.t - padding.b;
@@ -86,7 +105,7 @@ const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey, compact = f
   const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
 
   return (
-    <div className="relative h-full w-full" onMouseLeave={() => setSelectedPoint(null)}>
+    <div ref={rootRef} className="relative h-full w-full" onMouseLeave={() => setSelectedPoint(null)}>
       <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block w-full h-full">
         {gridLines.map((gl) => (
           <g key={`grid-${gl.ratio}`}>
@@ -104,79 +123,68 @@ const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey, compact = f
           </linearGradient>
         </defs>
         <path d={pathD + ` L ${padding.l + (data.length - 1) * pointSpacing} ${padding.t + innerH} L ${padding.l} ${padding.t + innerH} Z`} fill="url(#fimWaveGradient)" />
-{data.map((d, i) => {
-           const x = padding.l + i * pointSpacing;
-           const y = padding.t + innerH - (d.v / maxV) * innerH;
-           const pointKey = String(d.t);
-           const bucketMsForPoint = d.bucketMs || defaultBucketMs;
-           const pointData = {
-             index: i,
-             x,
-             y,
-             key: pointKey,
-             value: d.v,
-             time: d.t,
-             start: new Date(Number(d.t)).toISOString(),
-             end: new Date(Number(d.t) + bucketMsForPoint - 1).toISOString(),
-             bucketMs: bucketMsForPoint,
-           };
+        {data.map((d, i) => {
+          const x = padding.l + i * pointSpacing;
+          const y = padding.t + innerH - (d.v / maxV) * innerH;
+          const pointKey = String(d.t);
+          const bucketMsForPoint = d.bucketMs || defaultBucketMs;
+          const pointData = {
+            index: i,
+            x,
+            y,
+            key: pointKey,
+            value: d.v,
+            time: d.t,
+            start: new Date(Number(d.t)).toISOString(),
+            end: new Date(Number(d.t) + bucketMsForPoint - 1).toISOString(),
+            bucketMs: bucketMsForPoint,
+          };
 
-           const isHovered = selectedPoint?.index === i;
-           const isActive = (activePointKey !== null && typeof activePointKey !== "undefined") ? String(activePointKey) === pointKey : false;
-           const isHighlighted = isHovered || isActive;
+          const isHovered = selectedPoint?.index === i;
+          const isActive = (activePointKey !== null && typeof activePointKey !== "undefined") ? String(activePointKey) === pointKey : false;
+          const isHighlighted = isHovered || isActive;
 
-           // Visual circle radius adapts to density; hit-area only used when interactive states apply.
-           const visualR = isHighlighted ? (isDense ? "5" : "7") : `${denseVisualR}`;
-           const hitR = isHighlighted || isHovered ? (isDense ? "7" : "10") : `${denseHitR}`;
+          // Keep the selected marker the same size; only its hit-area adapts for interaction.
+          const visualR = `${denseVisualR}`;
+          const hitR = isHighlighted || isHovered ? (isDense ? "7" : "10") : `${denseHitR}`;
 
-           return (
-             <g key={`point-${pointKey}`}>
-               {isActive && (
-                 <circle
-                   cx={x}
-                   cy={y}
-                   r={isDense ? "5" : "7.5"}
-                   fill="transparent"
-                   stroke="#34d399"
-                   strokeWidth="1.5"
-                   opacity="0.85"
-                   className="pointer-events-none"
-                 />
-               )}
-               <circle
-                 cx={x}
-                 cy={y}
-                 r={hitR}
-                 fill="transparent"
-                 className="cursor-pointer"
-                 role="button"
-                 tabIndex={0}
-                 aria-label={`Filter events for ${formatDetailedTimestamp(pointData.start)}`}
-                 onClick={() => onPointSelect?.(pointData)}
-                 onMouseEnter={() => setSelectedPoint(pointData)}
-                 onMouseLeave={() => setSelectedPoint(null)}
-                 onFocus={() => setSelectedPoint(pointData)}
-                 onBlur={() => setSelectedPoint(null)}
-                 onKeyDown={(event) => {
-                   if (event.key === "Enter" || event.key === " ") {
-                     event.preventDefault();
-                     onPointSelect?.(pointData);
-                   }
-                 }}
-               />
-               <circle
-                 cx={x}
-                 cy={y}
-                 r={visualR}
-                 fill={isActive ? "#34d399" : color}
-                 stroke={isActive ? "#34d399" : color}
-                 strokeWidth={isDense ? "0.75" : "1.5"}
-                 opacity="0.95"
-                 className="pointer-events-none"
-               />
-             </g>
-           );
-         })}
+          return (
+            <g key={`point-${pointKey}`}>
+              <circle
+                cx={x}
+                cy={y}
+                r={hitR}
+                fill="transparent"
+                className="cursor-pointer focus:outline-none"
+                style={{ outline: "none" }}
+                role="button"
+                tabIndex={0}
+                aria-label={`Filter events for ${formatDetailedTimestamp(pointData.start)}`}
+                onClick={() => onPointSelect?.(pointData)}
+                onMouseEnter={() => setSelectedPoint(pointData)}
+                onMouseLeave={() => setSelectedPoint(null)}
+                onFocus={() => setSelectedPoint(pointData)}
+                onBlur={() => setSelectedPoint(null)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onPointSelect?.(pointData);
+                  }
+                }}
+              />
+              <circle
+                cx={x}
+                cy={y}
+                r={visualR}
+                fill={isActive ? "#34d399" : color}
+                stroke={isActive ? "#0f172a" : "none"}
+                strokeWidth="2.5"
+                opacity="0.95"
+                className="pointer-events-none"
+              />
+            </g>
+          );
+        })}
         {data.map((d, i) => {
           if (i % tickEvery !== 0) return null;
           const x = padding.l + i * pointSpacing;
@@ -215,6 +223,26 @@ const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey, compact = f
 };
 
 const SimpleBarHistogram = ({ data, width = 800, height = 65, rangeKey }) => {
+  const elRef = useRef(null);
+  const [measured, setMeasured] = useState({ width, height });
+
+  useEffect(() => {
+    const el = elRef.current;
+    if (!el) return;
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setMeasured({ width: rect.width, height: Math.max(rect.height, 30) });
+      }
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  width = measured.width;
+  height = measured.height;
   const maxV = Math.max(1, ...data.map((d) => d.v));
   const padding = { l: 28, r: 10, t: 8, b: 24 };
   const innerW = width - padding.l - padding.r;
@@ -224,7 +252,7 @@ const SimpleBarHistogram = ({ data, width = 800, height = 65, rangeKey }) => {
   const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
 
   return (
-    <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="block">
+    <svg ref={elRef} width="100%" viewBox={`0 0 ${width} ${height}`} className="block" style={{ height: "auto" }}>
       <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="var(--soc-border)" />
       <line x1={padding.l} y1={padding.t + innerH} x2={padding.l + innerW} y2={padding.t + innerH} stroke="var(--soc-border)" />
       {data.map((d, i) => {
@@ -255,34 +283,97 @@ const SimpleBarHistogram = ({ data, width = 800, height = 65, rangeKey }) => {
   );
 };
 
-const Donut = ({ items, size = 140, stroke = 14, centerLabelTop, centerLabelBottom, compact = false }) => {
-  const total = items.reduce((a, b) => a + b.value, 0) || 1;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
+const Donut = ({ items, size = 140, stroke = 14, centerLabelTop, centerLabelBottom, compact = false, activeLabel = null, onSelect = null }) => {
+  const [hovered, setHovered] = useState(null);
+  const positive = items.filter((it) => (it.value || 0) > 0);
+  if (positive.length === 0) {
+    return (
+      <div
+        className="flex shrink-0 items-center justify-center text-xs text-slate-600"
+        style={{ width: size, height: size }}
+      >
+        No data
+      </div>
+    );
+  }
+  const total = positive.reduce((a, b) => a + b.value, 0) || 1;
+  const R = size / 2;
+  const ro = R;
+  const ri = Math.max(0, R - stroke);
+  const isInteractive = typeof onSelect === "function";
+
+  const polar = (radius, angle) => {
+    const a = angle - Math.PI / 2;
+    return [radius * Math.cos(a), radius * Math.sin(a)];
+  };
+
+  const annularPiece = (a0, a1) => {
+    const large = a1 - a0 > Math.PI ? 1 : 0;
+    const [x1o, y1o] = polar(ro, a0);
+    const [x2o, y2o] = polar(ro, a1);
+    const [x2i, y2i] = polar(ri, a1);
+    const [x1i, y1i] = polar(ri, a0);
+    return [
+      `M ${x1o} ${y1o}`,
+      `A ${ro} ${ro} 0 ${large} 1 ${x2o} ${y2o}`,
+      `L ${x2i} ${y2i}`,
+      `A ${ri} ${ri} 0 ${large} 0 ${x1i} ${y1i}`,
+      "Z",
+    ].join(" ");
+  };
+
+  const annularSector = (a0, a1) => {
+    let span = a1 - a0;
+    if (span <= 0) return "";
+    const parts = [];
+    let cur = a0;
+    while (span > 1e-9) {
+      const piece = Math.min(Math.PI, span);
+      parts.push(annularPiece(cur, cur + piece));
+      cur += piece;
+      span -= piece;
+    }
+    return parts.join(" ");
+  };
+
+  let acc = 0;
+  const sectors = positive.map((it) => {
+    const sweep = (it.value / total) * Math.PI * 2;
+    const sector = { it, start: acc, end: acc + sweep };
+    acc += sweep;
+    return sector;
+  });
 
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
       <g transform={`translate(${size / 2} ${size / 2})`}>
-        <circle r={r} fill="transparent" stroke="var(--soc-border)" strokeWidth={stroke} />
-        {items.map((it, idx) => {
-          const currentOffset = items.slice(0, idx).reduce((acc, prev) => acc + (prev.value / total) * c, 0);
-          const dash = (it.value / total) * c;
-          const strokeDashoffset = -currentOffset;
+        {sectors.map(({ it, start, end }) => {
+          const active = activeLabel != null && String(it.label).toLowerCase() === String(activeLabel).toLowerCase();
+          const dimmed = activeLabel != null && !active;
+          const hoveredSelf = hovered === it.label;
+          const sliceOpacity = dimmed ? (hoveredSelf ? 0.85 : 0.7) : 1;
+          const d = annularSector(start, end);
+          if (!d) return null;
 
           return (
-            <circle
+            <path
               key={it.label}
-              r={r}
-              fill="transparent"
-              stroke={it.color}
-              strokeWidth={stroke}
-              strokeDasharray={`${dash} ${c - dash}`}
-              strokeDashoffset={strokeDashoffset}
-              transform="rotate(-90)"
-              strokeLinecap="butt"
+              className="fim-donut-seg"
+              d={d}
+              fill={it.color}
+              opacity={sliceOpacity}
+              stroke="none"
+              style={{ cursor: isInteractive ? "pointer" : "default", transition: "opacity 150ms", WebkitTapHighlightColor: "transparent" }}
+              role={isInteractive ? "button" : undefined}
+              tabIndex={isInteractive ? 0 : undefined}
+              aria-label={isInteractive ? `Filter logs by ${it.label} events` : undefined}
+              onClick={isInteractive ? () => onSelect(it.label) : undefined}
+              onKeyDown={isInteractive ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(it.label); } } : undefined}
+              onMouseEnter={() => setHovered(it.label)}
+              onMouseLeave={() => setHovered((h) => (h === it.label ? null : h))}
             >
-              <title>{`${it.label}: ${it.value}`}</title>
-            </circle>
+              <title>{`${it.label}: ${it.value}${isInteractive ? " — click to filter" : ""}`}</title>
+            </path>
           );
         })}
         <text y={compact ? -2 : -4} textAnchor="middle" fontSize={compact ? "14" : "18"} fill="#f1f5f9" fontWeight="700">{centerLabelTop}</text>
@@ -292,25 +383,57 @@ const Donut = ({ items, size = 140, stroke = 14, centerLabelTop, centerLabelBott
   );
 };
 
-const Legend = ({ items }) => (
-  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 w-full min-w-0 justify-center">
-    {items.map((it) => (
-      <div key={it.label} className="flex items-center gap-1 text-[10px] text-slate-400">
-        <span className="inline-block w-2 h-2 rounded-sm shrink-0" style={{ background: it.color }} />
-        <span className="truncate min-w-0 max-w-[10rem]">{it.label}</span>
-        <span className="text-slate-500 tabular-nums shrink-0">{it.value}</span>
-      </div>
-    ))}
-  </div>
-);
+const Legend = ({ items, activeLabel = null, onSelect = null, compact = false }) => {
+  const isInteractive = typeof onSelect === "function";
+
+  return (
+    <div className={`flex flex-wrap items-center w-full min-w-0 justify-center ${compact ? "gap-x-2 gap-y-1" : "gap-x-4 gap-y-1.5"}`}>
+      {items.map((it) => {
+        const active = activeLabel != null && String(it.label).toLowerCase() === String(activeLabel).toLowerCase();
+        return (
+          <div
+            key={it.label}
+            className={`fim-legend-item flex items-center gap-1 whitespace-nowrap transition-colors ${compact ? "text-[9px]" : "text-[10px]"} ${active ? "text-slate-100 font-bold" : "text-slate-400"
+              } ${activeLabel != null && !active ? "opacity-70" : ""} ${isInteractive ? "cursor-pointer hover:text-slate-200" : ""} ${isInteractive ? "px-1 -mx-1 rounded" : ""}`}
+            role={isInteractive ? "button" : undefined}
+            tabIndex={isInteractive ? 0 : undefined}
+            aria-label={isInteractive ? `Filter logs by ${it.label}` : undefined}
+            onClick={isInteractive ? () => onSelect(it.label) : undefined}
+            onKeyDown={isInteractive ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(it.label); } } : undefined}
+          >
+            <span className="inline-block w-2 h-2 rounded-sm shrink-0" style={{ background: it.color }} />
+            <span className="truncate min-w-0 max-w-[10rem]">{it.label}</span>
+            <span className="text-slate-500 tabular-nums shrink-0">{it.value}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
 
 // ── Domain Colors ────────────────────────────────────────────────────────────
 const DOMAIN_COLORS = ["#f472b6", "#38bdf8", "#4ade80", "#a78bfa", "#fb923c", "#34d399", "#f87171", "#facc15", "#60a5fa", "#e879f9"];
 
 // ── Domain Horizontal Bar Chart (Modern Design) ────
 const DomainBarChart = ({ domains }) => {
+  const chartWrapRef = useRef(null);
+  const [wrapWidth, setWrapWidth] = useState(1000);
+
+  useEffect(() => {
+    const el = chartWrapRef.current;
+    if (!el) return;
+    const updateSize = () => {
+      if (el.clientWidth > 0) setWrapWidth(el.clientWidth);
+    };
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   if (!domains || domains.length === 0) return <div className="flex items-center justify-center h-full text-slate-600 text-xs">No domain data</div>;
 
+  const width = Math.max(wrapWidth, 420);
   const maxCount = Math.max(...domains.map(d => d.count), 1);
   const barGap = 12;
   const barHeight = 10;
@@ -320,12 +443,12 @@ const DomainBarChart = ({ domains }) => {
   const truncateDomain = (name, maxChars = 26) => (name.length > maxChars ? name.substring(0, maxChars - 3) + "..." : name);
 
   const labelX = 18;
-  const barX = 180;
+  const barX = Math.round(width * 0.2);
   const rightPad = 20;
-  const maxBarArea = 950 - barX - rightPad;
+  const maxBarArea = Math.max(60, width - barX - rightPad);
 
   return (
-    <svg width="100%" viewBox={`0 0 1000 ${chartHeight}`} className="block" style={{ minHeight: chartHeight }}>
+    <svg ref={chartWrapRef} width="100%" viewBox={`0 0 ${width} ${chartHeight}`} className="block" style={{ minHeight: chartHeight }}>
       {domains.map((domain, i) => {
         const barWidth = Math.max(6, Math.round((domain.count / maxCount) * maxBarArea));
         const y = i * (barHeight + barGap);
@@ -422,14 +545,64 @@ const TopAgentsCard = ({ agents }) => {
 
 const WORD_COLORS = ["#f472b6", "#38bdf8", "#4ade80", "#a78bfa", "#fb923c", "#34d399", "#f87171", "#facc15", "#60a5fa", "#e879f9"];
 
-const PayloadWordCloud = ({ words, compact = false }) => {
+const PayloadWordCloud = ({ words, compact = false, activeWord = null, onWordClick = null }) => {
+  const wrapRef = useRef(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return undefined;
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setSize({ width: rect.width, height: rect.height });
+      }
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   if (!words || words.length === 0) return <div className="flex items-center justify-center h-full text-slate-600 text-xs">No payload data</div>;
-  const W = compact ? 520 : 620, H = compact ? 180 : 200;
+  const W = Math.max(size.width || (compact ? 520 : 620), compact ? 240 : 300);
+  const H = Math.max(size.height || (compact ? 180 : 200), 160);
+  const wScale = W / (compact ? 520 : 620);
   const maxCount = words[0].count;
   const minCount = words[words.length - 1].count;
   const range = Math.max(1, maxCount - minCount);
-  const fontSize = (count) => Math.round((compact ? 9 : 11) + ((count - minCount) / range) * (compact ? 22 : 31));
-  const estWidth = (text, fs) => text.length * fs * 0.6;
+  const SAFE_X = 18, SAFE_Y = 14;
+  const minInnerW = 2 * SAFE_X, minInnerH = 2 * SAFE_Y;
+
+  const measureTextWidth = (() => {
+    const canvas = typeof document !== "undefined" ? document.createElement("canvas") : null;
+    const ctx = canvas ? canvas.getContext("2d") : null;
+    return (text, fs, weight) => {
+      if (!ctx || !fs || fs <= 0) return text.length * fs * 0.62;
+      ctx.font = `${weight} ${fs}px monospace`;
+      return Math.ceil(ctx.measureText(text).width);
+    };
+  })();
+
+  const toWeight = (fs) => (fs > 26 ? "800" : fs > 18 ? "700" : "500");
+
+  const fitFontSize = (text, fs) => {
+    const maxW = W - minInnerW, maxH = H - minInnerH;
+    if (maxW < 12 || maxH < 12) return 8;
+    let f = fs;
+    let weight = toWeight(f);
+    for (let iter = 0; iter < 3; iter++) {
+      const w = measureTextWidth(text, f, weight);
+      const h = f * 1.4;
+      const s = Math.min(maxW / w, maxH / h);
+      if (s >= 1) break;
+      f = Math.max(8, Math.floor(f * s));
+      weight = toWeight(f);
+    }
+    return f;
+  };
+
+  const fontSize = (count) => Math.round((compact ? 9 : 11) + ((count - minCount) / range) * (compact ? 22 : 31) * Math.min(1, Math.max(0.6, wScale)));
   const placed = [];
   const rects = [];
   const overlaps = (nx, ny, nw, nh) => {
@@ -438,32 +611,56 @@ const PayloadWordCloud = ({ words, compact = false }) => {
   };
   for (let i = 0; i < words.length; i++) {
     const { text, count } = words[i];
-    const fs = fontSize(count);
-    const tw = estWidth(text, fs);
-    const th = fs * 1.2;
+    const fs = fitFontSize(text, fontSize(count));
+    const weight = toWeight(fs);
+    const tw = measureTextWidth(text, fs, weight);
+    const th = Math.ceil(fs * 1.4);
+    if (tw > W - minInnerW || th > H - minInnerH) continue;
     let placed_x = W / 2, placed_y = H / 2, found = false;
     for (let step = 0; step < 800; step++) {
       const angle = step * 0.35, radius = step * 0.8;
       const cx = W / 2 + radius * Math.cos(angle), cy = H / 2 + radius * Math.sin(angle) * 0.6;
-      if (cx - tw / 2 > 2 && cx + tw / 2 < W - 2 && cy - th / 2 > 2 && cy + th / 2 < H - 2 && !overlaps(cx, cy, tw, th)) {
+      if (cx - tw / 2 >= SAFE_X && cx + tw / 2 <= W - SAFE_X && cy - th / 2 >= SAFE_Y && cy + th / 2 <= H - SAFE_Y && !overlaps(cx, cy, tw, th)) {
         placed_x = cx; placed_y = cy; found = true; break;
       }
     }
-    if (found || i === 0) {
+    if (found) {
       rects.push({ x: placed_x, y: placed_y, w: tw, h: th });
-      placed.push({ text, fs, color: WORD_COLORS[i % WORD_COLORS.length], opacity: 0.65 + ((count - minCount) / range) * 0.35, x: placed_x, y: placed_y, count });
+      placed.push({ text, fs, weight, color: WORD_COLORS[i % WORD_COLORS.length], opacity: 0.65 + ((count - minCount) / range) * 0.35, x: placed_x, y: placed_y, count });
     }
   }
   return (
-    <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice" className="block w-full h-full" style={{ minHeight: 140 }}>
-      <defs><radialGradient id="wcGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#0f172a" stopOpacity="0" /><stop offset="100%" stopColor="#020617" stopOpacity="0.6" /></radialGradient></defs>
-      <rect className="command-word-cloud-bg" width={W} height={H} fill="url(#wcGlow)" rx={12} />
-      {placed.map((w) => (
-        <text key={w.text} x={w.x} y={w.y} textAnchor="middle" dominantBaseline="middle" fontSize={w.fs} fontWeight={w.fs > 26 ? "800" : w.fs > 18 ? "700" : "500"} fill={w.color} opacity={w.opacity} style={{ cursor: "default", fontFamily: "monospace" }}>
-          <title>{`${w.text}: ${w.count} occurrences`}</title>{w.text}
-        </text>
-      ))}
-    </svg>
+    <div ref={wrapRef} className="relative w-full h-full min-h-0">
+      <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="block w-full h-full">
+        <defs><radialGradient id="wcGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#0f172a" stopOpacity="0" /><stop offset="100%" stopColor="#020617" stopOpacity="0.6" /></radialGradient></defs>
+        <rect className="command-word-cloud-bg" width={W} height={H} fill="url(#wcGlow)" rx={12} />
+        {placed.map((w) => (
+          <text
+            key={w.text}
+            className="fim-payload-span"
+            x={w.x}
+            y={w.y}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize={w.fs}
+            fontWeight={activeWord === w.text ? "600" : w.weight}
+            fill={w.color}
+            stroke={activeWord === w.text ? w.color : "none"}
+            strokeWidth={activeWord === w.text ? 0.5 : 0}
+            opacity={activeWord != null && activeWord !== w.text ? 0.4 : activeWord === w.text ? 1 : w.opacity}
+            style={{ cursor: typeof onWordClick === "function" ? "pointer" : "default", fontFamily: "monospace", transition: "opacity 120ms, fill 120ms" }}
+            role={typeof onWordClick === "function" ? "button" : undefined}
+            tabIndex={typeof onWordClick === "function" ? 0 : undefined}
+            aria-label={typeof onWordClick === "function" ? `Filter logs containing ${w.text}` : undefined}
+            onClick={typeof onWordClick === "function" ? () => onWordClick(w.text) : undefined}
+            onKeyDown={typeof onWordClick === "function" ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onWordClick(w.text); } } : undefined}
+          >
+            <title>{`${w.text}: ${w.count} occurrences${typeof onWordClick === "function" ? " — click to filter logs" : ""}`}</title>
+            {w.text}
+          </text>
+        ))}
+      </svg>
+    </div>
   );
 };
 
@@ -538,6 +735,72 @@ const EVENT_TYPE_OPTIONS = [
   { value: "unknown", label: "Unknown" },
 ];
 
+const SEVERITY_LABELS = ["Critical", "High", "Medium", "Low"];
+
+const severityForLevel = (level) => {
+  if (level >= 12) return "Critical";
+  if (level >= 8) return "High";
+  if (level >= 5) return "Medium";
+  return "Low";
+};
+
+const PAYLOAD_SEARCH_FIELDS = [
+  "fileDiff",
+  "file_diff",
+  "fullLog",
+  "full_log",
+  "syscheckPath",
+  "syscheck_path",
+  "ruleDescription",
+  "rule_description",
+  "username",
+  "agentName",
+];
+
+const payloadTextIncludes = (value, needleLower) => {
+  if (value === null || value === undefined || value === "") return false;
+  if (typeof value === "number") return String(value).toLowerCase().includes(needleLower);
+  if (Array.isArray(value)) {
+    return value.some((v) => payloadTextIncludes(v, needleLower));
+  }
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value).toLowerCase().includes(needleLower);
+    } catch {
+      return false;
+    }
+  }
+  return String(value).toLowerCase().includes(needleLower);
+};
+
+const eventMatchesFilters = (event, eventType, severity, payloadPattern) => {
+  if (eventType) {
+    const actual = String(event.syscheckEvent || "unknown").toLowerCase();
+    if (actual !== String(eventType).toLowerCase()) return false;
+  }
+
+  if (severity) {
+    const level = Number(event.ruleLevel) || 0;
+    if (severityForLevel(level) !== severity) return false;
+  }
+
+  if (payloadPattern) {
+    const needle = String(payloadPattern).toLowerCase();
+    const hit = PAYLOAD_SEARCH_FIELDS.some((field) => payloadTextIncludes(event[field], needle));
+    if (!hit) return false;
+  }
+
+  return true;
+};
+
+const matchesGridFilters = (event, agentFilter, userFilter, eventFilter, severityFilter) => {
+  if (agentFilter !== "all" && String(event.agentName || event.agent_name || "Unknown agent").trim() !== agentFilter) return false;
+  if (userFilter !== "all" && String(event.username || event.user || "-") !== userFilter) return false;
+  if (eventFilter !== "all" && (event.syscheckEvent || "unknown").toLowerCase() !== eventFilter.toLowerCase()) return false;
+  if (severityFilter !== "all" && severityForLevel(Number(event.ruleLevel) || 0) !== severityFilter) return false;
+  return true;
+};
+
 const FimEvents = ({ agentId = "all" }) => {
   const [searchParams] = useSearchParams();
   const urlStart = searchParams.get("start");
@@ -545,6 +808,9 @@ const FimEvents = ({ agentId = "all" }) => {
   const urlRange = searchParams.get("rangeKey");
   const [events, setEvents] = useState([]);
   const [aggregatedEvents, setAggregatedEvents] = useState([]);
+  // Backend terms aggregation across the full date range (complete agent
+  // list); client-side counting below is only the fallback.
+  const [agentStats, setAgentStats] = useState([]);
   const [_domainData, setDomainData] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -577,33 +843,14 @@ const FimEvents = ({ agentId = "all" }) => {
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [eventFilter, setEventFilter] = useState("all");
+  const [agentFilter, setAgentFilter] = useState("all");
+  const [userFilter, setUserFilter] = useState("all");
+  const [severityFilter, setSeverityFilter] = useState("all");
 
-  const USE_STATIC = false;
-
-  const MOCK_EVENTS = [
-    {
-      id: "evt-1",
-      timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
-      agentName: "agent-1",
-      username: "root",
-      syscheckPath: "/etc/passwd",
-      syscheckEvent: "modified",
-      fileDiff: ">-line removed\n>+line added",
-      ruleDescription: "Example rule description",
-      ruleLevel: 5,
-    },
-    {
-      id: "evt-2",
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
-      agentName: "agent-2",
-      username: "admin",
-      syscheckPath: "/var/log/auth.log",
-      syscheckEvent: "deleted",
-      fileDiff: ">-sensitive line removed",
-      ruleDescription: "Deleted file detected",
-      ruleLevel: 8,
-    },
-  ];
+  const [selectedEventType, setSelectedEventType] = useState(null);
+  const [selectedSeverity, setSelectedSeverity] = useState(null);
+  const [selectedPayloadPattern, setSelectedPayloadPattern] = useState(null);
+  const [clientPage, setClientPage] = useState(1);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -634,7 +881,7 @@ const FimEvents = ({ agentId = "all" }) => {
     if (!response.ok) throw new Error(`API Error ${response.status}`);
 
     const result = await response.json();
-    if (!result.success) throw new Error(result.message || "Gagal mengambil data FIM fallback");
+    if (!result.success) throw new Error(result.message || "Failed to fetch FIM fallback data");
 
     const data = Array.isArray(result.data) ? result.data.map(mapHuntingFimEvent) : [];
     const total = Number(result.total) || data.length;
@@ -649,7 +896,7 @@ const FimEvents = ({ agentId = "all" }) => {
     };
   }, [agentId]);
 
-const fetchEvents = useCallback(async (page = 1, rk, startOverride = null, endOverride = null, options = {}) => {
+  const fetchEvents = useCallback(async (page = 1, rk, startOverride = null, endOverride = null, options = {}) => {
     try {
       setLoading(true);
       setError(null);
@@ -686,7 +933,7 @@ const fetchEvents = useCallback(async (page = 1, rk, startOverride = null, endOv
       if (!response.ok) throw new Error(`API Error ${response.status}`);
 
       const result = await response.json();
-      if (!result.success) throw new Error(result.message || "Gagal mengambil data");
+      if (!result.success) throw new Error(result.message || "Failed to fetch data");
 
       const primaryData = Array.isArray(result.data) ? result.data : [];
       const resolvedResult = primaryData.length === 0
@@ -705,7 +952,7 @@ const fetchEvents = useCallback(async (page = 1, rk, startOverride = null, endOv
     } finally {
       setLoading(false);
     }
-}, [agentId, pageSize, rangeKey, selectedTimelinePoint, getEffectiveRange, fetchHuntingFimEvents]);
+  }, [agentId, pageSize, rangeKey, selectedTimelinePoint, getEffectiveRange, fetchHuntingFimEvents]);
 
   const fetchAggregated = useCallback(async (size = 1000, rk) => {
     try {
@@ -725,7 +972,7 @@ const fetchEvents = useCallback(async (page = 1, rk, startOverride = null, endOv
       const resp = await fetch(endpoint);
       if (!resp.ok) throw new Error(`API Error ${resp.status}`);
       const r = await resp.json();
-      if (!r.success) throw new Error(r.message || "Gagal mengambil data (aggregated)");
+      if (!r.success) throw new Error(r.message || "Failed to fetch data (aggregated)");
       const primaryData = Array.isArray(r.data) ? r.data : [];
       const resolvedResult = primaryData.length === 0
         ? await fetchHuntingFimEvents(1, size, start, end)
@@ -733,7 +980,7 @@ const fetchEvents = useCallback(async (page = 1, rk, startOverride = null, endOv
 
       setAggregatedEvents(Array.isArray(resolvedResult.data) ? resolvedResult.data : []);
       return resolvedResult;
-} catch (err) {
+    } catch (err) {
       console.error("❌ Fetch Aggregated Error:", err.message);
       return null;
     }
@@ -758,13 +1005,41 @@ const fetchEvents = useCallback(async (page = 1, rk, startOverride = null, endOv
       if (!response.ok) throw new Error(`API Error ${response.status}`);
 
       const result = await response.json();
-      if (!result.success) throw new Error(result.message || "Gagal mengambil data domain");
+      if (!result.success) throw new Error(result.message || "Failed to fetch domain data");
 
       setDomainData(Array.isArray(result.data) ? result.data : []);
       return result;
-} catch (err) {
+    } catch (err) {
       console.error("Domain fetch error:", err.message);
       setDomainData([]);
+      return null;
+    }
+  }, [agentId, getEffectiveRange]);
+
+  const fetchAgentStats = useCallback(async (rk) => {
+    try {
+      const rangeWindow = getEffectiveRange(rk);
+      const { start, end } = rangeWindow;
+
+      const baseEndpoint =
+        agentId === "all"
+          ? `${API_BASE_URL}/api/events/agents/stats`
+          : `${API_BASE_URL}/api/events/${agentId}/agents/stats`;
+
+      const endpoint =
+        `${baseEndpoint}?size=20` +
+        `&start=${encodeURIComponent(start)}` +
+        `&end=${encodeURIComponent(end)}`;
+
+      const resp = await fetch(endpoint);
+      if (!resp.ok) throw new Error(`API Error ${resp.status}`);
+      const r = await resp.json();
+      if (!r.success) throw new Error(r.message || "Failed to fetch agent stats");
+      setAgentStats(Array.isArray(r.data) ? r.data : []);
+      return r;
+    } catch (err) {
+      console.error("Agent stats fetch error:", err.message);
+      setAgentStats([]);
       return null;
     }
   }, [agentId, getEffectiveRange]);
@@ -776,6 +1051,7 @@ const fetchEvents = useCallback(async (page = 1, rk, startOverride = null, endOv
     await Promise.all([
       fetchAggregated(sampleSize, rk),
       fetchDomains(rk),
+      fetchAgentStats(rk),
     ]);
 
     if (result) {
@@ -783,22 +1059,9 @@ const fetchEvents = useCallback(async (page = 1, rk, startOverride = null, endOv
     }
 
     return result;
-  }, [fetchAggregated, fetchDomains, fetchEvents]);
+  }, [fetchAggregated, fetchDomains, fetchAgentStats, fetchEvents]);
 
   useEffect(() => {
-    if (!USE_STATIC) return;
-    setEvents(MOCK_EVENTS);
-    setAggregatedEvents(MOCK_EVENTS);
-    setDomainData([]);
-    setTotalHits(MOCK_EVENTS.length);
-    setTotalPages(1);
-    setCurrentPage(1);
-    setLastUpdated(new Date().toISOString());
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    if (USE_STATIC) return;
     if (skipNextFetchRef.current) {
       // Skip a single scheduled fetch because we already fetched manually
       skipNextFetchRef.current = false;
@@ -816,7 +1079,6 @@ const fetchEvents = useCallback(async (page = 1, rk, startOverride = null, endOv
   }, [agentId, currentPage, rangeKey, refreshAllData, filterMode, customDateRange]);
 
   useEffect(() => {
-    if (USE_STATIC) return;
     const interval = setInterval(() => {
       refreshAllData(currentPage, rangeKey);
     }, 30000);
@@ -835,6 +1097,7 @@ const fetchEvents = useCallback(async (page = 1, rk, startOverride = null, endOv
 
     (async () => {
       setCurrentPage(1);
+      setClientPage(1);
       try {
         await refreshAllData(1, rangeKey);
       } catch {
@@ -857,11 +1120,18 @@ const fetchEvents = useCallback(async (page = 1, rk, startOverride = null, endOv
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  useEffect(() => {
+    setClientPage(1);
+  }, [searchQuery, eventFilter, agentFilter, userFilter, severityFilter]);
+
   const now = Date.now();
   const isMobile = viewportWidth < 768;
-  const isTablet = viewportWidth < 1024;
-  const donutSize = isMobile ? 148 : isTablet ? 160 : 280;
-  const donutStroke = isMobile ? 16 : isTablet ? 18 : 24;
+  const usesCompactDonuts = viewportWidth < 1280;
+  const usesLargeDonuts = viewportWidth >= 1600;
+  // This panel shares a row with the payload chart, so its two donuts must
+  // fit inside half of the available dashboard width—not the whole viewport.
+  const donutSize = isMobile ? 124 : usesCompactDonuts ? 160 : usesLargeDonuts ? 260 : 200;
+  const donutStroke = isMobile ? 14 : usesCompactDonuts ? 18 : usesLargeDonuts ? 22 : 20;
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -915,6 +1185,30 @@ const fetchEvents = useCallback(async (page = 1, rk, startOverride = null, endOv
     },
     [refreshAllData, rangeKey, totalPages]
   );
+
+  const vizFiltersActive = Boolean(selectedEventType || selectedSeverity || selectedPayloadPattern);
+
+  const handleSelectEventType = useCallback((label) => {
+    setSelectedEventType((prev) => (String(prev || "").toLowerCase() === String(label).toLowerCase() ? null : label));
+    setClientPage(1);
+  }, []);
+
+  const handleSelectSeverity = useCallback((label) => {
+    setSelectedSeverity((prev) => (prev === label ? null : label));
+    setClientPage(1);
+  }, []);
+
+  const handleSelectPayload = useCallback((word) => {
+    setSelectedPayloadPattern((prev) => (prev === word ? null : word));
+    setClientPage(1);
+  }, []);
+
+  const clearVizFilters = useCallback(() => {
+    setSelectedEventType(null);
+    setSelectedSeverity(null);
+    setSelectedPayloadPattern(null);
+    setClientPage(1);
+  }, []);
 
   const handleTimelinePointSelect = useCallback(
     async (point) => {
@@ -1051,9 +1345,18 @@ const fetchEvents = useCallback(async (page = 1, rk, startOverride = null, endOv
       existing.lastSeen = Math.max(existing.lastSeen, e._ms || 0);
       byAgent.set(agentLabel, existing);
     }
-    const topAgents = Array.from(byAgent.values())
-      .sort((a, b) => b.count - a.count || b.lastSeen - a.lastSeen || a.name.localeCompare(b.name))
-      .slice(0, 5);
+    // Prefer the backend terms aggregation (complete across the whole date
+    // range); fall back to client-side counting of the fetched sample.
+    const backendAgents = Array.isArray(agentStats) ? agentStats : [];
+    const topAgents = (backendAgents.length
+      ? backendAgents.map((it) => ({
+        name: String(it.agent || it.name || "Unknown agent"),
+        count: Number(it.count || it.value || 0),
+        lastSeen: 0,
+      }))
+      : Array.from(byAgent.values())
+        .sort((a, b) => b.count - a.count || b.lastSeen - a.lastSeen || a.name.localeCompare(b.name))
+    ).slice(0, 5);
 
     const byPayload = new Map();
     const STOP = new Set([
@@ -1139,7 +1442,24 @@ const fetchEvents = useCallback(async (page = 1, rk, startOverride = null, endOv
       uniqueFiles,
       mostSevereEvent: mostSevere,
     };
-  }, [events, rangeKey, totalHits, aggregatedEvents, now, filterMode, customDateRange]);
+  }, [events, rangeKey, totalHits, aggregatedEvents, agentStats, now, filterMode, customDateRange]);
+
+  const filterOptions = useMemo(() => {
+    const base = (aggregatedEvents && aggregatedEvents.length) ? aggregatedEvents : events;
+    const agentSet = new Set();
+    const userSet = new Set();
+    for (const e of base) {
+      const agentLabel = String(e.agentName || e.agent_name || "Unknown agent").trim() || "Unknown agent";
+      agentSet.add(agentLabel);
+      const userLabel = String(e.username || e.user || "-").trim();
+      if (userLabel && userLabel !== "-") userSet.add(userLabel);
+    }
+    const sortLabel = (a, b) => a.localeCompare(b);
+    return {
+      agents: Array.from(agentSet).sort(sortLabel),
+      users: Array.from(userSet).sort(sortLabel),
+    };
+  }, [aggregatedEvents, events]);
 
   const tableEvents = useMemo(() => {
     const activeRange = selectedTimelinePoint?.start && selectedTimelinePoint?.end
@@ -1158,15 +1478,56 @@ const fetchEvents = useCallback(async (page = 1, rk, startOverride = null, endOv
           .filter(Boolean)
           .some((field) => String(field).toLowerCase().includes(q));
       })
-      .filter((event) => eventFilter === "all" || (event.syscheckEvent || "unknown").toLowerCase() === eventFilter.toLowerCase())
+      .filter((event) => matchesGridFilters(event, agentFilter, userFilter, eventFilter, severityFilter))
       .sort((a, b) => b._ms - a._ms);
-  }, [events, selectedTimelinePoint, getEffectiveRange, searchQuery, eventFilter]);
+  }, [events, selectedTimelinePoint, getEffectiveRange, searchQuery, eventFilter, agentFilter, userFilter, severityFilter]);
+
+  const crossFilteredEvents = useMemo(() => {
+    if (!vizFiltersActive) return null;
+
+    const searchLower = searchQuery.trim().toLowerCase();
+
+    const base = (aggregatedEvents && aggregatedEvents.length) ? aggregatedEvents : events;
+
+    return base
+      .map((event) => ({ ...event, _ms: event.timestamp ? new Date(event.timestamp).getTime() : NaN }))
+      .filter((event) => Number.isFinite(event._ms) && event._ms >= derived.startMs && event._ms <= derived.endMs)
+      .filter((event) => {
+        if (!searchLower) return true;
+        return [event.agentName, event.username, event.syscheckPath, event.syscheckEvent, event.ruleDescription]
+          .filter(Boolean)
+          .some((field) => String(field).toLowerCase().includes(searchLower));
+      })
+      .filter((event) => matchesGridFilters(event, agentFilter, userFilter, eventFilter, severityFilter))
+      .filter((event) => eventMatchesFilters(event, selectedEventType, selectedSeverity, selectedPayloadPattern))
+      .sort((a, b) => b._ms - a._ms);
+  }, [vizFiltersActive, derived.startMs, derived.endMs, aggregatedEvents, events, searchQuery, eventFilter, agentFilter, userFilter, severityFilter, selectedEventType, selectedSeverity, selectedPayloadPattern]);
+
+  const displayTotal = vizFiltersActive ? (crossFilteredEvents || []).length : totalHits;
+  const displayPages = vizFiltersActive ? Math.max(1, Math.ceil((crossFilteredEvents || []).length / pageSize)) : totalPages;
+  const safeDisplayPage = Math.min(vizFiltersActive ? clientPage : currentPage, Math.max(displayPages, 1));
+  const visibleEvents = vizFiltersActive ? (crossFilteredEvents || []).slice((safeDisplayPage - 1) * pageSize, safeDisplayPage * pageSize) : tableEvents;
+
+  const goToDisplayPage = useCallback((next) => {
+    if (vizFiltersActive) {
+      setClientPage(Math.max(1, Math.min(next, Math.max(displayPages, 1))));
+      if (logsTableRef.current && typeof logsTableRef.current.scrollIntoView === "function") {
+        try {
+          logsTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+        } catch {
+          // ignore
+        }
+      }
+      return;
+    }
+    goToPage(next);
+  }, [vizFiltersActive, displayPages, goToPage]);
 
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-sky-400 gap-3">
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-sky-400"></div>
-        <div className="text-sm font-medium">Memuat data</div>
+        <div className="text-sm font-medium">Loading data</div>
       </div>
     );
   }
@@ -1174,186 +1535,247 @@ const fetchEvents = useCallback(async (page = 1, rk, startOverride = null, endOv
   if (error) return <div className="min-h-screen bg-slate-950 flex items-center justify-center"><div className="bg-red-950/60 border border-red-800/60 rounded-xl px-6 py-4 text-red-300 text-sm">⚠ Error: {error}</div></div>;
 
   return (
-    <div className="p-4 md:p-5 flex flex-col gap-4 w-full">
-        {/* FIM Header */}
-        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-3 md:p-4 shadow-lg">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-4">
-            <div>
-              <h1 className="text-base font-bold text-white flex items-center gap-2">
-                <FileText className="h-5 w-5 text-emerald-400" />
-                File Integrity Monitoring
-              </h1>
-              <p className="text-xs text-slate-500 mt-0.5">Real-time file changes monitoring</p>
-            </div>
+    <div className="soc-page-shell soc-fluid-page flex flex-col gap-3 sm:gap-4 w-full min-w-0">
+      {/* FIM Header */}
+      <div className="soc-page-heading bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-3 md:p-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-4">
+          <div>
+            <h1 className="soc-page-title flex items-center gap-2">
+              <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-400" />
+              File Integrity Monitoring
+            </h1>
+            <p className="soc-page-subtitle">Real-time file changes monitoring</p>
+          </div>
+        </div>
+      </div>
+
+      {/* FIM Data Container */}
+      <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-2 md:p-4 flex flex-col gap-3 md:gap-4">
+        <div className="soc-data-toolbar flex flex-row flex-wrap items-center justify-between gap-2">
+          <div className="rows-selector flex items-center gap-2 min-w-0 flex-shrink-0">
+          <label className="hidden items-center gap-1 text-[10px] text-slate-400 sm:flex whitespace-nowrap">
+            <span>Rows</span>
+          </label>
+          <div className="relative flex items-center bg-[var(--soc-card)] rounded border border-[var(--soc-border)]">
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="appearance-none bg-transparent py-1.5 pl-2 pr-5 text-left text-[11px] font-medium leading-tight text-slate-100 focus:outline-none"
+            >
+              {[10, 25, 50, 100].map((s) => (
+                <option key={s} value={s} className="bg-white text-black">{s}</option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
+          </div>
+          </div>
+
+          <div className="soc-filter-toolbar ml-auto flex flex-wrap items-center gap-2">
+            <RangeFilter
+              rangeKey={rangeKey}
+              onRangeChange={(nextRange) => {
+                if (rangeKey !== nextRange) {
+                  setCurrentPage(1);
+                  setSelectedTimelinePoint(null);
+                  setRangeKey(nextRange);
+                  setFilterMode("range");
+                }
+              }}
+              dimmed={filterMode === "custom"}
+              options={TIME_RANGE_OPTIONS}
+            />
+            <DateRangeFilter
+              value={customDateRange}
+              onChange={(range) => {
+                setCurrentPage(1);
+                setSelectedTimelinePoint(null);
+                setCustomDateRange(range);
+                setFilterMode("custom");
+              }}
+              className={filterMode === "range" ? "opacity-50" : ""}
+            />
+            <span className="hidden lg:flex items-center gap-1 text-[11px] text-slate-600">
+              <CalendarRange className="h-3 w-3" />
+              {filterMode === "custom"
+                ? new Date(getIsoDateRange(normalizeDateRange(customDateRange)).start).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }) +
+                " - " +
+                new Date(getIsoDateRange(normalizeDateRange(customDateRange)).end).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+                : rangeKey}
+            </span>
           </div>
         </div>
 
-        {/* FIM Data Container */}
-        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-2 md:p-4 shadow-lg flex flex-col gap-3 md:gap-4">
-          <div className="flex flex-col items-start gap-1 md:flex-row md:items-center md:justify-between md:gap-2">
-            <label className="hidden items-center gap-1 text-[10px] text-slate-400 sm:flex">
-              <span>Rows</span>
-            </label>
-            <div className="relative flex items-center bg-[var(--soc-card)] rounded border border-[var(--soc-border)]">
-              <select
-                value={pageSize}
-                onChange={(e) => setPageSize(Number(e.target.value))}
-                className="appearance-none bg-transparent py-1.5 pl-2 pr-5 text-left text-[11px] font-medium leading-tight text-slate-100 focus:outline-none"
-              >
-                {[10, 25, 50, 100].map((s) => (
-                  <option key={s} value={s} className="bg-white text-black">{s}</option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
+        <div className="soc-kpi-grid">
+          <div className="bg-violet-500/10 border border-violet-500/30 rounded p-2 md:p-3">
+            <div className="text-[8px] md:text-[10px] text-violet-400 uppercase font-semibold">Total Events</div>
+            <div className="text-sm md:text-lg font-black text-violet-300 mt-0.5 md:mt-1">{derived.total}</div>
+            <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">events in range</div>
+          </div>
+          <div className="bg-sky-500/10 border border-sky-500/30 rounded p-2 md:p-3">
+            <div className="text-[8px] md:text-[10px] text-sky-400 uppercase font-semibold">Files Changed</div>
+            <div className="text-sm md:text-lg font-black text-sky-300 mt-0.5 md:mt-1">{derived.uniqueFiles}</div>
+            <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">unique files modified</div>
+          </div>
+          <div className="bg-red-500/10 border border-red-500/30 rounded p-2 md:p-3">
+            <div className="text-[8px] md:text-[10px] text-red-400 uppercase font-semibold">Critical Events</div>
+            <div className="text-sm md:text-lg font-black text-red-300 mt-0.5 md:mt-1">{derived.criticalCount}</div>
+            <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">rule level ≥ 12</div>
+          </div>
+          <div className="bg-emerald-500/10 border border-emerald-500/30 rounded p-2 md:p-3">
+            <div className="text-[8px] md:text-[10px] text-emerald-400 uppercase font-semibold">Most Severe Event</div>
+            <div className="text-sm md:text-lg font-black text-emerald-300 mt-0.5 md:mt-1">
+              {derived.mostSevereEvent ? `Lvl ${derived.mostSevereEvent.ruleLevel}` : "—"}
             </div>
-
-            <div className="ml-auto flex items-center gap-2">
-              <RangeFilter
-                rangeKey={rangeKey}
-                onRangeChange={(nextRange) => {
-                  if (rangeKey !== nextRange) {
-                    setCurrentPage(1);
-                    setSelectedTimelinePoint(null);
-                    setRangeKey(nextRange);
-                    setFilterMode("range");
-                  }
-                }}
-                dimmed={filterMode === "custom"}
-                options={TIME_RANGE_OPTIONS}
-              />
-              <DateRangeFilter
-                value={customDateRange}
-                onChange={(range) => {
-                  setCurrentPage(1);
-                  setSelectedTimelinePoint(null);
-                  setCustomDateRange(range);
-                  setFilterMode("custom");
-                }}
-                className={filterMode === "range" ? "opacity-50" : ""}
-              />
-              <span className="hidden lg:flex items-center gap-1 text-[11px] text-slate-600">
-                <CalendarRange className="h-3 w-3" />
-                {filterMode === "custom"
-                  ? new Date(getIsoDateRange(normalizeDateRange(customDateRange)).start).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }) +
-                    " - " +
-                    new Date(getIsoDateRange(normalizeDateRange(customDateRange)).end).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })
-                  : rangeKey}
-              </span>
+            <div className="text-[8px] md:text-[9px] text-slate-400 mt-0.5 truncate" title={derived.mostSevereEvent?.description}>
+              {derived.mostSevereEvent ? derived.mostSevereEvent.description : "no events"}
             </div>
           </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
-            <div className="bg-violet-500/10 border border-violet-500/30 rounded p-2 md:p-3">
-              <div className="text-[8px] md:text-[10px] text-violet-400 uppercase font-semibold">Total Events</div>
-              <div className="text-sm md:text-lg font-black text-violet-300 mt-0.5 md:mt-1">{derived.total}</div>
-              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">events in range</div>
-            </div>
-            <div className="bg-sky-500/10 border border-sky-500/30 rounded p-2 md:p-3">
-              <div className="text-[8px] md:text-[10px] text-sky-400 uppercase font-semibold">Files Changed</div>
-              <div className="text-sm md:text-lg font-black text-sky-300 mt-0.5 md:mt-1">{derived.uniqueFiles}</div>
-              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">unique files modified</div>
-            </div>
-            <div className="bg-red-500/10 border border-red-500/30 rounded p-2 md:p-3">
-              <div className="text-[8px] md:text-[10px] text-red-400 uppercase font-semibold">Critical Events</div>
-              <div className="text-sm md:text-lg font-black text-red-300 mt-0.5 md:mt-1">{derived.criticalCount}</div>
-              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">rule level ≥ 12</div>
-            </div>
-            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded p-2 md:p-3">
-              <div className="text-[8px] md:text-[10px] text-emerald-400 uppercase font-semibold">Most Severe Event</div>
-              <div className="text-sm md:text-lg font-black text-emerald-300 mt-0.5 md:mt-1">
-                {derived.mostSevereEvent ? `Lvl ${derived.mostSevereEvent.ruleLevel}` : "—"}
+        </div>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch">
+          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full overflow-visible">
+            <div className="flex justify-between items-center mb-4 md:mb-4 gap-2">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
+                <Activity className="h-3 md:h-4 w-3 md:w-4 text-emerald-400" />
+                FIM Timeline
               </div>
-              <div className="text-[8px] md:text-[9px] text-slate-400 mt-0.5 truncate" title={derived.mostSevereEvent?.description}>
-                {derived.mostSevereEvent ? derived.mostSevereEvent.description : "no events"}
+              <div className="text-right">
+                <div className="text-xs text-slate-500">Last {rangeKey}</div>
+                <div className="text-[11px] text-slate-600">Updated {formatLiveTimestamp(lastUpdated)}</div>
+              </div>
+            </div>
+            <div className="flex-1 min-h-0 min-w-0 soc-chart--fim rounded-lg bg-[var(--soc-card)] p-2 md:p-4 overflow-visible">
+              <div className="min-w-0 h-full">
+                <WaveChart
+                  data={derived.series}
+                  color="#10b981"
+                  height={timelineChartHeight}
+                  rangeKey={rangeKey}
+                  compact={isMobile}
+                  activePointKey={selectedTimelinePoint?.key ?? null}
+                  onPointSelect={handleTimelinePointSelect}
+                />
               </div>
             </div>
           </div>
-<div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch">
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-6 flex flex-col h-full overflow-visible">
-              <div className="flex justify-between items-center mb-4 md:mb-6 gap-2">
-                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
-                  <Activity className="h-3 md:h-4 w-3 md:w-4 text-emerald-400" />
-                  FIM Timeline
-                </div>
-                <div className="text-right">
-                  <div className="text-xs text-slate-500">Last {rangeKey}</div>
-                  <div className="text-[11px] text-slate-600">Updated {formatLiveTimestamp(lastUpdated)}</div>
-                </div>
+          <div ref={topAgentsPanelRef} className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 h-full flex flex-col">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] md:text-xs font-semibold text-slate-300">Top 5 Agents</div>
+                <div className="mt-1 text-[11px] text-slate-500">Most active agents from FIM events</div>
               </div>
-              <div className="flex-1 min-h-[240px] md:min-h-[280px] min-w-0 rounded-lg bg-[var(--soc-card)] p-2 md:p-4 overflow-visible">
-                <div className="min-w-0 h-full">
-                  <WaveChart
-                    data={derived.series}
-                    color="#10b981"
-                    height={timelineChartHeight}
-                    rangeKey={rangeKey}
-                    compact={isMobile}
-                    activePointKey={selectedTimelinePoint?.key ?? null}
-                    onPointSelect={handleTimelinePointSelect}
-                  />
-                </div>
+              <div className="text-right">
+                <div className="text-xs text-slate-500">Unique agents</div>
+                <div className="text-xs font-black text-emerald-300">{derived.uniqueAgents}</div>
               </div>
             </div>
-            <div ref={topAgentsPanelRef} className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-6 h-full">
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-[11px] md:text-xs font-semibold text-slate-300">Top 5 Agents</div>
-                  <div className="mt-1 text-[11px] text-slate-500">Most active agents from FIM events</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs text-slate-500">Unique agents</div>
-                  <div className="text-xs font-black text-emerald-300">{derived.uniqueAgents}</div>
-                </div>
-              </div>
+            <div className="flex-1 flex flex-col">
               <TopAgentsCard agents={derived.topAgents} />
             </div>
           </div>
+        </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
-            {/* Kotak 1: Event + Severity Distribution */}
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 shadow-lg flex flex-col">
-              <div className="w-full text-[11px] md:text-xs font-semibold text-slate-300 mb-4">Event & Severity Distribution</div>
-              <div className="flex flex-col md:flex-row gap-5 md:gap-6 flex-1 items-center justify-center min-h-0">
-                <div className="flex flex-1 min-w-0 flex-col items-center justify-center">
-                  <Donut items={derived.eventItems} size={donutSize} stroke={donutStroke} centerLabelTop={derived.total} centerLabelBottom="events" compact={isMobile} />
-                  <div className="w-full text-xs mt-3"><Legend items={derived.eventItems} /></div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
+          {/* Kotak 1: Event + Severity Distribution */}
+          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 shadow-lg flex flex-col min-h-[200px] md:min-h-[240px]">
+            <div className="w-full text-[11px] md:text-xs font-semibold text-slate-300 mb-4">Event & Severity Distribution</div>
+            {derived.total === 0 ? (
+              <div className="flex flex-1 items-center justify-center gap-1 text-xs text-slate-600">
+                <span>No </span><span className="font-semibold">event &amp; severity distribution</span><span> data</span>
+              </div>
+            ) : (
+              <div className="flex flex-row flex-wrap gap-3 md:gap-4 flex-1 items-center justify-center min-h-0">
+                <div className="flex min-w-[124px] flex-1 flex-col items-center justify-center">
+                  <Donut items={derived.eventItems} size={donutSize} stroke={donutStroke} centerLabelTop={derived.total} centerLabelBottom="events" compact={isMobile} activeLabel={selectedEventType} onSelect={handleSelectEventType} />
+                  <div className="w-full text-xs mt-3"><Legend items={derived.eventItems} activeLabel={selectedEventType} onSelect={handleSelectEventType} compact={isMobile} /></div>
                 </div>
-                <div className="flex flex-1 min-w-0 flex-col items-center justify-center">
-                  <Donut items={derived.severityItems} size={donutSize} stroke={donutStroke} centerLabelTop={derived.total} centerLabelBottom="severity" compact={isMobile} />
-                  <div className="w-full text-xs mt-3"><Legend items={derived.severityItems} /></div>
+                <div className="flex min-w-[124px] flex-1 flex-col items-center justify-center">
+                  <Donut items={derived.severityItems} size={donutSize} stroke={donutStroke} centerLabelTop={derived.total} centerLabelBottom="severity" compact={isMobile} activeLabel={selectedSeverity} onSelect={handleSelectSeverity} />
+                  <div className="w-full text-xs mt-3"><Legend items={derived.severityItems} activeLabel={selectedSeverity} onSelect={handleSelectSeverity} compact={isMobile} /></div>
                 </div>
               </div>
-            </div>
-            {/* Kotak 2: Payload Pattern Cloud */}
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 shadow-lg flex flex-col">
-              <div className="w-full text-[11px] md:text-xs font-semibold text-slate-300 mb-4">Payload Pattern Cloud</div>
-<div className="command-keywords-distribution-box w-full flex-1 min-h-0 rounded-xl overflow-hidden">
-  <PayloadWordCloud words={derived.payloadWords} />
-</div>
+            )}
+          </div>
+          {/* Kotak 2: Payload Pattern Cloud */}
+          <div className="soc-payload-distribution-card bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 shadow-lg flex flex-col">
+            <div className="w-full text-[11px] md:text-xs font-semibold text-slate-300 mb-4">Payload Pattern Cloud</div>
+            <div className="command-keywords-distribution-box w-full h-0 flex-1 min-h-0 rounded-xl overflow-hidden">
+              <PayloadWordCloud words={derived.payloadWords} activeWord={selectedPayloadPattern} onWordClick={handleSelectPayload} />
             </div>
           </div>
         </div>
+      </div>
 
-        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl shadow-lg overflow-hidden">
-          <div className="p-2 md:p-3 border-b border-[var(--soc-border)] flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            <div className="relative flex-1 min-w-0">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari agent, user, path, event, rule..."
-                className="w-full rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-8 pr-8 text-[11px] text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                  aria-label="Clear search"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
+      <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl shadow-lg overflow-hidden">
+        <div ref={logsTableRef} className="p-3 md:p-4 border-b border-[var(--soc-border)] bg-[var(--soc-card)]">
+          {selectedTimelinePoint && (
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="text-xs text-emerald-300">
+                Timeline filter: {formatDetailedTimestamp(selectedTimelinePoint.start)}
+                {selectedTimelinePoint.end ? ` - ${formatDetailedTimestamp(selectedTimelinePoint.end)}` : ""}
+              </div>
+              <button
+                onClick={async () => {
+                  setSelectedTimelinePoint(null);
+                  setCurrentPage(1);
+                  try {
+                    await refreshAllData(1, rangeKey, { ignoreTimeline: true });
+                  } catch {
+                    // ignore
+                  }
+                }}
+                className="shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-200 transition-colors hover:bg-emerald-500/20"
+              >
+                Reset Time Filter
+              </button>
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <div className="relative flex-1 min-w-0">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search agent, user, path, event, rule..."
+              className="w-full rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-8 pr-8 text-[11px] text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                aria-label="Clear search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <select
+                value={agentFilter}
+                onChange={(e) => setAgentFilter(e.target.value)}
+                className="appearance-none rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-3 pr-8 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+              >
+                <option value="all" className="bg-white text-black">All agents</option>
+                {filterOptions.agents.map((agent) => (
+                  <option key={agent} value={agent} className="bg-white text-black">{agent}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            </div>
+            <div className="relative">
+              <select
+                value={userFilter}
+                onChange={(e) => setUserFilter(e.target.value)}
+                className="appearance-none rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-3 pr-8 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+              >
+                <option value="all" className="bg-white text-black">All users</option>
+                {filterOptions.users.map((user) => (
+                  <option key={user} value={user} className="bg-white text-black">{user}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             </div>
             <div className="relative">
               <select
@@ -1361,165 +1783,198 @@ const fetchEvents = useCallback(async (page = 1, rk, startOverride = null, endOv
                 onChange={(e) => setEventFilter(e.target.value)}
                 className="appearance-none rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-3 pr-8 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
               >
-                <option value="all" className="bg-white text-black">Semua event</option>
+                <option value="all" className="bg-white text-black">All events</option>
                 {EVENT_TYPE_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value} className="bg-white text-black">{opt.label}</option>
                 ))}
               </select>
               <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             </div>
-          </div>
-          <div ref={logsTableRef} className="overflow-x-auto">
-            {selectedTimelinePoint && (
-              <div className="p-3 border-b border-[var(--soc-border)] bg-[var(--soc-card)] flex items-center justify-between">
-                <div className="text-xs text-orange-300">
-                  Timeline filter: {formatDetailedTimestamp(selectedTimelinePoint.start)}
-                  {selectedTimelinePoint.end ? ` - ${formatDetailedTimestamp(selectedTimelinePoint.end)}` : ""}
-                </div>
-                <button
-                  onClick={async () => {
-                    setSelectedTimelinePoint(null);
-                    setCurrentPage(1);
-                    try {
-                      await refreshAllData(1, rangeKey, { ignoreTimeline: true });
-                    } catch {
-                      // ignore
-                    }
-                  }}
-                  className="rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs font-medium text-orange-200 transition-colors hover:bg-orange-500/20"
-                >
-                  Reset Time Filter
-                </button>
-              </div>
-            )}
-            <table className="w-full text-[10px] md:text-[11px] text-left whitespace-nowrap">
-              <thead>
-                <tr className="border-b border-slate-800 bg-slate-800/70">
-                  {["↓ time", "agent", "user", "path", "event", "payload", "severity"].map(h => (
-                    <th key={h} className="px-2 md:px-4 py-2 md:py-3 text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {tableEvents.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-xs text-slate-500">
-                      No FIM events found for the selected filter.
-                    </td>
-                  </tr>
-                ) : tableEvents.map((evt, idx) => (
-                  <tr
-                    key={evt.id}
-                    className={`border-b border-slate-800/60 hover:bg-slate-800/40 ${
-                      idx % 2 !== 0 ? "bg-slate-900/60" : ""
-                    }`}
-                  >
-                    <td className="px-2 md:px-4 py-1.5 md:py-3 text-slate-500 text-[10px] md:text-[11px]">{formatTime(evt.timestamp)}</td>
-                    <td className="px-2 md:px-4 py-1.5 md:py-3 text-sky-400 font-medium text-[10px] md:text-[11px]">{evt.agentName}</td>
-                    <td className="px-2 md:px-4 py-1.5 md:py-3 text-violet-400 font-medium text-[10px] md:text-[11px]">{evt.username}</td>
-                    <td className="px-2 md:px-4 py-1.5 md:py-3 text-emerald-400 font-mono text-[10px] md:text-[11px] truncate">{evt.syscheckPath}</td>
-                    <td className="px-2 md:px-4 py-1.5 md:py-3">
-                      <span
-                        className={`text-[10px] md:text-[11px] px-1 md:px-2 py-0.5 rounded border ${
-                          evt.syscheckEvent === "deleted"
-                            ? "text-red-400 bg-red-900/30"
-                            : "text-green-400 bg-green-900/30"
-                        }`}
-                      >
-                        {evt.syscheckEvent}
-                      </span>
-                    </td>
-                    <td className="px-2 md:px-4 py-1.5 md:py-3 text-slate-300 max-w-xs md:max-w-md text-[10px] md:text-[11px]">
-                      {(() => {
-                        const diffData = evt.fileDiff || evt.file_diff;
-
-                        if (diffData) {
-                          return (
-                            <div className="mb-2">
-                              <div className="text-[8px] md:text-[9px] text-sky-500 uppercase font-bold mb-1 tracking-tight">
-                                Changes:
-                              </div>
-                              <pre className="p-1 md:p-2 bg-black/60 text-[8px] md:text-[10px] rounded border border-slate-700/50 font-mono text-emerald-400 overflow-x-auto leading-normal whitespace-pre-wrap">
-                                {String(diffData)
-                                  .replace(/\\n/g, "\n")
-                                  .replace(/\\u003e/g, "→")
-                                  .replace(/["']/g, "")}
-                              </pre>
-                            </div>
-                          );
-                        }
-                      })()}
-
-                      <div className="text-[10px] md:text-[11px] font-semibold text-slate-100 opacity-80 border-t border-slate-800/50 pt-1">
-                        {evt.ruleDescription || evt.rule_description}
-                      </div>
-                    </td>
-                    <td className="px-2 md:px-4 py-1.5 md:py-3">{renderSeverityBadge(evt.ruleLevel)}</td>
-                  </tr>
+            <div className="relative">
+              <select
+                value={severityFilter}
+                onChange={(e) => setSeverityFilter(e.target.value)}
+                className="appearance-none rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-3 pr-8 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+              >
+                <option value="all" className="bg-white text-black">All severities</option>
+                {SEVERITY_LABELS.map((sev) => (
+                  <option key={sev} value={sev} className="bg-white text-black">{sev}</option>
                 ))}
-              </tbody>
-            </table>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            </div>
           </div>
+          </div>
+        </div>
 
-          {/* --- TOMBOL NAVIGASI --- */}
-            <div className="border-t border-slate-800 bg-slate-900/50 px-4 py-3">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-                  <div className="text-[10px] md:text-[11px] font-mono text-slate-500">
-                    <span className="hidden md:inline">SHOWING </span>
-                    <span className="font-bold text-sky-400">{totalHits === 0 ? 0 : (currentPage - 1) * pageSize + 1}</span>
-                    <span className="hidden md:inline"> - </span>
-                    <span className="md:hidden">-</span>
-                    <span className="font-bold text-sky-400">{Math.min(currentPage * pageSize, totalHits)}</span>
-                    <span className="hidden md:inline"> OF </span>
-                    <span className="md:hidden"> / </span>
-                    <span className="font-bold text-sky-400">{totalHits}</span>
-                    <span className="hidden md:inline"> EVENTS</span>
-                  </div>
-                </div>
+        {vizFiltersActive && (
+          <div className="px-2 md:px-3 py-2 border-b border-[var(--soc-border)] bg-slate-900/40 flex flex-wrap items-center gap-1.5 md:gap-2">
+            <span className="text-[10px] md:text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Active Filters:</span>
+            {selectedEventType && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 text-[10px] md:text-[11px] text-sky-300">
+                Event: {String(selectedEventType).charAt(0).toUpperCase() + String(selectedEventType).slice(1)}
+                <button onClick={() => handleSelectEventType(selectedEventType)} className="hover:text-white" aria-label="Remove event type filter"><X className="h-3 w-3" /></button>
+              </span>
+            )}
+            {selectedSeverity && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-orange-500/40 bg-orange-500/10 px-2 py-0.5 text-[10px] md:text-[11px] text-orange-300">
+                Severity: {selectedSeverity}
+                <button onClick={() => handleSelectSeverity(selectedSeverity)} className="hover:text-white" aria-label="Remove severity filter"><X className="h-3 w-3" /></button>
+              </span>
+            )}
+            {selectedPayloadPattern && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] md:text-[11px] text-emerald-300">
+                Payload: {selectedPayloadPattern}
+                <button onClick={() => handleSelectPayload(selectedPayloadPattern)} className="hover:text-white" aria-label="Remove payload filter"><X className="h-3 w-3" /></button>
+              </span>
+            )}
+            <span className="text-[10px] md:text-[11px] font-mono text-slate-400">
+              <span className="font-bold text-sky-300">{(crossFilteredEvents || []).length.toLocaleString()}</span>
+              <span className="hidden sm:inline"> matching events</span>
+            </span>
+            <button
+              onClick={clearVizFilters}
+              className="ml-auto text-[10px] md:text-[11px] font-semibold text-slate-300 hover:text-sky-300 border border-slate-700 rounded-full px-2 py-0.5 hover:border-sky-500/50 transition-colors"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    disabled={currentPage === 1 || loading}
-                    onClick={() => goToPage(1)}
-                    className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
-                  >
-                    <span className="hidden md:inline">FIRST</span>
-                    <span className="md:hidden">«</span>
-                  </button>
-                  <button
-                    disabled={currentPage === 1 || loading}
-                    onClick={() => goToPage(Math.max(currentPage - 1, 1))}
-                    className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
-                  >
-                    <span className="hidden md:inline">← PREV</span>
-                    <span className="md:hidden">‹</span>
-                  </button>
-                  <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400">
-                    <span className="hidden md:inline">PAGE </span>
-                    <span className="text-white">{currentPage}</span> / {totalPages}
-                  </span>
-                  <button
-                    disabled={currentPage === totalPages || loading}
-                    onClick={() => goToPage(Math.min(currentPage + 1, totalPages))}
-                    className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
-                  >
-                    <span className="hidden md:inline">NEXT →</span>
-                    <span className="md:hidden">›</span>
-                  </button>
-                  <button
-                    disabled={currentPage === totalPages || loading}
-                    onClick={() => goToPage(totalPages)}
-                    className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
-                  >
-                    <span className="hidden md:inline">LAST</span>
-                    <span className="md:hidden">»</span>
-                  </button>
-                </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[10px] md:text-[11px] text-left whitespace-nowrap">
+            <thead>
+              <tr className="border-b border-slate-800 bg-slate-800/70">
+                {["↓ time", "agent", "user", "path", "event", "payload", "severity"].map(h => (
+                  <th key={h} className="px-2 md:px-4 py-2 md:py-3 text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {visibleEvents.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-xs text-slate-500">
+                    {vizFiltersActive ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <span>No logs match the selected filters.</span>
+                        <button onClick={clearVizFilters} className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-semibold text-slate-300 hover:border-sky-500/50 hover:text-sky-300 transition-colors">Clear filters</button>
+                      </div>
+                    ) : (
+                      "No FIM events found for the selected filter."
+                    )}
+                  </td>
+                </tr>
+              ) : visibleEvents.map((evt, idx) => (
+                <tr
+                  key={evt.id}
+                  className={`border-b border-slate-800/60 hover:bg-slate-800/40 ${idx % 2 !== 0 ? "bg-slate-900/60" : ""
+                    }`}
+                >
+                  <td className="px-2 md:px-4 py-1.5 md:py-3 text-slate-500 text-[10px] md:text-[11px]">{formatTime(evt.timestamp)}</td>
+                  <td className="px-2 md:px-4 py-1.5 md:py-3 text-sky-400 font-medium text-[10px] md:text-[11px]">{evt.agentName}</td>
+                  <td className="px-2 md:px-4 py-1.5 md:py-3 text-violet-400 font-medium text-[10px] md:text-[11px]">{evt.username}</td>
+                  <td className="px-2 md:px-4 py-1.5 md:py-3 text-emerald-400 font-mono text-[10px] md:text-[11px] truncate">{evt.syscheckPath}</td>
+                  <td className="px-2 md:px-4 py-1.5 md:py-3">
+                    <span
+                      className={`text-[10px] md:text-[11px] px-1 md:px-2 py-0.5 rounded border ${evt.syscheckEvent === "deleted"
+                          ? "text-red-400 bg-red-900/30"
+                          : "text-green-400 bg-green-900/30"
+                        }`}
+                    >
+                      {evt.syscheckEvent}
+                    </span>
+                  </td>
+                  <td className="px-2 md:px-4 py-1.5 md:py-3 text-slate-300 max-w-xs md:max-w-md text-[10px] md:text-[11px]">
+                    {(() => {
+                      const diffData = evt.fileDiff || evt.file_diff;
+
+                      if (diffData) {
+                        return (
+                          <div className="mb-2">
+                            <div className="text-[8px] md:text-[9px] text-sky-500 uppercase font-bold mb-1 tracking-tight">
+                              Changes:
+                            </div>
+                            <pre className="p-1 md:p-2 bg-black/60 text-[8px] md:text-[10px] rounded border border-slate-700/50 font-mono text-emerald-400 overflow-x-auto leading-normal whitespace-pre-wrap">
+                              {String(diffData)
+                                .replace(/\\n/g, "\n")
+                                .replace(/\\u003e/g, "→")
+                                .replace(/["']/g, "")}
+                            </pre>
+                          </div>
+                        );
+                      }
+                    })()}
+
+                    <div className="text-[10px] md:text-[11px] font-semibold text-slate-100 opacity-80 border-t border-slate-800/50 pt-1">
+                      {evt.ruleDescription || evt.rule_description}
+                    </div>
+                  </td>
+                  <td className="px-2 md:px-4 py-1.5 md:py-3">{renderSeverityBadge(evt.ruleLevel)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* --- TOMBOL NAVIGASI --- */}
+        <div className="border-t border-slate-800 bg-slate-900/50 px-4 py-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+              <div className="text-[10px] md:text-[11px] font-mono text-slate-500">
+                <span className="hidden md:inline">SHOWING </span>
+                <span className="font-bold text-sky-400">{displayTotal === 0 ? 0 : (safeDisplayPage - 1) * pageSize + 1}</span>
+                <span className="hidden md:inline"> - </span>
+                <span className="md:hidden">-</span>
+                <span className="font-bold text-sky-400">{Math.min(safeDisplayPage * pageSize, displayTotal)}</span>
+                <span className="hidden md:inline"> OF </span>
+                <span className="md:hidden"> / </span>
+                <span className="font-bold text-sky-400">{displayTotal}</span>
+                <span className="hidden md:inline"> EVENTS</span>
               </div>
             </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                disabled={safeDisplayPage === 1 || loading}
+                onClick={() => goToDisplayPage(1)}
+                className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
+              >
+                <span className="hidden md:inline">FIRST</span>
+                <span className="md:hidden">«</span>
+              </button>
+              <button
+                disabled={safeDisplayPage === 1 || loading}
+                onClick={() => goToDisplayPage(Math.max(safeDisplayPage - 1, 1))}
+                className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
+              >
+                <span className="hidden md:inline">← PREV</span>
+                <span className="md:hidden">‹</span>
+              </button>
+              <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400">
+                <span className="hidden md:inline">PAGE </span>
+                <span className="text-white">{safeDisplayPage}</span> / {displayPages}
+              </span>
+              <button
+                disabled={safeDisplayPage === displayPages || loading}
+                onClick={() => goToDisplayPage(Math.min(safeDisplayPage + 1, displayPages))}
+                className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
+              >
+                <span className="hidden md:inline">NEXT →</span>
+                <span className="md:hidden">›</span>
+              </button>
+              <button
+                disabled={safeDisplayPage === displayPages || loading}
+                onClick={() => goToDisplayPage(displayPages)}
+                className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
+              >
+                <span className="hidden md:inline">LAST</span>
+                <span className="md:hidden">»</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
+    </div>
   );
 };
 

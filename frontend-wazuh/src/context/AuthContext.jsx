@@ -8,7 +8,6 @@ export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [pageLoading, setPageLoading] = useState(false);
 
   // Load auth state dari localStorage saat mount
   useEffect(() => {
@@ -44,12 +43,8 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
-  const setTransitionLoading = useCallback((state) => {
-    setPageLoading(state);
-  }, []);
-
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, loading, pageLoading, setTransitionLoading, login, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

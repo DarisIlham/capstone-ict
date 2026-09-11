@@ -8,6 +8,7 @@ import {
   Activity,
   CalendarRange,
   ChevronDown,
+  X,
 } from "lucide-react";
 import DateRangeFilter from "../components/DateRangeFilter";
 import RangeFilter from "../components/RangeFilter";
@@ -28,10 +29,10 @@ function rangeKeyToDateRange(rangeKey) {
     rangeKey === "1h"
       ? HOUR_MS
       : rangeKey === "7d"
-      ? 7 * DAY_MS
-      : rangeKey === "30d"
-      ? 30 * DAY_MS
-      : DAY_MS;
+        ? 7 * DAY_MS
+        : rangeKey === "30d"
+          ? 30 * DAY_MS
+          : DAY_MS;
   const start = new Date(end.getTime() - backMs);
   return { start: start.toISOString(), end: end.toISOString() };
 }
@@ -82,34 +83,82 @@ const formatLiveTimestamp = (isoString) => {
   });
 };
 
+// X-axis tick labels for the Command Timeline: no year, keeps ticks short.
 const formatBucketLabel = (timestamp, rangeKey) => {
   const d = new Date(timestamp);
   if (rangeKey === "1h") return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-  if (rangeKey === "24h") return d.toLocaleTimeString("en-US", { hour: "2-digit" });
-  if (rangeKey === "7d") return d.toLocaleString("en-US", { weekday: "short", hour: "2-digit" });
+  if (rangeKey === "24h") return d.toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit" });
+  if (rangeKey === "7d") return d.toLocaleString("en-US", { weekday: "short", month: "short", day: "2-digit" });
   return d.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
 };
 
 const clamp = (n, a, b) => Math.min(Math.max(n, a), b);
 
-const WaveChart = ({ data, rangeKey = "24h", height = 80, compact = false, activePointKey = null, onPointSelect }) => {
+// Tooltip position in pixels, contained inside the plot box that the
+// tooltip is absolutely positioned against (the relative SVG wrapper).
+// The old percent-based position was relative to the taller outer
+// container (header + plot + legend), which shifted the tooltip down and
+// let it get clipped by the chart box on hover.
+const getContainedTooltip = (px, py, width, height, tooltipWidth = 144, tooltipHeight = 56) => {
+  const W = Math.max(width, 80);
+  const H = Math.max(height, 80);
+  const gap = 8;
+  const edge = 4;
+  const half = tooltipWidth / 2;
+  const left = clamp(px, half + edge, Math.max(half + edge, W - half - edge));
+  let below = false;
+  let top = py - gap - tooltipHeight;
+  if (top < edge) {
+    below = true;
+    top = py + 12;
+  }
+  top = clamp(top, edge, Math.max(edge, H - tooltipHeight - edge));
+  return { left, top, below };
+};
+
+const WaveChart = ({ data, color = "#f97316", rangeKey = "24h", height = 80, compact = false, activePointKey = null, onPointSelect = null }) => {
   const [hoveredPoint, setHoveredPoint] = useState(null);
-  const width = 800;
+  const rootRef = useRef(null);
+  const [size, setSize] = useState({ width: 800, height });
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setSize({ width: Math.max(rect.width, 200), height: Math.max(rect.height, 40) });
+      }
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const width = size.width;
+  height = size.height;
   const padding = { l: 28, r: 10, t: 8, b: 24 };
   const innerW = width - padding.l - padding.r;
   const innerH = height - padding.t - padding.b;
 
   if (!data || data.length === 0) {
     return (
-      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="block">
+      <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block w-full h-full">
         <text x={width / 2} y={height / 2} textAnchor="middle" fontSize="12" fill="#64748b">No data</text>
       </svg>
     );
   }
 
   const maxV = Math.max(1, ...data.map((d) => d.v));
-  const pointSpacing = data.length ? innerW / (data.length - 1) : innerW;
+  const pointSpacing = data.length > 1 ? innerW / (data.length - 1) : innerW;
   const defaultBucketMs = rangeKey === "1h" ? 300000 : rangeKey === "24h" ? 3600000 : rangeKey === "7d" ? 21600000 : 86400000;
+
+  // When the chart is dense, shrink the visible markers and skip the large
+  // transparent hit-targets so neighbouring points do not overlap.
+  const isDense = data.length > 30;
+  const denseVisualR = isDense ? 1.6 : 3.5;
+  const denseHitR = isDense ? 5 : 10;
 
   const gridSteps = 5;
   const gridLines = [];
@@ -138,7 +187,7 @@ const WaveChart = ({ data, rangeKey = "24h", height = 80, compact = false, activ
   const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
 
   return (
-    <div className="relative h-full w-full" onMouseLeave={() => setHoveredPoint(null)}>
+    <div ref={rootRef} className="relative h-full w-full" onMouseLeave={() => setHoveredPoint(null)}>
       <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block w-full h-full">
         {gridLines.map((gl) => (
           <g key={`grid-${gl.ratio}`}>
@@ -148,11 +197,11 @@ const WaveChart = ({ data, rangeKey = "24h", height = 80, compact = false, activ
         ))}
         <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="var(--soc-border)" />
         <line x1={padding.l} y1={padding.t + innerH} x2={padding.l + innerW} y2={padding.t + innerH} stroke="var(--soc-border)" />
-        <path d={pathD} stroke="#f97316" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
+        <path d={pathD} stroke={color} strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
         <defs>
           <linearGradient id="cmdWaveGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#f97316" stopOpacity="0.24" />
-            <stop offset="100%" stopColor="#f97316" stopOpacity="0" />
+            <stop offset="0%" stopColor={color} stopOpacity="0.24" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
           </linearGradient>
         </defs>
         <path d={pathD + ` L ${padding.l + (data.length - 1) * pointSpacing} ${padding.t + innerH} L ${padding.l} ${padding.t + innerH} Z`} fill="url(#cmdWaveGradient)" />
@@ -171,43 +220,84 @@ const WaveChart = ({ data, rangeKey = "24h", height = 80, compact = false, activ
             time: d.t,
             start: d.start || d.t,
             end: d.end || d.t,
-            bucketMs: d.bucketMs,
+            bucketMs: bucketMsForPoint,
           };
-          const isHovered = hoveredPoint?.key === pointKey;
-          const isActive = activePointKey === pointKey;
+
+          const isHovered = hoveredPoint?.index === i;
+          const isActive = (activePointKey !== null && typeof activePointKey !== "undefined") ? String(activePointKey) === pointKey : false;
           const isHighlighted = isHovered || isActive;
+
+          // Keep the selected marker the same size; only its hit-area adapts for interaction.
+          const visualR = `${denseVisualR}`;
+          const hitR = isHighlighted || isHovered ? (isDense ? "7" : "10") : `${denseHitR}`;
+
           return (
-            <g key={pointKey}>
-              {isActive && (
-                <circle cx={x} cy={y} r="7.5" fill="transparent" stroke="#fdba74" strokeWidth="1.5" opacity="0.85" className="pointer-events-none" />
-              )}
-              <circle cx={x} cy={y} r={isHighlighted ? "7" : "10"} fill="transparent" className="cursor-pointer" role="button" tabIndex={0} aria-label={`Show audit log entries for ${formatDetailedTimestamp(pointData.start)}`} onClick={() => onPointSelect?.(pointData)} onMouseEnter={() => setHoveredPoint(pointData)} onMouseLeave={() => setHoveredPoint(null)} onFocus={() => setHoveredPoint(pointData)} onBlur={() => setHoveredPoint(null)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onPointSelect?.(pointData); } }} />
-              <circle cx={x} cy={y} r={isHighlighted ? "5" : "3.5"} fill={isActive ? "#fb923c" : "#f97316"} stroke="#0f172a" strokeWidth="1.5" opacity="0.95" className="pointer-events-none" />
+            <g key={`point-${pointKey}`}>
+              <circle
+                cx={x}
+                cy={y}
+                r={hitR}
+                fill="transparent"
+                className="cursor-pointer focus:outline-none"
+                style={{ outline: "none" }}
+                role="button"
+                tabIndex={0}
+                aria-label={`Show audit log entries for ${formatDetailedTimestamp(pointData.start)}`}
+                onClick={() => onPointSelect?.(pointData)}
+                onMouseEnter={() => setHoveredPoint(pointData)}
+                onMouseLeave={() => setHoveredPoint(null)}
+                onFocus={() => setHoveredPoint(pointData)}
+                onBlur={() => setHoveredPoint(null)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onPointSelect?.(pointData);
+                  }
+                }}
+              />
+              <circle
+                cx={x}
+                cy={y}
+                r={visualR}
+                fill={isActive ? "#fb923c" : color}
+                stroke={isActive ? "#0f172a" : "none"}
+                strokeWidth="2.5"
+                opacity="0.95"
+                className="pointer-events-none"
+              />
             </g>
           );
         })}
         {data.map((d, i) => {
           if (i % tickEvery !== 0) return null;
           const x = padding.l + i * pointSpacing;
-          const label = formatBucketLabel(d.t, rangeKey);
           return (
-            <g key={`label-${i}`}>
-              <text x={x} y={padding.t + innerH + 14} textAnchor={i === 0 ? "start" : i >= data.length - tickEvery ? "end" : "middle"} fontSize="8" fill="#64748b">{label}</text>
+            <g key={`tick-${d.t}`}>
+              <line x1={x} y1={padding.t + innerH} x2={x} y2={padding.t + innerH + 3} stroke="var(--soc-border)" />
+              <text
+                x={x}
+                y={padding.t + innerH + 14}
+                textAnchor={i === 0 ? "start" : i >= data.length - tickEvery ? "end" : "middle"}
+                fontSize="8"
+                fill="#64748b"
+              >
+                {formatBucketLabel(d.t, rangeKey)}
+              </text>
             </g>
           );
         })}
       </svg>
       {hoveredPoint && (
         <div
-          className="pointer-events-none absolute z-50 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-elevated)] px-3 py-2 text-[11px] shadow-xl"
+          className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-slate-700 bg-slate-900/95 px-3 py-2 text-xs shadow-lg"
           style={{
-            left: `${Math.min(Math.max((hoveredPoint.x / width) * 100, 14), 86)}%`,
-            top: `${Math.max(((hoveredPoint.y - 58) / height) * 100, -10)}%`,
+            left: `${Math.min(Math.max((hoveredPoint.x / width) * 100, 10), 82)}%`,
+            top: `${Math.max(((hoveredPoint.y - 40) / height) * 100, 6)}%`,
             transform: "translate(-50%, -100%)",
           }}
         >
-          <div className="font-bold text-orange-300">{hoveredPoint.value} <span className="font-normal text-slate-400">commands</span></div>
-          <div className="mt-0.5 text-slate-500 leading-snug">{formatDetailedTimestamp(hoveredPoint.start || hoveredPoint.time)}</div>
+          <div className="font-semibold text-white">{hoveredPoint.value} commands</div>
+          <div className="mt-1 text-slate-400">{formatDetailedTimestamp(hoveredPoint.start || hoveredPoint.time)}</div>
         </div>
       )}
     </div>
@@ -272,28 +362,48 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items" }) =
   const [selected, setSelected] = useState(null);
   const rootRef = useRef(null);
   const [size, setSize] = useState({ width: 1000, height: 210 });
-  const padding = { l: 56, r: 56, t: 12, b: 42 };
+  // Responsive plot padding (presentation only): reclaim horizontal space
+  // on narrow phones so the line itself stays wide enough to read.
+  const narrowPlot = size.width < 480;
+  const padding = narrowPlot
+    ? { l: 34, r: 16, t: 12, b: 42 }
+    : { l: 56, r: 56, t: 12, b: 42 };
+
+  // Keep the measured plot size fresh (see PayloadWordCloud): the SVG
+  // viewBox and the hover tooltip both assume these match the live box.
+  const syncSize = useCallback(() => {
+    const node = rootRef.current;
+    if (!node) return;
+    const rect = node.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      setSize((prev) =>
+        Math.abs(prev.width - rect.width) < 1 && Math.abs(prev.height - rect.height) < 1
+          ? prev
+          : { width: rect.width, height: rect.height }
+      );
+    }
+  }, []);
 
   useEffect(() => {
     const node = rootRef.current;
     if (!node) return undefined;
-    const updateSize = () => {
-      const rect = node.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        setSize({ width: rect.width, height: rect.height });
-      }
-    };
-    updateSize();
-    const observer = new ResizeObserver(updateSize);
+    syncSize();
+    const raf = requestAnimationFrame(() => syncSize());
+    const observer = new ResizeObserver(syncSize);
     observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
+    window.addEventListener("resize", syncSize);
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+      window.removeEventListener("resize", syncSize);
+    };
+  }, [syncSize, items]);
 
   const width = size.width;
   const height = size.height;
   if (!items || items.length === 0) {
     return (
-      <div className="flex min-h-24 items-center justify-center text-[11px] text-slate-500">
+      <div className="flex m-auto items-center justify-center px-2 py-10 text-center text-[11px] text-slate-500">
         No data available
       </div>
     );
@@ -316,7 +426,9 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items" }) =
   }
 
   const xFor = (i) => padding.l + i * step;
-  const yFor = (v) => padding.t + innerH - (v / maxV) * innerH;
+  // 8% headroom so the peak never touches the top edge (gridlines keep
+  // their nice round values; only plotted points sit slightly lower).
+  const yFor = (v) => padding.t + innerH - (v / maxV) * innerH * 0.92;
 
   const points = sorted.map((it, i) => ({
     x: xFor(i),
@@ -347,8 +459,10 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items" }) =
           {total} <span className="text-xs font-normal text-slate-500">{totalLabel}</span>
         </span>
       </div>
-      <div ref={rootRef} className="flex-1 min-h-0 w-full">
-        <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block">
+      <div ref={rootRef} className="relative w-full cat-chart-plot">
+        {/* "meet" keeps axis/legend glyphs proportional (never gepeng):
+            the viewBox always matches this box via ResizeObserver. */}
+        <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" className="block">
           {gridLines.map((grid, idx) => (
             <g key={`grid-${idx}`}>
               <line x1={padding.l} y1={grid.y} x2={padding.l + innerW} y2={grid.y} stroke="var(--soc-border)" strokeWidth="1" opacity={grid.y === padding.t || grid.y === padding.t + innerH ? "1" : "0.5"} />
@@ -364,6 +478,10 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items" }) =
           ))}
           {points.map((p) => {
             const isSel = selected?.index === p.index;
+            // Keep edge labels inside the SVG box: shift the centered label
+            // so its estimated half-width never crosses the box border.
+            const halfLabel = Math.ceil(String(p.label ?? "").length * 5.4 / 2) + 3;
+            const labelX = clamp(p.x, halfLabel + 2, Math.max(halfLabel + 2, width - halfLabel - 2));
             return (
               <g key={`${p.label}-${p.index}`}>
                 <circle cx={p.x} cy={p.y} r={isSel ? "6" : "9"} fill="transparent" className="cursor-pointer"
@@ -374,11 +492,28 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items" }) =
                   onClick={() => setSelected(isSel ? null : p)}
                 />
                 <circle cx={p.x} cy={p.y} r={isSel ? "5" : "3.5"} fill={p.color} stroke="var(--soc-bg)" strokeWidth="1.5" opacity="0.95" className="pointer-events-none" />
-                <text x={p.x} y={padding.t + innerH + 18} textAnchor="middle" fontSize="9" fill="var(--soc-text-muted)">{p.label}</text>
+                <text x={labelX} y={padding.t + innerH + 18} textAnchor="middle" fontSize="9" fill="var(--soc-text-muted)">{p.label}</text>
               </g>
             );
           })}
         </svg>
+        {selected &&
+          (() => {
+            const pos = getContainedTooltip(selected.x, selected.y, width, height);
+            return (
+              <div
+                className="pointer-events-none absolute z-20 min-w-[110px] max-w-[180px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-xl"
+                style={{
+                  left: `${pos.left}px`,
+                  top: `${pos.top}px`,
+                  transform: "translateX(-50%)",
+                }}
+              >
+                <div className="font-semibold text-slate-300 break-words">{selected.label}</div>
+                <div className="mt-1 text-slate-500">{selected.value} {totalLabel}</div>
+              </div>
+            );
+          })()}
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 justify-center px-1 mt-1">
         {points.map((p) => (
@@ -389,19 +524,6 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items" }) =
           </div>
         ))}
       </div>
-      {selected && (
-        <div
-          className="pointer-events-none absolute z-10 min-w-[110px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-xl"
-          style={{
-            left: `${Math.min(Math.max((selected.x / width) * 100, 10), 84)}%`,
-            top: `${Math.max(((selected.y - 46) / height) * 100, 2)}%`,
-            transform: "translate(-50%, -100%)",
-          }}
-        >
-          <div className="font-semibold text-slate-300">{selected.label}</div>
-          <div className="mt-1 text-slate-500">{selected.value} {totalLabel}</div>
-        </div>
-      )}
     </div>
   );
 };
@@ -409,7 +531,7 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items" }) =
 const CompactBarChart = ({ items, emptyLabel = "No data available" }) => {
   if (!items || items.length === 0) {
     return (
-      <div className="flex min-h-24 items-center justify-center text-[11px] text-slate-500">
+      <div className="flex h-full items-center justify-center px-2 py-10 text-center text-xs text-slate-600">
         {emptyLabel}
       </div>
     );
@@ -418,24 +540,24 @@ const CompactBarChart = ({ items, emptyLabel = "No data available" }) => {
   const maxValue = Math.max(...items.map((d) => d.value), 1);
 
   return (
-    <div className="space-y-2.5">
+    <div className="flex flex-col gap-3">
       {items.map((item, i) => (
-        <div key={item.label} className="flex flex-col">
-          <div className="flex items-center gap-1.5">
-            <span className="w-4 text-[11px] font-bold text-slate-500 shrink-0">
+        <div key={item.label} className="flex flex-col gap-1 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="w-5 text-[13px] font-bold text-slate-500 shrink-0">
               {i + 1}.
             </span>
-            <span className="flex-1 min-w-0 text-[11px] font-mono text-slate-400 truncate" title={item.label}>
+            <span className="flex-1 min-w-0 text-[13px] font-mono text-slate-300 truncate" title={item.label}>
               {item.label}
             </span>
-            <span className="text-[12px] font-bold text-slate-400 tabular-nums shrink-0 ml-1">
+            <span className="text-[13px] font-bold text-slate-400 tabular-nums shrink-0 ml-1">
               {item.value}x
             </span>
           </div>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <span className="w-4 shrink-0" />
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="w-5 shrink-0" />
             <div
-              className="flex-1 bg-[var(--soc-elevated)] border border-[var(--soc-border-strong)] rounded h-4 overflow-hidden"
+              className="flex-1 bg-[var(--soc-bg)] rounded h-4 overflow-hidden"
               title={`${item.label}: ${item.value} executions`}
             >
               <div
@@ -443,7 +565,6 @@ const CompactBarChart = ({ items, emptyLabel = "No data available" }) => {
                 style={{
                   width: `${(item.value / maxValue) * 100}%`,
                   backgroundColor: item.color,
-                  opacity: 0.85,
                 }}
               />
             </div>
@@ -461,12 +582,12 @@ const TopAgentsCard = ({ agents }) => {
   const maxValue = Math.max(...agents.map((a) => a.value), 1);
   const COLORS = ["#34d399", "#38bdf8", "#fbbf24", "#f97316", "#a78bfa"];
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       {agents.map((item, i) => {
         const color = COLORS[i % COLORS.length];
         return (
-          <div key={item.label} className="flex flex-col">
-            <div className="flex items-center gap-1.5">
+          <div key={item.label} className="flex flex-col gap-1 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0">
               <span className="w-5 text-[13px] font-bold text-slate-500 shrink-0">
                 {i + 1}.
               </span>
@@ -477,7 +598,7 @@ const TopAgentsCard = ({ agents }) => {
                 {new Intl.NumberFormat("en-US").format(item.value)}
               </span>
             </div>
-            <div className="flex items-center gap-1.5 mt-1">
+            <div className="flex items-center gap-1.5 min-w-0">
               <span className="w-5 shrink-0" />
               <div
                 className="flex-1 bg-[var(--soc-bg)] rounded h-4 overflow-hidden"
@@ -622,64 +743,164 @@ const CommandHighlighter = ({ command }) => {
 // ========================================
 const WORD_COLORS = ["#f472b6", "#38bdf8", "#4ade80", "#a78bfa", "#fb923c", "#34d399", "#f87171", "#facc15", "#60a5fa", "#e879f9"];
 
-const PayloadWordCloud = ({ words }) => {
+const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
   const rootRef = useRef(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+
+  // The SVG viewBox MUST track the live box size: a stale viewBox renders
+  // as a narrow centered blob (meet) or stretched text (none). Size is
+  // therefore re-synced from several sources — ResizeObserver, window
+  // resizes, a post-mount frame (layout/sidebar settle), and data changes.
+  const syncSize = useCallback(() => {
+    const node = rootRef.current;
+    if (!node) return;
+    const rect = node.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      setSize((prev) =>
+        Math.abs(prev.width - rect.width) < 1 && Math.abs(prev.height - rect.height) < 1
+          ? prev
+          : { width: rect.width, height: rect.height }
+      );
+    }
+  }, []);
 
   useEffect(() => {
     const node = rootRef.current;
     if (!node) return undefined;
-    const updateSize = () => {
-      const rect = node.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        setSize({ width: rect.width, height: rect.height });
-      }
-    };
-    updateSize();
-    const observer = new ResizeObserver(updateSize);
+    syncSize();
+    const raf = requestAnimationFrame(() => syncSize());
+    const observer = new ResizeObserver(syncSize);
     observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
+    window.addEventListener("resize", syncSize);
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+      window.removeEventListener("resize", syncSize);
+    };
+  }, [syncSize, words]);
 
-  if (!words || words.length === 0) return <div className="flex items-center justify-center h-full text-slate-600 text-xs">No command data</div>;
-  const W = size.width || 640, H = size.height || 300;
+  if (!words || words.length === 0) return <div className="m-auto flex items-center justify-center px-2 py-10 text-center text-slate-600 text-xs">No command data</div>;
+
+  // Follow the measured box (presentation only): never assume a minimum
+  // wider than the actual container, or words overflow on small phones.
+  const W = Math.max(size.width || 300, 140);
+  const H = Math.max(size.height || 160, 120);
+  const wScale = W / 620;
+
   const maxCount = words[0].count;
   const minCount = words[words.length - 1].count;
   const range = Math.max(1, maxCount - minCount);
-  const fontSize = (count) => Math.round(16 + ((count - minCount) / range) * 46);
-  const estWidth = (text, fs) => text.length * fs * 0.6;
+
+  const measureTextWidth = (() => {
+    const canvas = typeof document !== "undefined" ? document.createElement("canvas") : null;
+    const ctx = canvas ? canvas.getContext("2d") : null;
+    return (text, fs, weight) => {
+      if (!ctx || !fs || fs <= 0) return text.length * fs * 0.6;
+      ctx.font = `${weight} ${fs}px monospace`;
+      return Math.ceil(ctx.measureText(text).width);
+    };
+  })();
+
+  const toWeight = (fs) => (fs > 26 ? "800" : fs > 18 ? "700" : "500");
+  const SAFE_X = 14;
+  const SAFE_Y = 12;
+  const minInnerW = 2 * SAFE_X;
+  const minInnerH = 2 * SAFE_Y;
+
+  const fitFontSize = (text, fs) => {
+    const maxW = W - minInnerW;
+    const maxH = H - minInnerH;
+    if (maxW < 12 || maxH < 12) return 8;
+    let f = fs;
+    let weight = toWeight(f);
+    for (let iter = 0; iter < 3; iter++) {
+      const w = measureTextWidth(text, f, weight);
+      const h = f * 1.4;
+      const scale = Math.min(maxW / w, maxH / h);
+      if (scale >= 1) break;
+      f = Math.max(8, Math.floor(f * scale));
+      weight = toWeight(f);
+    }
+    return f;
+  };
+
+  const fontSize = (count) => Math.round((10 + ((count - minCount) / range) * 27) * Math.min(1, Math.max(0.5, wScale)));
   const placed = [];
   const rects = [];
   const overlaps = (nx, ny, nw, nh) => {
-    const pad = 4;
-    return rects.some(r => nx - nw / 2 - pad < r.x + r.w / 2 && nx + nw / 2 + pad > r.x - r.w / 2 && ny - nh / 2 - pad < r.y + r.h / 2 && ny + nh / 2 + pad > r.y - r.h / 2);
+    const pad = 3;
+    return rects.some((r) =>
+      nx - nw / 2 - pad < r.x + r.w / 2 &&
+      nx + nw / 2 + pad > r.x - r.w / 2 &&
+      ny - nh / 2 - pad < r.y + r.h / 2 &&
+      ny + nh / 2 + pad > r.y - r.h / 2
+    );
   };
+
   for (let i = 0; i < words.length; i++) {
     const { text, count } = words[i];
-    const fs = fontSize(count);
-    const tw = estWidth(text, fs);
-    const th = fs * 1.2;
-    let placed_x = W / 2, placed_y = H / 2, found = false;
+    const fs = fitFontSize(text, fontSize(count));
+    const weight = toWeight(fs);
+    const tw = measureTextWidth(text, fs, weight);
+    const th = Math.ceil(fs * 1.4);
+    if (tw > W - minInnerW || th > H - minInnerH) continue;
+
+    let placedX = W / 2;
+    let placedY = H / 2;
+    let found = false;
     for (let step = 0; step < 800; step++) {
-      const angle = step * 0.35, radius = step * 0.8;
-      const cx = W / 2 + radius * Math.cos(angle), cy = H / 2 + radius * Math.sin(angle) * 0.6;
-      if (cx - tw / 2 > 2 && cx + tw / 2 < W - 2 && cy - th / 2 > 2 && cy + th / 2 < H - 2 && !overlaps(cx, cy, tw, th)) {
-        placed_x = cx; placed_y = cy; found = true; break;
+      const angle = step * 0.35;
+      // Wider spiral fills short-wide boxes edge-to-edge so the cloud
+      // does not collapse into a flat band in the middle (closer to
+      // the File Integrity cloud behaviour).
+      const radius = step * 0.62;
+      const cx = W / 2 + radius * Math.cos(angle);
+      const cy = H / 2 + radius * Math.sin(angle) * 0.8;
+      if (cx - tw / 2 >= SAFE_X && cx + tw / 2 <= W - SAFE_X && cy - th / 2 >= SAFE_Y && cy + th / 2 <= H - SAFE_Y && !overlaps(cx, cy, tw, th)) {
+        placedX = cx;
+        placedY = cy;
+        found = true;
+        break;
       }
     }
-    if (found || i === 0) {
-      rects.push({ x: placed_x, y: placed_y, w: tw, h: th });
-      placed.push({ text, fs, color: WORD_COLORS[i % WORD_COLORS.length], opacity: 0.65 + ((count - minCount) / range) * 0.35, x: placed_x, y: placed_y, count });
+
+    if (found) {
+      rects.push({ x: placedX, y: placedY, w: tw, h: th });
+      placed.push({ text, fs, weight, color: WORD_COLORS[i % WORD_COLORS.length], opacity: 0.65 + ((count - minCount) / range) * 0.35, x: placedX, y: placedY, count });
     }
   }
+
+  // Uniform scaling only: with "meet" the text can never be stretched
+  // non-uniformly (gepeng) even if the measured box lags the real box —
+  // worst case is small even margins, never squished glyphs.
   return (
-    <div ref={rootRef} className="w-full h-full min-h-0">
-      <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="command-word-cloud block w-full h-full">
+    <div ref={rootRef} className="relative w-full h-full min-h-0">
+      <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="command-word-cloud block w-full h-full">
         <defs><radialGradient id="wcGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#0f172a" stopOpacity="0" /><stop offset="100%" stopColor="#020617" stopOpacity="0.6" /></radialGradient></defs>
-        <rect className="command-word-cloud-bg" width={W} height={H} fill="url(#wcGlow)" rx={8} />
+        <rect className="command-word-cloud-bg" width={W} height={H} fill="url(#wcGlow)" rx={12} />
         {placed.map((w) => (
-          <text key={w.text} x={w.x} y={w.y} textAnchor="middle" dominantBaseline="middle" fontSize={w.fs} fontWeight={w.fs > 46 ? "800" : w.fs > 30 ? "700" : "500"} fill={w.color} opacity={w.opacity} style={{ cursor: "default", fontFamily: "monospace" }}>
-            <title>{`${w.text}: ${w.count} occurrences`}</title>{w.text}
+          <text
+            key={w.text}
+            className="fim-payload-span"
+            x={w.x}
+            y={w.y}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize={w.fs}
+            fontWeight={activeWord === w.text ? "600" : w.weight}
+            fill={w.color}
+            stroke={activeWord === w.text ? w.color : "none"}
+            strokeWidth={activeWord === w.text ? 0.5 : 0}
+            opacity={activeWord != null && activeWord !== w.text ? 0.4 : activeWord === w.text ? 1 : w.opacity}
+            style={{ cursor: typeof onWordClick === "function" ? "pointer" : "default", fontFamily: "monospace", transition: "opacity 120ms, fill 120ms" }}
+            role={typeof onWordClick === "function" ? "button" : undefined}
+            tabIndex={typeof onWordClick === "function" ? 0 : undefined}
+            aria-label={typeof onWordClick === "function" ? `Filter logs containing ${w.text}` : undefined}
+            onClick={typeof onWordClick === "function" ? () => onWordClick(w.text) : undefined}
+            onKeyDown={typeof onWordClick === "function" ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onWordClick(w.text); } } : undefined}
+          >
+            <title>{`${w.text}: ${w.count} occurrences${typeof onWordClick === "function" ? " — click to filter logs" : ""}`}</title>
+            {w.text}
           </text>
         ))}
       </svg>
@@ -701,7 +922,6 @@ const CHART_COLORS = ["#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e"];
 const DEFAULT_PAGE_SIZE = 25;
 const ANALYTICS_LIMIT = 1000;
 const TIMELINE_BUCKET_MS = 60 * 1000;
-const FALLBACK_TIMELINE_BUCKET_MS = 60 * 60 * 1000;
 
 async function fetchJson(url) {
   const response = await fetch(url);
@@ -753,48 +973,7 @@ function countBy(items, getKey) {
     .sort((a, b) => b.value - a.value);
 }
 
-function createTimelineBucketPoint(
-  timestamp,
-  value,
-  { suspicious = 0, bucketMs = TIMELINE_BUCKET_MS } = {}
-) {
-  const startDate = new Date(timestamp);
-  if (Number.isNaN(startDate.getTime())) return null;
 
-  const start = startDate.toISOString();
-
-  return {
-    key: start,
-    t: start,
-    start,
-    end: new Date(startDate.getTime() + bucketMs - 1).toISOString(),
-    bucketMs,
-    v: value,
-    suspicious,
-  };
-}
-
-function buildTimelineFromLogs(logs) {
-  if (!logs.length) return [];
-
-  const buckets = new Map();
-
-  for (const log of logs) {
-    const date = new Date(log.timestamp);
-    if (Number.isNaN(date.getTime())) continue;
-
-    date.setMinutes(0, 0, 0);
-    const key = date.toISOString();
-    buckets.set(key, (buckets.get(key) || 0) + 1);
-  }
-
-  return Array.from(buckets.entries())
-    .sort(([a], [b]) => new Date(a) - new Date(b))
-    .map(([t, v]) =>
-      createTimelineBucketPoint(t, v, { bucketMs: FALLBACK_TIMELINE_BUCKET_MS })
-    )
-    .filter(Boolean);
-}
 
 function formatTimelineBucketLabel(point) {
   if (!point?.start) return "";
@@ -830,8 +1009,7 @@ function extractHighlightedCommandKeywords(logs) {
 
   return Array.from(keywordCounts.entries())
     .map(([text, count]) => ({ text, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 40);
+    .sort((a, b) => b.count - a.count || a.text.localeCompare(b.text));
 }
 
 // ========================================
@@ -866,11 +1044,12 @@ const HostMonitoring = () => {
   });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [selectedKeyword, setSelectedKeyword] = useState(null);
 
   const [logs, setLogs] = useState([]);
   const [analyticsLogs, setAnalyticsLogs] = useState([]);
   const [dangerousLogs, setDangerousLogs] = useState([]);
-  const [timelineData, setTimelineData] = useState([]);
+  const [backendTimelineData, setBackendTimelineData] = useState([]);
   const [backendStats, setBackendStats] = useState(null);
   const [pagination, setPagination] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -880,9 +1059,10 @@ const HostMonitoring = () => {
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth : 1280
   );
-  const [timelineChartHeight, setTimelineChartHeight] = useState(320);
+  const [timelineChartHeight, setTimelineChartHeight] = useState(250);
 
   const logsTableRef = useRef(null);
+  const topAgentsPanelRef = useRef(null);
 
   const loadDashboardData = useCallback(async () => {
     const params = new URLSearchParams({
@@ -950,15 +1130,6 @@ const HostMonitoring = () => {
       const normalizedLogs = (listResponse.data || []).map(normalizeLinuxCommand);
       const normalizedAnalyticsLogs = (analyticsResponse.data || []).map(normalizeLinuxCommand);
       const normalizedDangerousLogs = (dangerousResponse.data || []).map(normalizeLinuxCommand);
-      const apiTimeline = (timelineResponse.data || [])
-        .map((item) =>
-          createTimelineBucketPoint(item.timestamp, item.total || 0, {
-            suspicious: item.suspicious || 0,
-            bucketMs: TIMELINE_BUCKET_MS,
-          })
-        )
-        .filter(Boolean)
-        .filter((item) => item.v > 0 || item.suspicious > 0);
 
       setLogs(normalizedLogs);
       setAnalyticsLogs(normalizedAnalyticsLogs.length ? normalizedAnalyticsLogs : normalizedLogs);
@@ -976,7 +1147,7 @@ const HostMonitoring = () => {
         }
       );
       setBackendStats(statsResponse.data || null);
-      setTimelineData(apiTimeline.length ? apiTimeline : buildTimelineFromLogs(normalizedLogs));
+      setBackendTimelineData(Array.isArray(timelineResponse.data) ? timelineResponse.data : []);
       setLastUpdated(new Date().toISOString());
     } catch (err) {
       console.error(err);
@@ -990,6 +1161,99 @@ const HostMonitoring = () => {
   useEffect(() => {
     loadDashboardData();
   }, [loadDashboardData]);
+
+  const timelineData = useMemo(() => {
+    const rangeMsMap = {
+      "1h": 3600000,
+      "24h": 86400000,
+      "7d": 604800000,
+      "30d": 2592000000,
+    };
+
+    let rangeMs;
+    let startMs;
+    let endMs;
+
+    if (filterMode === "custom") {
+      const { start, end } = getIsoDateRange(normalizeDateRange(customDateRange));
+      startMs = new Date(start).getTime();
+      endMs = new Date(end).getTime();
+      rangeMs = Math.max(endMs - startMs, 1);
+    } else {
+      rangeMs = rangeMsMap[rangeKey] ?? 86400000;
+      const nowMs = Date.now();
+      startMs = nowMs - rangeMs;
+      endMs = nowMs;
+    }
+
+    let stepMs =
+      filterMode === "custom"
+        ? rangeMs <= 3600000
+          ? 300000
+          : rangeMs <= 86400000
+            ? 3600000
+            : rangeMs <= 604800000
+              ? 21600000
+              : 86400000
+        : rangeKey === "1h"
+          ? 300000
+          : rangeKey === "24h"
+            ? 3600000
+            : rangeKey === "7d"
+              ? 21600000
+              : 86400000;
+
+    const bucketStart = (ms) => Math.floor(ms / stepMs) * stepMs;
+    const buckets = new Map();
+
+    const hasBackendData =
+      Array.isArray(backendTimelineData) &&
+      backendTimelineData.length > 0 &&
+      backendTimelineData.some((it) => (it.total || 0) > 0 || (it.suspicious || 0) > 0);
+
+    if (hasBackendData) {
+      for (const item of backendTimelineData) {
+        const ms = new Date(item.timestamp).getTime();
+        if (!Number.isFinite(ms)) continue;
+        const b = bucketStart(ms);
+        const existing = buckets.get(b) || { total: 0, suspicious: 0 };
+        existing.total += Number(item.total) || 0;
+        existing.suspicious += Number(item.suspicious) || 0;
+        buckets.set(b, existing);
+      }
+    } else {
+      const sourceLogs = analyticsLogs.length ? analyticsLogs : logs;
+      for (const log of sourceLogs) {
+        const ms = new Date(log.timestamp).getTime();
+        if (!Number.isFinite(ms) || ms < startMs || ms > endMs) continue;
+        const b = bucketStart(ms);
+        const existing = buckets.get(b) || { total: 0, suspicious: 0 };
+        existing.total += 1;
+        if (log.command?.risk === "suspicious" || log.risk === "suspicious") {
+          existing.suspicious += 1;
+        }
+        buckets.set(b, existing);
+      }
+    }
+
+    const series = [];
+    for (let t = bucketStart(startMs); t <= bucketStart(endMs); t += stepMs) {
+      const bData = buckets.get(t) || { total: 0, suspicious: 0 };
+      const startIso = new Date(t).toISOString();
+      const endIso = new Date(t + stepMs - 1).toISOString();
+      series.push({
+        key: String(t),
+        t,
+        start: startIso,
+        end: endIso,
+        bucketMs: stepMs,
+        v: bData.total,
+        suspicious: bData.suspicious,
+      });
+    }
+
+    return series;
+  }, [filterMode, customDateRange, rangeKey, backendTimelineData, analyticsLogs, logs]);
 
   const stats = useMemo(() => {
     const loadedTotalCommands = logs.length;
@@ -1010,16 +1274,21 @@ const HostMonitoring = () => {
   }, [backendStats, logs, pagination]);
 
   const analytics = useMemo(() => {
+    // Range-wide source: analyticsLogs is fetched with the same start/end
+    // as the selected date filter (up to ANALYTICS_LIMIT rows), so Top
+    // Agents and sibling summaries always reflect the active period —
+    // not just the current table page.
+    const rangedLogs = analyticsLogs.length ? analyticsLogs : logs;
     const suspiciousSourceLogs = dangerousLogs.length
       ? dangerousLogs
       : (analyticsLogs.length ? analyticsLogs : logs).filter((log) => log.command.risk === "suspicious");
     const uniqueAgents = new Set(
-      logs
+      rangedLogs
         .map((log) => log.agentName)
         .filter((agentName) => agentName && agentName !== "-")
     ).size;
 
-    const topUsers = (backendStats?.users?.length ? backendStats.users : countBy(logs, (log) => log.user))
+    const topUsers = (backendStats?.users?.length ? backendStats.users : countBy(rangedLogs, (log) => log.user))
       .slice(0, 5)
       .map((it, i) => ({
         label: it.user || it.label,
@@ -1029,7 +1298,7 @@ const HostMonitoring = () => {
 
     // Top agents should be derived from the same agent label shown in the table.
     const agentMap = new Map();
-    for (const log of logs) {
+    for (const log of rangedLogs) {
       const agentName = log.agentName;
       if (!agentName || agentName === "-") continue;
       const existing = agentMap.get(agentName) || { label: agentName, value: 0, lastSeen: 0 };
@@ -1040,8 +1309,17 @@ const HostMonitoring = () => {
       }
       agentMap.set(agentName, existing);
     }
-    const topAgents = Array.from(agentMap.values())
-      .sort((a, b) => b.value - a.value || b.lastSeen - a.lastSeen)
+    // Prefer the backend terms aggregation (complete across the whole date
+    // range); fall back to the client-side sample when unavailable.
+    const backendAgents = Array.isArray(backendStats?.agents) ? backendStats.agents : [];
+    const topAgentsSource = backendAgents.length
+      ? backendAgents.map((it) => ({
+        label: it.agent || it.label,
+        value: it.count || it.value,
+        lastSeen: 0,
+      }))
+      : Array.from(agentMap.values()).sort((a, b) => b.value - a.value || b.lastSeen - a.lastSeen);
+    const topAgents = topAgentsSource
       .slice(0, 5)
       .map((it, i) => ({
         label: it.label,
@@ -1069,7 +1347,7 @@ const HostMonitoring = () => {
       color: CHART_COLORS[i % CHART_COLORS.length],
     }));
 
-    const topSessions = countBy(logs, (log) => log.sessionId && log.sessionId !== "-" ? log.sessionId : null)
+    const topSessions = countBy(rangedLogs, (log) => log.sessionId && log.sessionId !== "-" ? log.sessionId : null)
       .slice(0, 5)
       .map((it, i) => ({
         label: it.label.length > 18 ? `${it.label.slice(0, 16)}...` : it.label,
@@ -1096,6 +1374,9 @@ const HostMonitoring = () => {
     () => extractHighlightedCommandKeywords(wordCloudSourceLogs),
     [wordCloudSourceLogs]
   );
+
+  // Height is now controlled by CSS (.soc-panel--responsive-height) for
+  // responsiveness; no inline fixed height needed.
 
   const filteredLogs = useMemo(() => {
     let result = logs;
@@ -1125,6 +1406,56 @@ const HostMonitoring = () => {
     return [...result].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   }, [logs, searchQuery, selectedTimelinePoint, suspiciousOnly]);
 
+  const keywordFilterActive = Boolean(selectedKeyword);
+
+  const crossFilteredLogs = useMemo(() => {
+    if (!keywordFilterActive) return null;
+
+    let result = wordCloudSourceLogs;
+
+    if (selectedTimelinePoint?.start && selectedTimelinePoint?.end) {
+      const bucketStart = new Date(selectedTimelinePoint.start).getTime();
+      const bucketEnd = new Date(selectedTimelinePoint.end).getTime();
+
+      result = result.filter((log) => {
+        const logTime = new Date(log.timestamp).getTime();
+
+        return Number.isFinite(logTime) && logTime >= bucketStart && logTime <= bucketEnd;
+      });
+    }
+
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (l) => l.user.toLowerCase().includes(q) || (l.command?.cmd || "").toLowerCase().includes(q)
+      );
+    }
+
+    if (suspiciousOnly) {
+      result = result.filter((l) => l.command.risk === "suspicious");
+    }
+
+    if (selectedKeyword) {
+      const needle = String(selectedKeyword).toLowerCase();
+      result = result.filter((l) => (l.command?.cmd || "").toLowerCase().includes(needle));
+    }
+
+    return [...result].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  }, [wordCloudSourceLogs, keywordFilterActive, selectedKeyword, selectedTimelinePoint, searchQuery, suspiciousOnly]);
+
+  const handleSelectKeyword = useCallback(
+    (word) => {
+      setSelectedKeyword((prev) => (prev === word ? null : word));
+      setPage(1);
+    },
+    []
+  );
+
+  const clearKeywordFilter = useCallback(() => {
+    setSelectedKeyword(null);
+    setPage(1);
+  }, []);
+
   const sessionCommands = useMemo(() => {
     if (!selectedSession) return [];
 
@@ -1139,14 +1470,14 @@ const HostMonitoring = () => {
       current?.key === point.key
         ? null
         : {
-            key: point.key,
-            time: point.time,
-            start: point.start || point.time,
-            end: point.end || point.time,
-            bucketMs: point.bucketMs || TIMELINE_BUCKET_MS,
-          }
+          key: point.key,
+          time: point.time,
+          start: point.start || point.time,
+          end: point.end || point.time,
+          bucketMs: point.bucketMs || TIMELINE_BUCKET_MS,
+        }
     );
-    
+
     // Scroll to logs table after state update
     setTimeout(() => {
       if (logsTableRef.current && typeof logsTableRef.current.scrollIntoView === "function") {
@@ -1166,6 +1497,36 @@ const HostMonitoring = () => {
   }, []);
 
   const isMobile = viewportWidth < 768;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const updateTimelineHeight = () => {
+      if (isMobile) {
+        setTimelineChartHeight(110);
+        return;
+      }
+
+      const panelHeight = topAgentsPanelRef.current?.getBoundingClientRect().height;
+      if (!panelHeight) return;
+
+      const nextHeight = clamp(Math.round(panelHeight - 104), 180, 420);
+      setTimelineChartHeight(nextHeight);
+    };
+
+    updateTimelineHeight();
+
+    if (typeof ResizeObserver === "undefined" || !topAgentsPanelRef.current) {
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(() => {
+      updateTimelineHeight();
+    });
+
+    observer.observe(topAgentsPanelRef.current);
+    return () => observer.disconnect();
+  }, [isMobile, viewportWidth]);
 
   const goToPage = useCallback(
     async (nextPage) => {
@@ -1189,53 +1550,55 @@ const HostMonitoring = () => {
 
   return (
     <>
-    <div className="p-4 md:p-5 flex flex-col gap-4 w-full">
-        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-3 md:p-4 shadow-lg">
+      <div className="soc-page-shell attack-page flex flex-col gap-3 sm:gap-4 w-full min-w-0">
+        <div className="soc-page-heading attack-page-heading bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-3 md:p-4">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-4">
             <div>
-              <h1 className="text-base font-bold text-white flex items-center gap-2">
-                <Terminal className="h-5 w-5 text-orange-400" />
+              <h1 className="soc-page-title flex items-center gap-2">
+                <Terminal className="h-4 w-4 sm:h-5 sm:w-5 text-orange-400" />
                 Host Monitoring
               </h1>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="soc-page-subtitle">
                 Real-time Linux command auditing and user activity tracking
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-2 md:p-4 shadow-lg flex flex-col gap-3 md:gap-4">
-          <div className="flex flex-col items-start gap-1 md:flex-row md:items-center md:justify-between md:gap-2">
-            <label className="hidden items-center gap-1 text-[10px] text-slate-400 sm:flex">
-              <span>Rows</span>
-            </label>
-            <div className="relative flex items-center bg-[var(--soc-card)] rounded border border-[var(--soc-border)]">
-              <select
-                value={pageSize}
-                onChange={(event) => {
-                  setPage(1);
-                  setPageSize(Number(event.target.value));
-                  // Scroll to logs table
-                  setTimeout(() => {
-                    if (logsTableRef.current && typeof logsTableRef.current.scrollIntoView === "function") {
-                      try {
-                        logsTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-                      } catch (e) {
-                        // ignore
+        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-2 md:p-4 flex flex-col gap-3 md:gap-4 attack-filter-card">
+          <div className="soc-data-toolbar attack-toolbar flex flex-row flex-wrap items-center justify-between gap-2">
+            <div className="rows-selector flex items-center gap-2 min-w-0 flex-shrink-0">
+              <label className="hidden items-center gap-1 text-[10px] text-slate-400 sm:flex whitespace-nowrap">
+                <span>Rows</span>
+              </label>
+              <div className="relative flex items-center bg-[var(--soc-card)] rounded border border-[var(--soc-border)]">
+                <select
+                  value={pageSize}
+                  onChange={(event) => {
+                    setPage(1);
+                    setPageSize(Number(event.target.value));
+                    // Scroll to logs table
+                    setTimeout(() => {
+                      if (logsTableRef.current && typeof logsTableRef.current.scrollIntoView === "function") {
+                        try {
+                          logsTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+                        } catch (e) {
+                          // ignore
+                        }
                       }
-                    }
-                  }, 100);
-                }}
-                className="appearance-none bg-transparent py-1.5 pl-2 pr-5 text-left text-[11px] font-medium leading-tight text-slate-100 focus:outline-none"
-              >
-                {[10, 25, 50, 100].map((size) => (
-                  <option key={size} value={size} className="bg-white text-black">{size}</option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
+                    }, 100);
+                  }}
+                  className="appearance-none bg-transparent py-1.5 pl-2 pr-5 text-left text-[11px] font-medium leading-tight text-slate-100 focus:outline-none"
+                >
+                  {[10, 25, 50, 100].map((size) => (
+                    <option key={size} value={size} className="bg-white text-black">{size}</option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
+              </div>
             </div>
 
-            <div className="ml-auto flex items-center gap-2">
+            <div className="soc-filter-toolbar ml-auto flex flex-wrap items-center gap-2">
               <RangeFilter
                 rangeKey={rangeKey}
                 onRangeChange={(nextRange) => {
@@ -1262,8 +1625,8 @@ const HostMonitoring = () => {
                 <CalendarRange className="h-3 w-3" />
                 {filterMode === "custom"
                   ? new Date(getIsoDateRange(normalizeDateRange(customDateRange)).start).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }) +
-                    " - " +
-                    new Date(getIsoDateRange(normalizeDateRange(customDateRange)).end).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+                  " - " +
+                  new Date(getIsoDateRange(normalizeDateRange(customDateRange)).end).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })
                   : rangeKey}
               </span>
             </div>
@@ -1271,11 +1634,11 @@ const HostMonitoring = () => {
 
           {error && (
             <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-xs text-red-200">
-              Gagal mengambil data backend: {error}
+              Failed to fetch backend data: {error}
             </div>
           )}
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+          <div className="soc-kpi-grid attack-kpi-grid">
             <div className="bg-orange-500/10 border border-orange-500/30 rounded p-2 md:p-3">
               <div className="text-[8px] md:text-[10px] text-orange-400 uppercase font-semibold">Commands</div>
               <div className="text-sm md:text-lg font-black text-orange-300 mt-0.5 md:mt-1">
@@ -1306,9 +1669,9 @@ const HostMonitoring = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch">
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-6 flex flex-col h-full overflow-visible">
-              <div className="flex justify-between items-center mb-4 md:mb-6 gap-2">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch attack-panel-grid">
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full min-w-0 overflow-visible attack-card">
+              <div className="flex justify-between items-center mb-4 md:mb-4 gap-2">
                 <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
                   <Activity className="h-3 md:h-4 w-3 md:w-4 text-orange-400" />
                   Command Timeline
@@ -1318,7 +1681,7 @@ const HostMonitoring = () => {
                   <div className="text-[11px] text-slate-600">Updated {formatLiveTimestamp(lastUpdated)}</div>
                 </div>
               </div>
-              <div className="flex-1 min-h-[240px] md:min-h-[300px] min-w-0 rounded-lg bg-[var(--soc-card)] p-2 md:p-4 overflow-visible">
+              <div className="flex-1 min-h-0 min-w-0 soc-chart--fim rounded-lg bg-[var(--soc-card)] p-2 md:p-4 overflow-visible">
                 <div className="min-w-0 h-full">
                   <WaveChart
                     data={timelineData}
@@ -1332,7 +1695,7 @@ const HostMonitoring = () => {
               </div>
             </div>
 
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-6 h-full">
+            <div ref={topAgentsPanelRef} className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full min-w-0 attack-card">
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
                   <div className="text-[11px] md:text-xs font-semibold text-slate-300">Top 5 Agents</div>
@@ -1347,41 +1710,45 @@ const HostMonitoring = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col h-full min-h-[260px]">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 items-stretch attack-split-grid">
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col h-full min-w-0">
               <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-2 w-full">Top Sessions</div>
-              <div className="flex-1 min-h-0 w-full">
+              <div className="flex-1 min-h-0 w-full soc-chart soc-chart--category overflow-visible flex flex-col">
                 <CategoryLineChart items={analytics.topSessions} color="#f97316" totalLabel="sessions" />
               </div>
             </div>
 
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col h-full min-h-[260px]">
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col h-full min-w-0">
               <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-2 w-full">Risk Indicators</div>
-              <div className="flex-1 min-h-0 w-full">
+              <div className="flex-1 min-h-0 w-full soc-chart soc-chart--category overflow-visible flex flex-col">
                 <CategoryLineChart items={analytics.riskIndicators} color="#ef4444" totalLabel="risks" />
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4">
-              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-4 flex items-center gap-2">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 items-stretch attack-split-grid">
+            <div
+              className={`bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 min-w-0 flex flex-col h-full ${(analytics.topSuspicious?.length ?? 0) > 0 ? "min-h-[220px] md:min-h-[260px]" : ""}`}
+            >
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-3 flex items-center gap-2 flex-shrink-0">
                 <AlertTriangle className="h-4 w-4" />
                 Top 5 Dangerous Commands Executed
               </div>
-              <CompactBarChart
-                items={analytics.topSuspicious}
-                emptyLabel="No suspicious command data found"
-              />
+              <div className="w-full flex-1 min-h-0">
+                <CompactBarChart
+                  items={analytics.topSuspicious}
+                  emptyLabel="No suspicious command data found"
+                />
+              </div>
             </div>
 
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4">
-              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-4 flex items-center gap-2">
+            <div className="soc-payload-distribution-card bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 shadow-lg min-w-0 flex flex-col h-full">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-3 flex items-center gap-2 flex-shrink-0">
                 <Terminal className="h-4 w-4" />
                 Command Keywords Distribution
               </div>
-              <div className="command-keywords-distribution-box w-full h-40">
-                <PayloadWordCloud words={commandPayloadWords} />
+              <div className={`command-keywords-distribution-box w-full h-0 flex-1 min-h-0 rounded-xl overflow-hidden ${(commandPayloadWords?.length ?? 0) > 0 ? "" : "is-empty"}`}>
+                <PayloadWordCloud words={commandPayloadWords} activeWord={selectedKeyword} onWordClick={handleSelectKeyword} />
               </div>
             </div>
           </div>
@@ -1389,29 +1756,26 @@ const HostMonitoring = () => {
 
         <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl shadow-lg overflow-hidden">
           <div ref={logsTableRef} className="p-3 md:p-4 border-b border-[var(--soc-border)] bg-[var(--soc-card)]">
-            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-              <div>
-                {selectedTimelinePoint && (
+            <div className="mb-4">
+              {selectedTimelinePoint && (
+                <div className="flex items-start justify-between gap-3">
                   <div className="text-xs text-orange-300">
                     Timeline filter: {formatTimelineBucketLabel(selectedTimelinePoint)}
                   </div>
-                )}
-              </div>
-
-              {selectedTimelinePoint && (
-                <button
-                  onClick={() => {
-                    setPage(1);
-                    setSelectedTimelinePoint(null);
-                  }}
-                  className="rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs font-medium text-orange-200 transition-colors hover:bg-orange-500/20"
-                >
-                  Reset Time Filter
-                </button>
+                  <button
+                    onClick={() => {
+                      setPage(1);
+                      setSelectedTimelinePoint(null);
+                    }}
+                    className="shrink-0 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs font-medium text-orange-200 transition-colors hover:bg-orange-500/20"
+                  >
+                    Reset Time Filter
+                  </button>
+                </div>
               )}
             </div>
 
-            <div className="flex gap-3 flex-wrap">
+            <div className="flex gap-3 flex-wrap attack-logs-search">
               <div className="flex-1 min-w-64 relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-500" />
                 <input
@@ -1430,22 +1794,51 @@ const HostMonitoring = () => {
                   setPage(1);
                   setSuspiciousOnly(!suspiciousOnly);
                 }}
-                className={`px-4 py-2 text-[13px] rounded-lg font-medium transition-colors ${
-                  suspiciousOnly
+                className={`px-4 py-2 text-[13px] rounded-lg font-medium transition-colors ${suspiciousOnly
                     ? "bg-red-600 text-white"
                     : "bg-slate-700 text-slate-400 hover:bg-slate-600"
-                }`}
+                  }`}
               >
                 Suspicious Only
               </button>
             </div>
           </div>
 
+          {keywordFilterActive && (
+            <div className="px-2 md:px-3 py-2 border-b border-[var(--soc-border)] bg-slate-900/40 flex flex-wrap items-center gap-1.5 md:gap-2">
+              <span className="text-[10px] md:text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Active Filters:</span>
+              {selectedKeyword && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] md:text-[11px] text-emerald-300">
+                  Keyword: {selectedKeyword}
+                  <button onClick={() => handleSelectKeyword(selectedKeyword)} className="hover:text-white" aria-label="Remove keyword filter"><X className="h-3 w-3" /></button>
+                </span>
+              )}
+              <span className="text-[10px] md:text-[11px] font-mono text-slate-400">
+                <span className="font-bold text-sky-300">{(crossFilteredLogs || []).length.toLocaleString()}</span>
+                <span className="hidden sm:inline"> matching logs</span>
+              </span>
+              <button
+                onClick={clearKeywordFilter}
+                className="ml-auto text-[10px] md:text-[11px] font-semibold text-slate-300 hover:text-sky-300 border border-slate-700 rounded-full px-2 py-0.5 hover:border-sky-500/50 transition-colors"
+              >
+                Clear all
+              </button>
+            </div>
+          )}
+
           <div className="overflow-x-auto">
-            <table className="w-full text-[10px] md:text-[11px] text-left whitespace-nowrap">
+            <table className="w-full min-w-[980px] table-fixed text-[10px] md:text-[11px] text-left whitespace-nowrap">
+              <colgroup>
+                <col style={{ width: "14%" }} />
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "14%" }} />
+                <col style={{ width: "12%" }} />
+                <col />
+                <col style={{ width: "10%" }} />
+              </colgroup>
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-800/70">
-                  {["waktu", "user", "agent", "session id", "command", "status"].map((header) => (
+                  {["time", "user", "agent", "session id", "command", "status"].map((header) => (
                     <th
                       key={header}
                       className="px-2 md:px-4 py-2 md:py-3 text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase"
@@ -1456,18 +1849,18 @@ const HostMonitoring = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredLogs.length > 0 ? (
-                  filteredLogs.map((log, idx) => (
+                {(keywordFilterActive ? crossFilteredLogs || [] : filteredLogs).length > 0 ? (
+                  (keywordFilterActive ? crossFilteredLogs || [] : filteredLogs).map((log, idx) => (
                     <tr
                       key={log.id}
-                      className={`border-b border-slate-800/60 hover:bg-slate-800/40 ${
-                        idx % 2 !== 0 ? "bg-slate-900/60" : ""
-                      }`}
+                      className={`border-b border-slate-800/60 hover:bg-slate-800/40 ${idx % 2 !== 0 ? "bg-slate-900/60" : ""
+                        }`}
                     >
                       <td className="px-2 md:px-4 py-1.5 md:py-3 text-slate-500 text-[10px] md:text-[11px]">
                         {new Date(log.timestamp).toLocaleString("en-US", {
                           month: "short",
                           day: "2-digit",
+                          year: "numeric",
                           hour: "2-digit",
                           minute: "2-digit",
                           second: "2-digit",
@@ -1487,8 +1880,10 @@ const HostMonitoring = () => {
                           {log.sessionId}
                         </button>
                       </td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-3 min-w-96">
-                        <CommandHighlighter command={log.command.cmd} />
+                      <td className="px-2 md:px-4 py-1.5 md:py-3 align-top">
+                        <div className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
+                          <CommandHighlighter command={log.command.cmd} />
+                        </div>
                       </td>
                       <td className="px-2 md:px-4 py-1.5 md:py-3">
                         {log.command.risk === "suspicious" ? (
@@ -1506,7 +1901,14 @@ const HostMonitoring = () => {
                 ) : (
                   <tr>
                     <td colSpan={6} className="px-2 md:px-4 py-10 text-center text-[10px] md:text-[11px] text-slate-500">
-                      No audit log entries found for the current filter.
+                      {keywordFilterActive ? (
+                        <div className="flex flex-col items-center gap-2">
+                          <span>No logs match the selected filters.</span>
+                          <button onClick={clearKeywordFilter} className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-semibold text-slate-300 hover:border-sky-500/50 hover:text-sky-300 transition-colors">Clear filters</button>
+                        </div>
+                      ) : (
+                        "No audit log entries found for the current filter."
+                      )}
                     </td>
                   </tr>
                 )}
@@ -1515,8 +1917,12 @@ const HostMonitoring = () => {
           </div>
 
           <PaginationControls
-            pagination={pagination || { total: filteredLogs.length, totalPages: 1, limit: pageSize }}
-            page={page}
+            pagination={keywordFilterActive
+              ? (crossFilteredLogs || []).length > 0
+                ? { total: (crossFilteredLogs || []).length, totalPages: 1, limit: (crossFilteredLogs || []).length }
+                : { total: 0, totalPages: 1, limit: pageSize }
+              : pagination || { total: filteredLogs.length, totalPages: 1, limit: pageSize }}
+            page={keywordFilterActive ? 1 : page}
             pageSize={pageSize}
             loading={refreshing || loading}
             onPageChange={goToPage}

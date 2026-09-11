@@ -1,4 +1,4 @@
-import {
+﻿import {
   addUser,
   deleteUser,
   pendingUser,
@@ -15,11 +15,11 @@ export const createUser = async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
 
-    // Validasi input
+    // Validate input
     if (!name || !email || !password) {
       return res.status(400).json({
         success: false,
-        message: "Nama, email, dan password harus diisi",
+        message: "Name, email, and password are required",
       });
     }
 
@@ -78,7 +78,7 @@ export const removeUser = async (req, res) => {
     if (!userId) {
       return res.status(400).json({
         success: false,
-        message: "User ID harus diisi",
+        message: "User ID is required",
       });
     }
 
@@ -105,7 +105,7 @@ export const suspendUser = async (req, res) => {
     if (!userId) {
       return res.status(400).json({
         success: false,
-        message: "User ID harus diisi",
+        message: "User ID is required",
       });
     }
 
@@ -130,7 +130,7 @@ export const restoreUser = async (req, res) => {
     if (!userId) {
       return res.status(400).json({
         success: false,
-        message: "User ID harus diisi",
+        message: "User ID is required",
       });
     }
 
@@ -156,14 +156,14 @@ export const changeUserRole = async (req, res) => {
     if (!userId) {
       return res.status(400).json({
         success: false,
-        message: "User ID harus diisi",
+        message: "User ID is required",
       });
     }
 
     if (!role) {
       return res.status(400).json({
         success: false,
-        message: "Role harus diisi",
+        message: "Role is required",
       });
     }
 

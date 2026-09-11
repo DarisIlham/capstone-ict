@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,42 +13,42 @@
 </head>
 <body>
 
-    <h2>💻 Daftar Agen Terhubung (Real-Time API)</h2>
+    <h2>💻 Connected Agents List (Real-Time API)</h2>
     <div id="agent-container">
-        <p>Memuat data langsung dari Wazuh API...</p>
+        <p>Loading data directly from the Wazuh API...</p>
     </div>
 
     <script>
         async function fetchWazuhAgents() {
             try {
-                // Memanggil backend Node.js buatan kita
+                // Call our custom Node.js backend
                 const response = await fetch('http://localhost:3000/api/agents');
                 const agents = await response.json();
                 
                 const container = document.getElementById('agent-container');
-                container.innerHTML = ''; // Bersihkan loading
+                container.innerHTML = ''; // Clear loading
 
-                // Tampilkan setiap agen ke layar
+                // Display each agent on the screen
                 agents.forEach(agent => {
-                    // Beri warna hijau jika aktif, merah jika mati
+                    // Green for active, red for disconnected
                     const statusClass = agent.status === 'active' ? 'status-active' : 'status-disconnected';
                     
                     const card = `
                         <div class="agent-card">
                             <h3>ID: ${agent.id} - ${agent.name}</h3>
                             <p><strong>IP Address:</strong> ${agent.ip}</p>
-                            <p><strong>Sistem Operasi:</strong> ${agent.os.name} ${agent.os.version}</p>
+                            <p><strong>Operating System:</strong> ${agent.os.name} ${agent.os.version}</p>
                             <p><strong>Status:</strong> <span class="${statusClass}">${agent.status.toUpperCase()}</span></p>
                         </div>
                     `;
                     container.innerHTML += card;
                 });
             } catch (error) {
-                document.getElementById('agent-container').innerHTML = '<p style="color:red;">Gagal terhubung ke Backend / API Wazuh.</p>';
+                document.getElementById('agent-container').innerHTML = '<p style="color:red;">Failed to connect to the Backend / Wazuh API.</p>';
             }
         }
 
-        // Jalankan saat pertama dibuka
+        // Run on first load
         fetchWazuhAgents();
     </script>
 </body>

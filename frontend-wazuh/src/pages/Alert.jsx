@@ -47,6 +47,24 @@ export default function Alert() {
   const [customDateRange, setCustomDateRange] = useState(() =>
     createDefaultDateRange(1)
   );
+  // Presentation-only viewport width for the responsive search placeholder.
+  // Filtering logic is untouched; only the placeholder text adapts.
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth : 1024
+  );
+
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const searchPlaceholder =
+    viewportWidth < 240
+      ? "Search..."
+      : viewportWidth < 280
+        ? "Search alerts..."
+        : "Search alerts by title, source, asset, or reason...";
 
   const effectiveRange =
     filterMode === "custom"
@@ -165,19 +183,19 @@ export default function Alert() {
   };
 
   return (
-    <div className="p-4 md:p-5 flex flex-col gap-4 w-full">
+    <div className="soc-page-shell flex flex-col gap-3 sm:gap-4 w-full min-w-0">
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-        <div>
-          <h1 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
-            <Bell className="h-4 w-4 text-sky-400" />
+      <div className="soc-dashboard-header alert-page-header">
+        <div className="alert-title-block">
+          <h1 className="soc-page-title flex items-center gap-2">
+            <Bell className="h-4 w-4 sm:h-5 sm:w-5 text-sky-400" />
             Security Alerts Center
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="soc-page-subtitle">
             Aggregated security alerts from all monitoring sources
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="soc-filter-toolbar flex flex-wrap items-center gap-2">
           <RangeFilter
             rangeKey={rangeKey}
             onRangeChange={(k) => {
@@ -206,7 +224,7 @@ export default function Alert() {
       </div>
 
       {/* Severity Counts */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className="alert-summary-grid grid grid-cols-1 min-[430px]:grid-cols-2 min-[1200px]:grid-cols-4 xl:grid-cols-4 gap-2">
         {[
           { label: "Critical", count: counts.critical, color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" },
           { label: "High", count: counts.high, color: "text-orange-400", bg: "bg-orange-500/10 border-orange-500/20" },
@@ -229,18 +247,18 @@ export default function Alert() {
       </div>
 
       {/* Search + Source Filter */}
-      <div className="flex flex-col lg:flex-row lg:items-center gap-2">
+      <div className="alert-search-row flex flex-col lg:flex-row lg:items-center gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search alerts by title, source, asset, or reason..."
+            placeholder={searchPlaceholder}
             className="w-full pl-10 pr-4 py-2 bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg text-xs text-[var(--soc-text-primary)] placeholder-slate-600 focus:outline-none focus:border-sky-500/50 transition-colors"
           />
         </div>
-        <div className="flex items-center gap-1 overflow-x-auto">
+        <div className="alert-source-filters flex items-center gap-2 overflow-x-auto">
           {["all", "Host Monitoring", "File Scanner", "FIM"].map((source) => (
             <button
               key={source}
@@ -258,14 +276,14 @@ export default function Alert() {
       </div>
 
       {/* Alert Feed */}
-      <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg overflow-hidden">
+      <div className="alert-feed-panel bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-16">
+          <div className="flex items-center justify-center py-10">
             <div className="animate-spin rounded-full h-8 w-8 border-2 border-sky-400 border-t-transparent" />
           </div>
         ) : filteredAlerts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <Shield className="h-10 w-10 text-slate-600 mb-3" />
+          <div className="alert-empty-state flex flex-col items-center justify-center py-10 text-center">
+            <Shield className="h-8 w-8 text-slate-600 mb-3" />
             <p className="text-sm text-slate-400 font-medium">No alerts found</p>
             <p className="text-xs text-slate-600 mt-1">
               {alerts.length === 0
