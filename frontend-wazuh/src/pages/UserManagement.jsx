@@ -38,6 +38,11 @@ const UserManagement = () => {
     loadUsers();
   }, [currentPage]);
 
+  useEffect(() => {
+    const interval = setInterval(() => loadUsers(), 30000);
+    return () => clearInterval(interval);
+  }, [currentPage]);
+
   const loadUsers = async () => {
     try {
       setLoading(true);

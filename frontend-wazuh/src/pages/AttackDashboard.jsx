@@ -192,7 +192,7 @@ const WaveChart = ({ data, color = "#f97316", rangeKey = "24h", height = 80, com
         {gridLines.map((gl) => (
           <g key={`grid-${gl.ratio}`}>
             <line x1={padding.l} y1={gl.y} x2={padding.l + innerW} y2={gl.y} stroke="var(--soc-border)" strokeDasharray="2,2" opacity="0.5" />
-            <text x={padding.l - 5} y={gl.y + 3} textAnchor="end" fontSize="8" fill="#64748b">{gl.value}</text>
+            <text x={padding.l - 5} y={gl.y + 3} textAnchor="end" fontSize="10" fill="#64748b" fontWeight="500">{gl.value}</text>
           </g>
         ))}
         <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="var(--soc-border)" />
@@ -278,8 +278,9 @@ const WaveChart = ({ data, color = "#f97316", rangeKey = "24h", height = 80, com
                 x={x}
                 y={padding.t + innerH + 14}
                 textAnchor={i === 0 ? "start" : i >= data.length - tickEvery ? "end" : "middle"}
-                fontSize="8"
+                fontSize="10"
                 fill="#64748b"
+                fontWeight="500"
               >
                 {formatBucketLabel(d.t, rangeKey)}
               </text>
@@ -466,7 +467,7 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items" }) =
           {gridLines.map((grid, idx) => (
             <g key={`grid-${idx}`}>
               <line x1={padding.l} y1={grid.y} x2={padding.l + innerW} y2={grid.y} stroke="var(--soc-border)" strokeWidth="1" opacity={grid.y === padding.t || grid.y === padding.t + innerH ? "1" : "0.5"} />
-              <text x={padding.l - 6} y={grid.y + 3} textAnchor="end" fontSize="10" fill="var(--soc-text-muted)" fontWeight="600">
+              <text x={padding.l - 6} y={grid.y + 3} textAnchor="end" fontSize="11" fill="var(--soc-text-muted)" fontWeight="600">
                 {grid.value}
               </text>
             </g>
@@ -492,7 +493,7 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items" }) =
                   onClick={() => setSelected(isSel ? null : p)}
                 />
                 <circle cx={p.x} cy={p.y} r={isSel ? "5" : "3.5"} fill={p.color} stroke="var(--soc-bg)" strokeWidth="1.5" opacity="0.95" className="pointer-events-none" />
-                <text x={labelX} y={padding.t + innerH + 18} textAnchor="middle" fontSize="9" fill="var(--soc-text-muted)">{p.label}</text>
+                <text x={labelX} y={padding.t + innerH + 18} textAnchor="middle" fontSize="10" fill="var(--soc-text-muted)" fontWeight="500">{p.label}</text>
               </g>
             );
           })}
@@ -1162,6 +1163,13 @@ const HostMonitoring = () => {
     loadDashboardData();
   }, [loadDashboardData]);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadDashboardData();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [loadDashboardData]);
+
   const timelineData = useMemo(() => {
     const rangeMsMap = {
       "1h": 3600000,
@@ -1681,8 +1689,8 @@ const HostMonitoring = () => {
                   <div className="text-[11px] text-slate-600 break-words">Updated {formatLiveTimestamp(lastUpdated)}</div>
                 </div>
               </div>
-              <div className="flex-1 min-h-0 min-w-0 soc-chart--fim rounded-lg bg-[var(--soc-card)] p-2 md:p-4 overflow-visible">
-                <div className="min-w-0 h-full">
+              <div className="min-w-0 soc-chart--timeline rounded-lg bg-[var(--soc-card)] p-2 md:p-4 overflow-hidden" style={{ height: `${timelineChartHeight}px` }}>
+                <div className="min-w-0 h-full w-full">
                   <WaveChart
                     data={timelineData}
                     rangeKey={rangeKey}

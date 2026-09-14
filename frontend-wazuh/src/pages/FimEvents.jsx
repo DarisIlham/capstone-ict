@@ -20,8 +20,8 @@ const clamp = (n, a, b) => Math.min(Math.max(n, a), b);
 const formatBucketLabel = (ms, rangeKey) => {
   const d = new Date(ms);
   if (rangeKey === "1h") return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-  if (rangeKey === "24h") return d.toLocaleTimeString("en-US", { hour: "2-digit" });
-  if (rangeKey === "7d") return d.toLocaleString("en-US", { weekday: "short", hour: "2-digit" });
+  if (rangeKey === "24h") return d.toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit" });
+  if (rangeKey === "7d") return d.toLocaleString("en-US", { weekday: "short", month: "short", day: "2-digit" });
   return d.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
 };
 
@@ -111,7 +111,7 @@ const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey, compact = f
         {gridLines.map((gl) => (
           <g key={`grid-${gl.ratio}`}>
             <line x1={padding.l} y1={gl.y} x2={padding.l + innerW} y2={gl.y} stroke="var(--soc-border)" strokeDasharray="2,2" opacity="0.5" />
-            <text x={padding.l - 5} y={gl.y + 3} textAnchor="end" fontSize="8" fill="#64748b">{gl.value}</text>
+            <text x={padding.l - 5} y={gl.y + 3} textAnchor="end" fontSize="10" fill="#64748b" fontWeight="500">{gl.value}</text>
           </g>
         ))}
         <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="var(--soc-border)" />
@@ -196,8 +196,9 @@ const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey, compact = f
                 x={x}
                 y={padding.t + innerH + 14}
                 textAnchor={i === 0 ? "start" : i >= data.length - tickEvery ? "end" : "middle"}
-                fontSize="8"
+                fontSize="10"
                 fill="#64748b"
+                fontWeight="500"
               >
                 {formatBucketLabel(d.t, rangeKey)}
               </text>
@@ -1750,7 +1751,7 @@ const FimEvents = ({ agentId = "all" }) => {
       </div>
 
       <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl shadow-lg overflow-hidden">
-        <div ref={logsTableRef} className="p-3 md:p-4 border-b border-[var(--soc-border)] bg-[var(--soc-card)]">
+        <div ref={logsTableRef} className="p-3 md:p-4 lg:p-3 border-b border-[var(--soc-border)] bg-[var(--soc-card)]">
           {selectedTimelinePoint && (
             <div className="mb-4 flex items-start justify-between gap-3">
               <div className="text-xs text-emerald-300">
@@ -1890,7 +1891,7 @@ const FimEvents = ({ agentId = "all" }) => {
             <thead>
               <tr className="border-b border-slate-800 bg-slate-800/70">
                 {["↓ time", "agent", "user", "path", "event", "payload", "severity"].map(h => (
-                  <th key={h} className="px-2 md:px-4 py-2 md:py-3 text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">{h}</th>
+                  <th key={h} className="px-2 md:px-4 lg:px-3 py-2 md:py-3 lg:py-2 text-[9px] md:text-[11px] lg:text-[10px] font-semibold text-slate-400 uppercase">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -1914,13 +1915,13 @@ const FimEvents = ({ agentId = "all" }) => {
                   className={`border-b border-slate-800/60 hover:bg-slate-800/40 ${idx % 2 !== 0 ? "bg-slate-900/60" : ""
                     }`}
                 >
-                  <td className="px-2 md:px-4 py-1.5 md:py-3 text-slate-500 text-[10px] md:text-[11px]">{formatTime(evt.timestamp)}</td>
-                  <td className="px-2 md:px-4 py-1.5 md:py-3 text-sky-400 font-medium text-[10px] md:text-[11px]">{evt.agentName}</td>
-                  <td className="px-2 md:px-4 py-1.5 md:py-3 text-violet-400 font-medium text-[10px] md:text-[11px]">{evt.username}</td>
-                  <td className="px-2 md:px-4 py-1.5 md:py-3 text-emerald-400 font-mono text-[10px] md:text-[11px] truncate">{evt.syscheckPath}</td>
-                  <td className="px-2 md:px-4 py-1.5 md:py-3">
+                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-slate-500 text-[10px] md:text-[11px] lg:text-[10px]">{formatTime(evt.timestamp)}</td>
+                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-sky-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]">{evt.agentName}</td>
+                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-violet-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]">{evt.username}</td>
+                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-emerald-400 font-mono text-[10px] md:text-[11px] lg:text-[10px] truncate">{evt.syscheckPath}</td>
+                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2">
                     <span
-                      className={`text-[10px] md:text-[11px] px-1 md:px-2 py-0.5 rounded border ${evt.syscheckEvent === "deleted"
+                      className={`text-[10px] md:text-[11px] lg:text-[10px] px-1 md:px-2 lg:px-1.5 py-0.5 rounded border ${evt.syscheckEvent === "deleted"
                           ? "text-red-400 bg-red-900/30"
                           : "text-green-400 bg-green-900/30"
                         }`}
@@ -1928,7 +1929,7 @@ const FimEvents = ({ agentId = "all" }) => {
                       {evt.syscheckEvent}
                     </span>
                   </td>
-                  <td className="px-2 md:px-4 py-1.5 md:py-3 text-slate-300 max-w-xs md:max-w-md text-[10px] md:text-[11px]">
+                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-slate-300 max-w-xs md:max-w-md lg:max-w-[320px] text-[10px] md:text-[11px] lg:text-[10px]">
                     {(() => {
                       const diffData = evt.fileDiff || evt.file_diff;
 
@@ -1949,11 +1950,11 @@ const FimEvents = ({ agentId = "all" }) => {
                       }
                     })()}
 
-                    <div className="text-[10px] md:text-[11px] font-semibold text-slate-100 opacity-80 border-t border-slate-800/50 pt-1">
+                    <div className="text-[10px] md:text-[11px] lg:text-[10px] font-semibold text-slate-100 opacity-80 border-t border-slate-800/50 pt-1">
                       {evt.ruleDescription || evt.rule_description}
                     </div>
                   </td>
-                  <td className="px-2 md:px-4 py-1.5 md:py-3">{renderSeverityBadge(evt.ruleLevel)}</td>
+                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2">{renderSeverityBadge(evt.ruleLevel)}</td>
                 </tr>
               ))}
             </tbody>
@@ -1961,7 +1962,7 @@ const FimEvents = ({ agentId = "all" }) => {
         </div>
 
         {/* --- TOMBOL NAVIGASI --- */}
-        <div className="border-t border-slate-800 bg-slate-900/50 px-4 py-3">
+        <div className="border-t border-slate-800 bg-slate-900/50 px-4 lg:px-3 py-3 lg:py-2">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
               <div className="text-[10px] md:text-[11px] font-mono text-slate-500">

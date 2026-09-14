@@ -172,11 +172,6 @@ const LoginPage = () => {
     }
   }, [notification.show]);
 
-  useEffect(() => {
-    setIsRecaptchaFilled(false);
-    recaptchaRef.current?.reset?.();
-  }, [theme]);
-
   return (
     <div className="login-page-shell min-h-dvh bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 relative overflow-hidden px-[clamp(20px,5vw,28px)] py-[clamp(20px,4vh,48px)]">
       {/* Background decoration */}

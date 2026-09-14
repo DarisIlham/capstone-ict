@@ -411,7 +411,9 @@ const formatBucketLabel = (timestamp, rangeKey) => {
   }
 
   if (rangeKey === '24h') {
-    return date.toLocaleTimeString('en-US', {
+    return date.toLocaleString('en-US', {
+      month: 'short',
+      day: '2-digit',
       hour: '2-digit',
     });
   }
@@ -419,7 +421,8 @@ const formatBucketLabel = (timestamp, rangeKey) => {
   if (rangeKey === '7d') {
     return date.toLocaleString('en-US', {
       weekday: 'short',
-      hour: '2-digit',
+      month: 'short',
+      day: '2-digit',
     });
   }
 

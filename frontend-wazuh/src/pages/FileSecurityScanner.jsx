@@ -50,8 +50,8 @@ const getBucketMsForRange = (rangeKey) => rangeToBucketMs[rangeKey] || rangeToBu
 const formatBucketLabel = (ms, currentRangeKey) => {
   const date = new Date(ms);
   if (currentRangeKey === "1h") return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-  if (currentRangeKey === "24h") return date.toLocaleTimeString("en-US", { hour: "2-digit" });
-  if (currentRangeKey === "7d") return date.toLocaleString("en-US", { weekday: "short", hour: "2-digit" });
+  if (currentRangeKey === "24h") return date.toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit" });
+  if (currentRangeKey === "7d") return date.toLocaleString("en-US", { weekday: "short", month: "short", day: "2-digit" });
   return date.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
 };
 
@@ -354,7 +354,7 @@ const WaveChart = ({
   data,
   color = "#ef4444",
   activeColor = "#fb7185",
-  height = 200,
+  height = 80,
   rangeKey,
   compact = false,
   activePointKey = null,
@@ -393,9 +393,12 @@ const WaveChart = ({
     );
   }
 
-  const maxV = Math.max(1, ...data.map((d) => Number(d.v || 0)));
-  const pointSpacing = data.length > 1 ? innerW / (data.length - 1) : innerW;
+  const maxV = Math.max(1, ...data.map((d) => d.v));
+  const pointSpacing = data.length ? innerW / (data.length - 1) : innerW;
   const defaultBucketMs = getBucketMsForRange(rangeKey);
+  const isDense = data.length > 30;
+  const denseVisualR = isDense ? 1.6 : 3.5;
+  const denseHitR = isDense ? 5 : 10;
 
   const gridSteps = 5;
   const gridLines = [];
@@ -411,12 +414,12 @@ const WaveChart = ({
   let pathD = "";
   for (let i = 0; i < data.length; i += 1) {
     const x = padding.l + i * pointSpacing;
-    const y = padding.t + innerH - (Number(data[i].v || 0) / maxV) * innerH;
+    const y = padding.t + innerH - (data[i].v / maxV) * innerH;
     if (i === 0) {
       pathD += `M ${x} ${y}`;
     } else {
       const prevX = padding.l + (i - 1) * pointSpacing;
-      const prevY = padding.t + innerH - (Number(data[i - 1].v || 0) / maxV) * innerH;
+      const prevY = padding.t + innerH - (data[i - 1].v / maxV) * innerH;
       const controlX = (prevX + x) / 2;
       pathD += ` C ${controlX} ${prevY}, ${controlX} ${y}, ${x} ${y}`;
     }
@@ -431,7 +434,7 @@ const WaveChart = ({
         {gridLines.map((grid) => (
           <g key={`grid-${grid.ratio}`}>
             <line x1={padding.l} y1={grid.y} x2={padding.l + innerW} y2={grid.y} stroke="var(--soc-border)" strokeDasharray="2,2" opacity="0.5" />
-            <text x={padding.l - 5} y={grid.y + 3} textAnchor="end" fontSize="8" fill="#64748b">{grid.value}</text>
+            <text x={padding.l - 5} y={grid.y + 3} textAnchor="end" fontSize="10" fill="#64748b" fontWeight="500">{grid.value}</text>
           </g>
         ))}
 
@@ -448,7 +451,7 @@ const WaveChart = ({
 
         {data.map((d, i) => {
           const x = padding.l + i * pointSpacing;
-          const y = padding.t + innerH - (Number(d.v || 0) / maxV) * innerH;
+          const y = padding.t + innerH - (d.v / maxV) * innerH;
           const pointKey = String(d.key ?? d.t);
           const bucketMsForPoint = d.bucketMs || defaultBucketMs;
           const pointData = {
@@ -468,13 +471,15 @@ const WaveChart = ({
               ? String(activePointKey) === pointKey
               : false;
           const isHighlighted = isHovered || isActive;
+          const visualR = `${denseVisualR}`;
+          const hitR = isHighlighted || isHovered ? (isDense ? "7" : "10") : `${denseHitR}`;
 
           return (
             <g key={`point-${pointKey}`}>
               <circle
                 cx={x}
                 cy={y}
-                r={isHighlighted ? "7" : "10"}
+                r={hitR}
                 fill="transparent"
                 className="cursor-pointer focus:outline-none"
                 style={{ outline: "none" }}
@@ -496,7 +501,7 @@ const WaveChart = ({
               <circle
                 cx={x}
                 cy={y}
-                r="3.5"
+                r={visualR}
                 fill={isActive ? activeColor : color}
                 stroke={isActive ? "#0f172a" : "none"}
                 strokeWidth="2.5"
@@ -516,8 +521,9 @@ const WaveChart = ({
                 x={x}
                 y={padding.t + innerH + 14}
                 textAnchor={i === 0 ? "start" : i >= data.length - tickEvery ? "end" : "middle"}
-                fontSize="8"
+                fontSize="10"
                 fill="#64748b"
+                fontWeight="500"
               >
                 {formatBucketLabel(d.t, rangeKey)}
               </text>
@@ -962,7 +968,7 @@ const FileSecurityScanner = () => {
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth : 1280
   );
-  const [timelineChartHeight, setTimelineChartHeight] = useState(160);
+  const [timelineChartHeight, setTimelineChartHeight] = useState(250);
   const [selectedTimelinePoint, setSelectedTimelinePoint] = useState(() =>
     urlStart && urlEnd ? { key: "custom", start: urlStart, end: urlEnd } : null
   );
@@ -1062,6 +1068,13 @@ const FileSecurityScanner = () => {
   }, [loadData]);
 
   useEffect(() => {
+    const interval = setInterval(() => {
+      loadData();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [loadData]);
+
+  useEffect(() => {
     setPage(1);
     setSelectedTimelinePoint((prev) => (prev?.key === "custom" ? prev : null));
   }, [rangeKey]);
@@ -1084,14 +1097,14 @@ const FileSecurityScanner = () => {
 
     const updateTimelineHeight = () => {
       if (isMobile) {
-        setTimelineChartHeight(100);
+        setTimelineChartHeight(110);
         return;
       }
 
       const panelHeight = topAgentsPanelRef.current?.getBoundingClientRect().height;
       if (!panelHeight) return;
 
-      const nextHeight = clamp(Math.round(panelHeight - 104), 160, 300);
+      const nextHeight = clamp(Math.round(panelHeight - 104), 180, 420);
       setTimelineChartHeight(nextHeight);
     };
 
@@ -1350,8 +1363,8 @@ const FileSecurityScanner = () => {
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch">
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-6 flex flex-col h-full overflow-visible soc-fluid-card">
-              <div className="soc-chart-header flex flex-wrap justify-between items-start gap-x-3 gap-y-1.5 mb-4 md:mb-6">
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full overflow-visible soc-fluid-card">
+              <div className="soc-chart-header flex flex-wrap justify-between items-start gap-x-3 gap-y-1.5 mb-4 md:mb-4">
                 <div className="min-w-0">
                   <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
                     <BarChart3 className="h-3 md:h-4 w-3 md:w-4 text-red-400 shrink-0" />
@@ -1398,16 +1411,16 @@ const FileSecurityScanner = () => {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col h-full">
-              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-2 w-full">File Type Distribution</div>
-              <div className="flex-1 min-h-0 w-full soc-chart overflow-hidden">
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-2.5 md:p-3 lg:p-3 flex flex-col h-full lg:h-[170px] xl:h-[185px]">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-1 w-full">File Type Distribution</div>
+              <div className="flex-1 min-h-0 w-full soc-chart overflow-hidden h-[150px] lg:h-[125px] xl:h-[145px]">
                 <CategoryLineChart items={analytics.fileTypes} color="#ef4444" totalLabel="files" />
               </div>
             </div>
 
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col h-full">
-              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-2 w-full">Severity Distribution</div>
-              <div className="flex-1 min-h-0 w-full soc-chart">
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-2.5 md:p-3 lg:p-3 flex flex-col h-full lg:h-[170px] xl:h-[185px]">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-1 w-full">Severity Distribution</div>
+              <div className="flex-1 min-h-0 w-full soc-chart overflow-hidden h-[150px] lg:h-[125px] xl:h-[145px]">
                 <CategoryLineChart items={analytics.severities} color="#ef4444" totalLabel="files" />
               </div>
             </div>
