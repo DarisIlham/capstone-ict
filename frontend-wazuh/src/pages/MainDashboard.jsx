@@ -6,6 +6,7 @@ import {
 } from "../services/dashboardApi";
 import DateRangeFilter from "../components/DateRangeFilter";
 import RangeFilter from "../components/RangeFilter";
+import PageLoader from "../components/PageLoader";
 import {
   createDefaultDateRange,
   formatDateRangeLabel,
@@ -664,12 +665,7 @@ export default function MainDashboard() {
       : RANGE_LABELS[rangeKey] || rangeKey;
 
   if (loading && !dashboardData.lastUpdated) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-sky-400 gap-3">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-sky-400" />
-        <div className="text-sm font-medium text-slate-400">Loading dashboard...</div>
-      </div>
-    );
+    return <PageLoader message="Loading dashboard..." />;
   }
 
   if (loadError && !dashboardData.lastUpdated) {

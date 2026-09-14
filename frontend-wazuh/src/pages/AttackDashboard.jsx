@@ -1670,15 +1670,15 @@ const HostMonitoring = () => {
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch attack-panel-grid">
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full min-w-0 overflow-visible attack-card">
-              <div className="flex justify-between items-center mb-4 md:mb-4 gap-2">
-                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
-                  <Activity className="h-3 md:h-4 w-3 md:w-4 text-orange-400" />
-                  Command Timeline
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full min-w-0 overflow-visible attack-card soc-fluid-card">
+              <div className="soc-chart-header flex flex-wrap justify-between items-start gap-x-3 gap-y-1.5 mb-4 md:mb-4">
+                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2 min-w-0">
+                  <Activity className="h-3 md:h-4 w-3 md:w-4 text-orange-400 shrink-0" />
+                  <span className="truncate">Command Timeline</span>
                 </div>
-                <div className="text-right">
-                  <div className="text-xs text-slate-500">Last {rangeKey}</div>
-                  <div className="text-[11px] text-slate-600">Updated {formatLiveTimestamp(lastUpdated)}</div>
+                <div className="soc-chart-meta text-right min-w-0">
+                  <div className="text-xs text-slate-500 whitespace-nowrap">Last {rangeKey}</div>
+                  <div className="text-[11px] text-slate-600 break-words">Updated {formatLiveTimestamp(lastUpdated)}</div>
                 </div>
               </div>
               <div className="flex-1 min-h-0 min-w-0 soc-chart--fim rounded-lg bg-[var(--soc-card)] p-2 md:p-4 overflow-visible">
@@ -1728,7 +1728,7 @@ const HostMonitoring = () => {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 items-stretch attack-split-grid">
             <div
-              className={`bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 min-w-0 flex flex-col h-full ${(analytics.topSuspicious?.length ?? 0) > 0 ? "min-h-[220px] md:min-h-[260px]" : ""}`}
+              className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 min-w-0 flex flex-col h-auto soc-fluid-card"
             >
               <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-3 flex items-center gap-2 flex-shrink-0">
                 <AlertTriangle className="h-4 w-4" />
@@ -1775,8 +1775,8 @@ const HostMonitoring = () => {
               )}
             </div>
 
-            <div className="flex gap-3 flex-wrap attack-logs-search">
-              <div className="flex-1 min-w-64 relative">
+            <div className="flex gap-2 flex-wrap attack-logs-search soc-filter-row">
+              <div className="flex-1 min-w-0 basis-full sm:basis-0 relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-500" />
                 <input
                   type="text"
@@ -1826,8 +1826,8 @@ const HostMonitoring = () => {
             </div>
           )}
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] table-fixed text-[10px] md:text-[11px] text-left whitespace-nowrap">
+          <div className="overflow-x-auto soc-table-scroll">
+            <table className="w-full min-w-[720px] text-[10px] md:text-[11px] text-left soc-responsive-table">
               <colgroup>
                 <col style={{ width: "14%" }} />
                 <col style={{ width: "10%" }} />

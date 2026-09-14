@@ -4303,3 +4303,1375 @@ aside.w-60 {
 .soc-date-field-row > label:first-child .soc-date-time-input::-webkit-calendar-picker-indicator {
   margin-left: 5px !important;
 }
+
+/* ==========================================================================
+   MOBILE-FIRST RESPONSIVE OVERHAUL (360px -> desktop)
+   Base = smallest phones. min-width queries scale up.
+   Breakpoints: <480 small phones / 480-767 large phones / 768-1023 tablets
+   / >=1024 desktop. Dark theme untouched — structure only.
+   ========================================================================== */
+
+/* ---- Base (all widths, written for ~360px first) ---- */
+.soc-container {
+  padding-inline: clamp(10px, 3vw, 28px);
+  overflow-x: clip;
+}
+
+.soc-page-shell {
+  gap: 8px !important;
+}
+
+.soc-page-heading,
+.attack-page .attack-page-heading,
+.soc-fluid-page .soc-page-heading {
+  padding: 10px 12px !important;
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+/* Fluid cards: size to content, small consistent padding, never tall fixed. */
+.soc-fluid-card,
+.attack-page .attack-card,
+.soc-fluid-page .soc-card,
+.dashboard-page .bg-\[var\(--soc-card\)\] {
+  height: auto !important;
+  min-height: 0 !important;
+  min-width: 0;
+  max-width: 100%;
+  padding: clamp(10px, 3vw, 16px) !important;
+  overflow-wrap: break-word;
+}
+
+/* Kill legacy fixed tall gauges on small screens. */
+.min-h-24,
+.min-h-\[120px\],
+.min-h-\[150px\],
+.min-h-\[200px\],
+.min-h-\[220px\],
+.min-h-\[240px\],
+.min-h-\[260px\],
+.min-h-\[280px\],
+.h-32,
+.h-48 {
+  min-height: 0 !important;
+}
+.h-48 {
+  height: auto !important;
+}
+
+/* Chart wrappers: fluid height, content-led, capped so no empty space. */
+.soc-chart,
+.soc-chart--dash,
+.soc-chart--fim,
+.soc-chart--ml,
+.soc-chart--timeline,
+.soc-chart--category,
+.soc-dashboard-category-chart {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  height: auto !important;
+  min-height: 140px !important;
+  max-height: none !important;
+  flex: 1 1 auto !important;
+}
+.soc-chart--dash > *,
+.soc-chart--fim > *,
+.soc-chart--ml > *,
+.soc-chart--timeline > * {
+  height: clamp(150px, 42vw, 220px) !important;
+  min-height: 0 !important;
+}
+.soc-dashboard-category-chart {
+  min-height: 150px !important;
+}
+.soc-dashboard-category-chart > * {
+  min-height: 0 !important;
+}
+
+/* Word-cloud boxes: fluid, never stretched canvas, glyphs proportional. */
+.command-keywords-distribution-box {
+  width: 100% !important;
+  max-width: none !important;
+  height: clamp(160px, 48vw, 230px) !important;
+  min-height: 0 !important;
+  flex: none !important;
+}
+.command-keywords-distribution-box.is-empty {
+  height: auto !important;
+  min-height: 64px !important;
+  flex: 1 1 auto !important;
+  display: flex !important;
+}
+.command-word-cloud {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  overflow: hidden;
+}
+.command-word-cloud text {
+  paint-order: stroke;
+  stroke-linejoin: round;
+}
+
+/* Chart headers: wrap, never overlap regardless of text length. */
+.soc-chart-header {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 4px 10px !important;
+  min-width: 0 !important;
+}
+.soc-chart-header > div:first-child {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+.soc-chart-meta {
+  flex: 0 1 auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  font-size: clamp(10px, 3vw, 12px) !important;
+  line-height: 1.4 !important;
+}
+.soc-chart-meta > div {
+  overflow-wrap: break-word !important;
+  word-break: break-word !important;
+}
+
+/* Stat numbers / icons / badges scale proportionally (no "besar sendiri"). */
+.soc-kpi-grid > div > div:nth-child(2),
+.dashboard-kpi-grid > div > div:nth-child(2),
+.attack-kpi-grid > div > div:nth-child(2) {
+  font-size: clamp(1rem, 4.6vw, 1.25rem) !important;
+  line-height: 1.1 !important;
+}
+.soc-kpi-grid svg,
+.dashboard-kpi-grid svg,
+.attack-kpi-grid svg {
+  width: clamp(14px, 4.4vw, 18px) !important;
+  height: clamp(14px, 4.4vw, 18px) !important;
+}
+.soc-kpi-grid > div > div:first-child,
+.soc-kpi-grid > div > div:last-child,
+.dashboard-kpi-grid > div > div:first-child,
+.attack-kpi-grid > div > div:first-child {
+  font-size: clamp(8px, 2.6vw, 10px) !important;
+}
+
+/* Filter rows stack/wrap on mobile; controls keep 40px+ touch targets.
+   Strictly <768px so tablet/desktop filter boxes keep their original sizes. */
+@media (max-width: 767px) {
+  .soc-filter-row,
+  .attack-logs-search,
+  .soc-filter-toolbar,
+  .dashboard-filter-toolbar,
+  .attack-toolbar {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+  .soc-filter-row > *,
+  .attack-logs-search > * {
+    min-width: 0 !important;
+  }
+  .soc-filter-row input[type="text"],
+  .attack-logs-search input[type="text"],
+  .soc-data-toolbar input[type="text"] {
+    width: 100% !important;
+    min-height: 40px !important;
+    padding-block: 9px !important;
+    font-size: clamp(11px, 3.2vw, 12px) !important;
+  }
+  .soc-filter-row select,
+  .attack-logs-search select,
+  .soc-data-toolbar select,
+  .soc-filter-row button,
+  .attack-logs-search > button {
+    min-height: 40px !important;
+    padding-block: 8px !important;
+    padding-inline: 12px !important;
+    font-size: clamp(11px, 3.2vw, 12px) !important;
+  }
+  .soc-range-compact,
+  .soc-date-compact summary,
+  .soc-range-filter > div,
+  .soc-date-field-row {
+    min-height: 32px !important;
+  }
+}
+
+/* Grids: single column base, multi-column as space allows. */
+.dashboard-analytics-grid,
+.attack-panel-grid,
+.attack-split-grid {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 8px !important;
+  align-items: stretch !important;
+}
+.dashboard-kpi-grid,
+.soc-kpi-grid,
+.attack-kpi-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+/* Tables: scroll-guarded + sticky first column + graceful truncation. */
+.soc-table-scroll {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-gutter: stable;
+}
+.soc-responsive-table {
+  width: 100% !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+}
+.soc-responsive-table :is(th, td) {
+  padding-block: 10px !important;
+  padding-inline: 10px !important;
+  vertical-align: middle !important;
+  overflow-wrap: break-word !important;
+}
+.soc-responsive-table thead th {
+  white-space: nowrap !important;
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 2 !important;
+}
+.soc-responsive-table tbody th:first-child,
+.soc-responsive-table tbody td:first-child {
+  position: sticky !important;
+  left: 0 !important;
+  z-index: 1 !important;
+  background: var(--soc-card) !important;
+  max-width: 34vw !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+.soc-responsive-table td .truncate,
+.soc-responsive-table td > div[class*="truncate"],
+.soc-responsive-table td.font-mono,
+.soc-responsive-table td > div.font-mono {
+  max-width: 44vw !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+}
+
+/* Long text anywhere: ellipsis or wrap, never silently clipped. */
+.truncate[title],
+[title].truncate {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* Empty states hug content. */
+.alert-empty-state,
+.soc-fluid-card .flex.h-full.min-h-24,
+.dashboard-page .flex.h-full.min-h-24 {
+  min-height: 96px !important;
+  height: auto !important;
+  padding: 14px 12px !important;
+}
+
+/* ---- 480px-767px: large phones ---- */
+@media (min-width: 480px) {
+  .soc-page-shell {
+    gap: 10px !important;
+  }
+  .dashboard-analytics-grid,
+  .attack-split-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+  .soc-chart--dash > *,
+  .soc-chart--fim > *,
+  .soc-chart--ml > *,
+  .soc-chart--timeline > * {
+    height: clamp(160px, 30vw, 210px) !important;
+  }
+  .command-keywords-distribution-box {
+    height: clamp(170px, 32vw, 240px) !important;
+  }
+  .soc-responsive-table tbody td:first-child {
+    max-width: 26vw !important;
+  }
+  .soc-responsive-table td .truncate,
+  .soc-responsive-table td > div[class*="truncate"],
+  .soc-responsive-table td.font-mono,
+  .soc-responsive-table td > div.font-mono {
+    max-width: 34vw !important;
+  }
+}
+
+/* ---- 768px-1023px: tablets ---- */
+@media (min-width: 768px) {
+  .soc-container {
+    padding-inline: clamp(14px, 2vw, 24px);
+  }
+  .soc-page-shell {
+    gap: 14px !important;
+  }
+  .dashboard-kpi-grid,
+  .soc-kpi-grid,
+  .attack-kpi-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 12px !important;
+  }
+  .dashboard-analytics-grid {
+    gap: 12px !important;
+  }
+  .attack-panel-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px !important;
+  }
+  .soc-chart--dash > *,
+  .soc-chart--fim > *,
+  .soc-chart--ml > *,
+  .soc-chart--timeline > * {
+    height: clamp(170px, 22vh, 220px) !important;
+  }
+  .soc-filter-row,
+  .attack-logs-search {
+    flex-wrap: nowrap !important;
+  }
+  .soc-filter-row > div:first-child,
+  .attack-logs-search > div:first-child {
+    flex: 1 1 auto !important;
+  }
+  .soc-responsive-table tbody td:first-child {
+    position: static !important;
+    max-width: none !important;
+  }
+  .soc-responsive-table td .truncate,
+  .soc-responsive-table td > div[class*="truncate"],
+  .soc-responsive-table td.font-mono,
+  .soc-responsive-table td > div.font-mono {
+    max-width: 28rem !important;
+  }
+}
+
+/* ---- >=1024px: desktop (restore roomier rhythm, keep fluid caps) ---- */
+@media (min-width: 1024px) {
+  .soc-page-shell {
+    gap: 16px !important;
+  }
+  .dashboard-analytics-grid,
+  .attack-panel-grid,
+  .attack-split-grid {
+    gap: 16px !important;
+  }
+  .soc-chart--dash > *,
+  .soc-chart--fim > *,
+  .soc-chart--ml > *,
+  .soc-chart--timeline > * {
+    height: clamp(180px, 22vh, 240px) !important;
+  }
+  .command-keywords-distribution-box {
+    height: auto !important;
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+  }
+
+  /* Desktop filter lock-in (>=1024px only): quick-range pills + From/To box
+     size from their content (padding + line-height, no fixed height) and
+     stretch to each other's height so the row stays aligned on every page.
+     Mobile/tablet rules above are untouched. */
+  .soc-data-toolbar .soc-filter-toolbar,
+  .dashboard-page .dashboard-filter-toolbar,
+  .alert-page-header .soc-filter-toolbar {
+    gap: 8px !important;
+    align-items: stretch !important;
+  }
+  .soc-data-toolbar .soc-range-filter,
+  .soc-data-toolbar .soc-date-filter,
+  .dashboard-page .dashboard-filter-toolbar .soc-range-filter,
+  .dashboard-page .dashboard-filter-toolbar .soc-date-filter,
+  .alert-page-header .soc-filter-toolbar .soc-range-filter,
+  .alert-page-header .soc-filter-toolbar .soc-date-filter {
+    align-self: stretch !important;
+    min-width: 0 !important;
+  }
+  .soc-data-toolbar .soc-range-filter > div,
+  .dashboard-page .dashboard-filter-toolbar .soc-range-filter > div,
+  .alert-page-header .soc-filter-toolbar .soc-range-filter > div {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    flex: 0 1 auto !important;
+    align-self: stretch !important;
+    padding: 2px !important;
+    gap: 2px !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+  }
+  .soc-data-toolbar .rows-selector,
+  .soc-data-toolbar .dashboard-current-time,
+  .dashboard-page .dashboard-current-time,
+  .alert-page-header .soc-filter-toolbar > span:last-child {
+    align-self: center !important;
+  }
+  .soc-data-toolbar .soc-filter-toolbar .soc-range-filter button,
+  .dashboard-page .dashboard-filter-toolbar .soc-range-filter button,
+  .alert-page-header .soc-range-filter button {
+    font-size: 11px !important;
+    line-height: 1 !important;
+    padding: 4px 10px !important;
+    white-space: nowrap !important;
+  }
+  .soc-data-toolbar .soc-date-field-row,
+  .dashboard-page .dashboard-filter-toolbar .soc-date-field-row,
+  .alert-page-header .soc-filter-toolbar .soc-date-field-row {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    flex: 0 1 auto !important;
+    align-self: stretch !important;
+    padding: 2px 10px !important;
+    gap: 6px !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+  }
+  .soc-data-toolbar .soc-date-field-row label,
+  .dashboard-page .dashboard-filter-toolbar .soc-date-field-row label,
+  .alert-page-header .soc-date-field-row label {
+    gap: 5px !important;
+    font-size: 11px !important;
+    white-space: nowrap !important;
+  }
+  .soc-data-toolbar .soc-date-field-row > span,
+  .dashboard-page .dashboard-filter-toolbar .soc-date-field-row > span,
+  .alert-page-header .soc-date-field-row > span {
+    font-size: 11px !important;
+  }
+  .soc-data-toolbar .soc-date-field-row .soc-date-time-input,
+  .dashboard-page .dashboard-filter-toolbar .soc-date-field-row .soc-date-time-input,
+  .alert-page-header .soc-date-field-row .soc-date-time-input {
+    height: 22px !important;
+    min-height: 0 !important;
+    padding: 0 2px !important;
+    font-size: 11px !important;
+    line-height: 22px !important;
+  }
+  .soc-data-toolbar .soc-date-field-row .soc-date-time-input::-webkit-calendar-picker-indicator,
+  .dashboard-page .dashboard-filter-toolbar .soc-date-field-row .soc-date-time-input::-webkit-calendar-picker-indicator,
+  .alert-page-header .soc-filter-toolbar .soc-date-field-row .soc-date-time-input::-webkit-calendar-picker-indicator {
+    width: 13px !important;
+    height: 13px !important;
+    margin-left: 3px !important;
+    margin-right: 0 !important;
+  }
+}
+
+/* ---- 768px-1023px: same content-fit treatment for tablet widths.
+   Only heights/alignment are touched here — the existing tablet font and
+   padding tuning above is left intact, so type stays proportional. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .soc-data-toolbar .soc-filter-toolbar,
+  .dashboard-page .dashboard-filter-toolbar,
+  .alert-page-header .soc-filter-toolbar {
+    align-items: stretch !important;
+  }
+  .soc-data-toolbar .soc-range-filter,
+  .soc-data-toolbar .soc-date-filter,
+  .dashboard-page .dashboard-filter-toolbar .soc-range-filter,
+  .dashboard-page .dashboard-filter-toolbar .soc-date-filter,
+  .alert-page-header .soc-filter-toolbar .soc-range-filter,
+  .alert-page-header .soc-filter-toolbar .soc-date-filter {
+    align-self: stretch !important;
+    min-width: 0 !important;
+  }
+  .soc-data-toolbar .soc-range-filter > div,
+  .dashboard-page .dashboard-filter-toolbar .soc-range-filter > div,
+  .alert-page-header .soc-filter-toolbar .soc-range-filter > div,
+  .soc-data-toolbar .soc-date-field-row,
+  .dashboard-page .dashboard-filter-toolbar .soc-date-field-row,
+  .alert-page-header .soc-filter-toolbar .soc-date-field-row {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    flex: 0 1 auto !important;
+    align-self: stretch !important;
+  }
+  .soc-data-toolbar .rows-selector,
+  .soc-data-toolbar .dashboard-current-time,
+  .dashboard-page .dashboard-current-time,
+  .alert-page-header .soc-filter-toolbar > span:last-child {
+    align-self: center !important;
+  }
+}
+
+/* ==========================================================================
+   Mobile nav drawer: viewport-locked flex column (fixed header /
+   scrollable nav / pinned footer). The JSX gives the <aside> its flex
+   column + max-h-[100dvh]; here only scroll chaining is contained so the
+   middle nav scrolls internally instead of pushing the footer off-screen.
+   ========================================================================== */
+.soc-mobile-drawer nav {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ==========================================================================
+   Centered page loading state (all pages share one centered animation).
+   Inside AppLayout <main> the loader fills the available content height so
+   the spinner sits in the true middle of the page at every breakpoint.
+   ========================================================================== */
+.soc-page-loader {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: clamp(320px, 60vh, 560px) !important;
+  padding: clamp(20px, 5vw, 40px) !important;
+  text-align: center !important;
+}
+
+.soc-page-loader--fullscreen {
+  min-height: 100vh !important;
+  min-height: 100dvh !important;
+}
+
+.soc-page-loader-inner {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 12px !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  margin: auto !important;
+}
+
+.soc-page-loader-text {
+  font-size: clamp(12px, 3.4vw, 14px) !important;
+  font-weight: 500 !important;
+  color: var(--soc-text-secondary) !important;
+  line-height: 1.5 !important;
+}
+
+/* ==========================================================================
+   Mobile date-range popover (From / To) — trigger-width overlay, <768px.
+   Panel is pinned left:0 + right:0 to its shrink-wrapped <details> trigger,
+   so it is exactly as wide as the trigger pill and can never leave the
+   card. Extended to 767px to cover the dashboard's <768px compact state
+   (dashboard forces the compact <details> below 768px; other pages keep
+   the component's own 640px switch, where these rules stay inert).
+   ========================================================================== */
+@media (max-width: 767px) {
+  /* Never render the panel while closed (explicit guard). */
+  .soc-date-compact:not([open]) > div {
+    display: none !important;
+  }
+
+  /* Trigger hugs its content — the panel below copies its exact width. */
+  .soc-date-filter .soc-date-compact,
+  .dashboard-page .dashboard-date-filter .soc-date-compact {
+    position: relative !important;
+    width: fit-content !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .soc-date-compact[open] > summary {
+    width: fit-content !important;
+    max-width: 100% !important;
+  }
+
+  /* Panel shell: overlay pinned to the trigger's own box — left: 0 +
+     right: 0 of the shrink-wrapped <details> makes the panel EXACTLY as
+     wide as the trigger pill, so its edges line up with the button and it
+     can never stick out past the card (the trigger itself never does). */
+  .soc-date-compact[open] > .soc-date-popover,
+  .dashboard-page .dashboard-date-filter .soc-date-compact[open] > div {
+    position: absolute !important;
+    top: calc(100% + 4px) !important;
+    left: 0 !important;
+    right: 0 !important;
+    transform: none !important;
+    z-index: 50 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 4px !important;
+    box-sizing: border-box !important;
+    width: auto !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 6px 10px !important;
+    max-height: calc(100dvh - 120px) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    background-color: var(--soc-card) !important;
+    border: 1px solid var(--soc-border-strong) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6) !important;
+    isolation: isolate !important;
+    opacity: 1 !important;
+    backdrop-filter: none !important;
+    pointer-events: auto !important;
+  }
+
+  /* Fields stacked (panel is only trigger-wide, so side-by-side can't fit):
+     label sits right above its input (2px), while the 6px panel gap keeps
+     the From group visually distinct from the To group. */
+  .soc-date-compact[open] .soc-date-popover-field,
+  .dashboard-page .dashboard-date-filter .soc-date-compact[open] label {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+    gap: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 10px !important;
+    line-height: 1.1 !important;
+    text-align: left !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+  }
+
+  .soc-date-compact[open] .soc-date-popover-field > span,
+  .dashboard-page .dashboard-date-filter .soc-date-compact[open] label > span {
+    flex: 0 0 auto !important;
+    padding-inline: 2px !important;
+  }
+
+  /* Native inputs: full panel width. 10px type + 10px icon + 4px gap keeps
+     the full "MM/DD/YYYY, HH:MM AM" (~19 chars) inside a ~135px panel
+     instead of clipping the last digit. 36px rows pull the value text
+     closer under its label while staying a comfortable tap target that
+     opens the native picker. */
+  .soc-date-compact[open] .soc-date-popover .soc-date-time-input,
+  .dashboard-page .dashboard-date-filter .soc-date-compact[open] .soc-date-time-input {
+    width: 100% !important;
+    inline-size: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+    flex-shrink: 1 !important;
+    height: 24px !important;
+    min-height: 24px !important;
+    max-height: 24px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 10px !important;
+    line-height: 24px !important;
+    overflow: visible !important;
+  }
+
+  .soc-date-compact[open] .soc-date-popover .soc-date-time-input::-webkit-calendar-picker-indicator,
+  .dashboard-page .dashboard-date-filter .soc-date-compact[open] .soc-date-time-input::-webkit-calendar-picker-indicator {
+    width: 10px !important;
+    height: 10px !important;
+    margin-left: 4px !important;
+    margin-right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    flex: 0 0 auto !important;
+  }
+}
+
+/* ==========================================================================
+   SINGLE 768px SWITCH — dashboard period + date-range filters.
+   Authoritative display logic (placed last so it beats the older 389/549/
+   620/640/699px stepped rules and the component's own 640px switch, scoped
+   to .dashboard-page so other pages keep their behavior):
+   - <768px: period collapses to the "30d v" compact select; date filter
+     becomes the trigger pill + trigger-width popover on the next row;
+     timestamp takes its own full-width line below.
+   - >=768px: segmented 1h/24h/7d/30d + single-line inline From-To row +
+     inline timestamp, all in one row when space allows.
+   Box heights stay content-fit (auto) in both states. KPI grid already
+   switches 2-col/4-col at this same 768px via .soc-kpi-grid.
+   ========================================================================== */
+@media (max-width: 767px) {
+  .dashboard-page .soc-dashboard-header .dashboard-filter-toolbar {
+    flex-wrap: wrap !important;
+  }
+
+  /* Period: segmented group off, compact select on (trigger-sized). */
+  .dashboard-page .soc-dashboard-header .dashboard-range-filter > div:first-child {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-range-filter .soc-range-compact {
+    display: flex !important;
+    visibility: visible !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    align-items: center !important;
+    padding-inline: 8px !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-range-filter .soc-range-compact select {
+    font-size: 10px !important;
+    line-height: 1 !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-range-filter .soc-range-compact svg {
+    width: 11px !important;
+    height: 11px !important;
+    flex: 0 0 auto !important;
+  }
+
+  /* Date: inline row off, trigger pill on. */
+  .dashboard-page .soc-dashboard-header .dashboard-date-filter .soc-date-field-row {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-date-filter .soc-date-compact {
+    display: block !important;
+    visibility: visible !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: fit-content !important;
+    flex: 0 1 auto !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-date-filter .soc-date-compact > summary {
+    height: 32px !important;
+    min-height: 32px !important;
+    font-size: 10px !important;
+    white-space: nowrap !important;
+  }
+
+  /* Timestamp drops to its own left-aligned line below the controls. */
+  .dashboard-page .soc-dashboard-header .dashboard-current-time {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    white-space: nowrap !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .dashboard-page .soc-dashboard-header .dashboard-filter-toolbar {
+    flex-direction: row !important;
+  }
+
+  /* Period: segmented group on, compact select off. */
+  .dashboard-page .soc-dashboard-header .dashboard-range-filter > div:first-child {
+    display: flex !important;
+    visibility: visible !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-range-filter .soc-range-compact {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Date: inline single-line row on, trigger pill off. */
+  .dashboard-page .soc-dashboard-header .dashboard-date-filter .soc-date-field-row {
+    display: inline-flex !important;
+    visibility: visible !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-date-filter .soc-date-compact {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Timestamp shares the row when space allows. */
+  .dashboard-page .soc-dashboard-header .dashboard-current-time {
+    flex: 0 1 auto !important;
+    white-space: nowrap !important;
+  }
+}
+
+/* ==========================================================================
+   Dashboard 768px–1023px: filter row in ONE horizontal line, equal heights.
+   Root cause fixed: .dashboard-range-filter IS the bordered box itself (the
+   className prop lands on the inner div), so the old
+   `.dashboard-range-filter > div` selectors never matched and the range box
+   never got its intended height. Target the box directly here.
+   Placed last so it beats earlier rules; desktop >=1024px and mobile <768px
+   untouched.
+   ========================================================================== */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .dashboard-page .soc-dashboard-header .dashboard-filter-toolbar {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+  /* Range segmented box = first child; compact dropdown stays hidden here
+     (both carry .dashboard-range-filter, so target by position, not class). */
+  .dashboard-page .soc-dashboard-header .soc-range-filter > div:first-child {
+    display: flex !important;
+    visibility: visible !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    max-height: 30px !important;
+    padding: 2px !important;
+    gap: 2px !important;
+    flex: 0 0 auto !important;
+    align-self: center !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
+  .dashboard-page .soc-dashboard-header .soc-range-filter > .soc-range-compact {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  .dashboard-page .soc-dashboard-header .soc-range-filter > div:first-child button {
+    flex: 0 0 auto !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+  }
+  /* Date box: outer centers, inner row fixed to the same 30px. */
+  .dashboard-page .soc-dashboard-header .dashboard-date-filter {
+    align-self: center !important;
+    min-width: 0 !important;
+    flex: 0 1 auto !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-date-filter .soc-date-field-row {
+    display: inline-flex !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    max-height: 30px !important;
+    align-self: center !important;
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-current-time {
+    align-self: center !important;
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    white-space: nowrap !important;
+  }
+}
+
+/* ==========================================================================
+   Dashboard 640px–767px: keep the 769px format (segmented fix-day buttons +
+   inline From-To row). Clock drops to its own line below when tight; under
+   640px the existing compact dropdown behavior stays (last-resort fallback).
+   Placed last so it beats the <768px compact switch; desktop/mobile ends
+   untouched.
+   ========================================================================== */
+@media (min-width: 640px) and (max-width: 767px) {
+  .dashboard-page .soc-dashboard-header .dashboard-filter-toolbar {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    gap: 8px !important;
+  }
+  /* Fix-day segmented box on, compact select off. */
+  .dashboard-page .soc-dashboard-header .soc-range-filter {
+    align-self: center !important;
+    min-width: 0 !important;
+    flex: 0 0 auto !important;
+  }
+  .dashboard-page .soc-dashboard-header .soc-range-filter > div:first-child {
+    display: flex !important;
+    visibility: visible !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    max-height: 30px !important;
+    padding: 2px !important;
+    gap: 2px !important;
+    align-self: center !important;
+    overflow: hidden !important;
+  }
+  .dashboard-page .soc-dashboard-header .soc-range-filter > div:first-child button {
+    flex: 0 0 auto !important;
+    font-size: 11px !important;
+    line-height: 1 !important;
+    padding: 4px 10px !important;
+    white-space: nowrap !important;
+  }
+  .dashboard-page .soc-dashboard-header .soc-range-filter > .soc-range-compact {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  /* From-To inline row on, trigger pill off. */
+  .dashboard-page .soc-dashboard-header .dashboard-date-filter {
+    align-self: center !important;
+    min-width: 0 !important;
+    flex: 0 1 auto !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-date-filter .soc-date-field-row {
+    display: inline-flex !important;
+    visibility: visible !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    max-height: 30px !important;
+    align-self: center !important;
+    gap: 6px !important;
+    padding: 2px 8px !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-date-filter label {
+    font-size: 11px !important;
+    white-space: nowrap !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-date-filter .soc-date-time-input {
+    font-size: 11px !important;
+    width: auto !important;
+    inline-size: auto !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-date-filter .soc-date-compact {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  /* Clock takes its own full-width line below when space is tight. */
+  .dashboard-page .soc-dashboard-header .dashboard-current-time {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    align-self: center !important;
+    white-space: nowrap !important;
+  }
+}
+
+/* ==========================================================================
+   Dashboard 400px–639px: compact dropdown row, equal heights, clock inline.
+   Range dropdown height matches the From-To pill (32px); all three share one
+   horizontal row down to ~400px. Placed last so it beats the <768px compact
+   switch; desktop and <400px untouched.
+   ========================================================================== */
+@media (min-width: 400px) and (max-width: 639px) {
+  .dashboard-page .soc-dashboard-header .dashboard-filter-toolbar {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    gap: 8px !important;
+  }
+  .dashboard-page .soc-dashboard-header .soc-range-filter {
+    align-self: center !important;
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+  .dashboard-page .soc-dashboard-header .soc-range-filter > div:first-child {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  .dashboard-page .soc-dashboard-header .soc-range-filter > .soc-range-compact {
+    display: flex !important;
+    visibility: visible !important;
+    align-items: center !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    max-height: 32px !important;
+    align-self: center !important;
+    flex: 0 0 auto !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-date-filter .soc-date-field-row {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-date-filter {
+    align-self: center !important;
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-date-filter .soc-date-compact {
+    display: block !important;
+    visibility: visible !important;
+    align-self: center !important;
+    min-width: 0 !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-date-filter .soc-date-compact > summary {
+    display: flex !important;
+    align-items: center !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    max-height: 32px !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-current-time {
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    align-self: center !important;
+    white-space: nowrap !important;
+  }
+}
+
+/* ==========================================================================
+   Alerts 768px–1023px: same one-row treatment as the dashboard (segmented
+   fix-day buttons + inline From-To row, equal 30px boxes, clock inline).
+   Scoped to .alert-page-header so dashboard/other pages are untouched.
+   ========================================================================== */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .alert-page-header .soc-filter-toolbar {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+  .alert-page-header .soc-range-filter {
+    align-self: center !important;
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+  .alert-page-header .soc-range-filter > div:first-child {
+    display: flex !important;
+    visibility: visible !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    max-height: 30px !important;
+    padding: 2px !important;
+    gap: 2px !important;
+    align-self: center !important;
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
+  .alert-page-header .soc-range-filter > div:first-child button {
+    flex: 0 0 auto !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+  }
+  .alert-page-header .soc-range-filter > .soc-range-compact {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  .alert-page-header .soc-date-filter {
+    align-self: center !important;
+    min-width: 0 !important;
+    flex: 0 1 auto !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+  .alert-page-header .soc-date-filter .soc-date-field-row {
+    display: inline-flex !important;
+    visibility: visible !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    max-height: 30px !important;
+    align-self: center !important;
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
+  .alert-page-header .soc-date-filter .soc-date-compact {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  .alert-page-header .dashboard-current-time {
+    align-self: center !important;
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    white-space: nowrap !important;
+  }
+}
+
+/* ==========================================================================
+   Alerts 640px–767px: keep the full filter format; clock drops to its own
+   line below when tight. Under 640px the existing compact dropdown behavior
+   stays as the last-resort fallback.
+   ========================================================================== */
+@media (min-width: 640px) and (max-width: 767px) {
+  .alert-page-header .soc-filter-toolbar {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    gap: 8px !important;
+  }
+  .alert-page-header .soc-range-filter {
+    align-self: center !important;
+    min-width: 0 !important;
+    flex: 0 0 auto !important;
+  }
+  .alert-page-header .soc-range-filter > div:first-child {
+    display: flex !important;
+    visibility: visible !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    max-height: 30px !important;
+    padding: 2px !important;
+    gap: 2px !important;
+    align-self: center !important;
+    overflow: hidden !important;
+  }
+  .alert-page-header .soc-range-filter > div:first-child button {
+    flex: 0 0 auto !important;
+    font-size: 11px !important;
+    line-height: 1 !important;
+    padding: 4px 10px !important;
+    white-space: nowrap !important;
+  }
+  .alert-page-header .soc-range-filter > .soc-range-compact {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  .alert-page-header .soc-date-filter {
+    align-self: center !important;
+    min-width: 0 !important;
+    flex: 0 1 auto !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+  .alert-page-header .soc-date-filter .soc-date-field-row {
+    display: inline-flex !important;
+    visibility: visible !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    max-height: 30px !important;
+    align-self: center !important;
+    gap: 6px !important;
+    padding: 2px 8px !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
+  .alert-page-header .soc-date-filter .soc-date-field-row label,
+  .alert-page-header .soc-date-filter .soc-date-time-input {
+    font-size: 11px !important;
+    white-space: nowrap !important;
+  }
+  .alert-page-header .soc-date-filter .soc-date-compact {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  .alert-page-header .dashboard-current-time {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    align-self: center !important;
+    white-space: nowrap !important;
+  }
+}
+
+/* ==========================================================================
+   Alerts 400px–639px: compact dropdown row, equal 32px heights, clock inline
+   in the same horizontal row down to ~400px.
+   ========================================================================== */
+@media (min-width: 400px) and (max-width: 639px) {
+  .alert-page-header .soc-filter-toolbar {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    gap: 8px !important;
+  }
+  .alert-page-header .soc-range-filter {
+    align-self: center !important;
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+  .alert-page-header .soc-range-filter > div:first-child {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  .alert-page-header .soc-range-filter > .soc-range-compact {
+    display: flex !important;
+    visibility: visible !important;
+    align-items: center !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    max-height: 32px !important;
+    align-self: center !important;
+    flex: 0 0 auto !important;
+    padding-inline: 8px !important;
+  }
+  .alert-page-header .soc-range-filter > .soc-range-compact select {
+    font-size: 10px !important;
+    line-height: 1 !important;
+  }
+  .alert-page-header .soc-range-filter > .soc-range-compact svg {
+    width: 11px !important;
+    height: 11px !important;
+    flex: 0 0 auto !important;
+  }
+  .alert-page-header .soc-date-filter .soc-date-field-row {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  .alert-page-header .soc-date-filter {
+    align-self: center !important;
+    flex: 0 1 auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+  .alert-page-header .soc-date-filter .soc-date-compact {
+    display: block !important;
+    visibility: visible !important;
+    align-self: center !important;
+    min-width: 0 !important;
+  }
+  .alert-page-header .soc-date-filter .soc-date-compact > summary {
+    display: flex !important;
+    align-items: center !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    max-height: 32px !important;
+    font-size: 10px !important;
+    white-space: nowrap !important;
+  }
+  .alert-page-header .dashboard-current-time {
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    align-self: center !important;
+    white-space: nowrap !important;
+  }
+}
+
+/* ==========================================================================
+   PARITY 400px–639px: dashboard + alerts filter controls render IDENTICAL.
+   Same row, same 32px boxes, same fonts/paddings, clock inline. One shared
+   block (placed last) so neither page can drift from the other.
+   ========================================================================== */
+@media (min-width: 400px) and (max-width: 639px) {
+  .dashboard-page .soc-dashboard-header .dashboard-filter-toolbar,
+  .alert-page-header .soc-filter-toolbar {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    gap: 8px !important;
+  }
+  .dashboard-page .soc-dashboard-header .soc-range-filter,
+  .alert-page-header .soc-range-filter {
+    align-self: center !important;
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+  .dashboard-page .soc-dashboard-header .soc-range-filter > div:first-child,
+  .alert-page-header .soc-range-filter > div:first-child {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  .dashboard-page .soc-dashboard-header .soc-range-filter > .soc-range-compact,
+  .alert-page-header .soc-range-filter > .soc-range-compact {
+    display: flex !important;
+    visibility: visible !important;
+    align-items: center !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    max-height: 32px !important;
+    align-self: center !important;
+    flex: 0 0 auto !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    padding-inline: 8px !important;
+    gap: 4px !important;
+  }
+  .dashboard-page .soc-dashboard-header .soc-range-filter > .soc-range-compact select,
+  .alert-page-header .soc-range-filter > .soc-range-compact select {
+    font-size: 10px !important;
+    line-height: 1 !important;
+  }
+  .dashboard-page .soc-dashboard-header .soc-range-filter > .soc-range-compact svg,
+  .alert-page-header .soc-range-filter > .soc-range-compact svg {
+    width: 11px !important;
+    height: 11px !important;
+    flex: 0 0 auto !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-date-filter,
+  .alert-page-header .soc-date-filter {
+    align-self: center !important;
+    flex: 0 1 auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-date-filter .soc-date-field-row,
+  .alert-page-header .soc-date-filter .soc-date-field-row {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-date-filter .soc-date-compact,
+  .alert-page-header .soc-date-filter .soc-date-compact {
+    display: block !important;
+    visibility: visible !important;
+    align-self: center !important;
+    min-width: 0 !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-date-filter .soc-date-compact > summary,
+  .alert-page-header .soc-date-filter .soc-date-compact > summary {
+    display: flex !important;
+    align-items: center !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    max-height: 32px !important;
+    font-size: 10px !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+  .dashboard-page .soc-dashboard-header .dashboard-current-time,
+  .alert-page-header .dashboard-current-time {
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    align-self: center !important;
+    white-space: nowrap !important;
+  }
+}

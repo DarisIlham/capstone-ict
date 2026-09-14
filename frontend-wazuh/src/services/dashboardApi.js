@@ -427,6 +427,7 @@ function buildWarningMessage(key, error) {
     fileTimeline: "file scan timeline",
     fileSuspicious: "suspicious file list",
     fimEvents: "FIM events",
+    fimDistribution: "FIM severity distribution",
     mlStats: "ML stats",
     mlTimeline: "ML timeline",
   };
@@ -473,6 +474,7 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
       fetchJson(`${API_ROOT}/file-scans/suspicious?${fileSuspiciousParams.toString()}`),
     ],
     ["fimEvents", fetchJson(`${API_ROOT}/events?${fimParams.toString()}`)],
+    ["fimDistribution", fetchJson(`${API_ROOT}/events/distribution/stats?${rangeParams.toString()}`)],
     ["mlStats", fetchJson(`${API_ROOT}/ml/predictions/stats?${rangeParams.toString()}`)],
     ["mlTimeline", fetchMlTimeline(minutes, dateRange)],
   ];
@@ -513,7 +515,20 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
   const attackSuspicious = toCount(attackStats.suspiciousCommands);
   const fileThreats = toCount(fileStats.suspiciousScans);
   const fileScanned = toCount(fileStats.totalSuccessScans);
-  const fimSeverityCounts = buildFimSeverityCounts(fimEventsRaw);
+  // Full-range severity aggregation (no 1000-sample cap): the distribution
+  // endpoint counts every event in range via a rule.level range agg.
+  // Falls back to the page-1 sample only if that request fails.
+  const fimDistSeverity = safeArray(responses.fimDistribution?.severity);
+  const fimSeverityCounts = fimDistSeverity.length
+    ? fimDistSeverity.reduce(
+        (accumulator, item) => {
+          const label = String(item?.label || "");
+          if (label in accumulator) accumulator[label] = toCount(item?.value);
+          return accumulator;
+        },
+        { Critical: 0, High: 0, Medium: 0, Low: 0 }
+      )
+    : buildFimSeverityCounts(fimEventsRaw);
   const fileSeverityCounts = buildFileSeverityCounts(suspiciousFiles);
   const fimSuspicious = fimSeverityCounts.Critical + fimSeverityCounts.High;
   const mlCounts = buildMlCounts(mlStats.labels);

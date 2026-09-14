@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { API_BASE_URL } from "../config/Api";
 import DateRangeFilter from "../components/DateRangeFilter";
 import RangeFilter from "../components/RangeFilter";
+import PageLoader from "../components/PageLoader";
 import {
   createDefaultDateRange,
   normalizeDateRange,
@@ -1349,18 +1350,18 @@ const FileSecurityScanner = () => {
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch">
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-6 flex flex-col h-full overflow-visible">
-              <div className="flex justify-between items-center mb-4 md:mb-6 gap-2">
-                <div>
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-6 flex flex-col h-full overflow-visible soc-fluid-card">
+              <div className="soc-chart-header flex flex-wrap justify-between items-start gap-x-3 gap-y-1.5 mb-4 md:mb-6">
+                <div className="min-w-0">
                   <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
-                    <BarChart3 className="h-3 md:h-4 w-3 md:w-4 text-red-400" />
-                    Detection Timeline
+                    <BarChart3 className="h-3 md:h-4 w-3 md:w-4 text-red-400 shrink-0" />
+                    <span className="truncate">Detection Timeline</span>
                   </div>
                   <div className="mt-1 text-[11px] text-slate-500">Click a point to filter suspicious files by time bucket</div>
                 </div>
-                <div className="text-right">
-                  <div className="text-xs text-slate-500">Last {rangeKey}</div>
-                  <div className="text-[11px] text-slate-600">Updated {formatLiveTimestamp(lastUpdated)}</div>
+                <div className="soc-chart-meta text-right min-w-0">
+                  <div className="text-xs text-slate-500 whitespace-nowrap">Last {rangeKey}</div>
+                  <div className="text-[11px] text-slate-600 break-words">Updated {formatLiveTimestamp(lastUpdated)}</div>
                 </div>
               </div>
               <div className="flex-1 min-h-0 min-w-0 soc-chart--fim rounded-lg bg-[var(--soc-card)] p-2 md:p-4 overflow-visible">
@@ -1413,20 +1414,20 @@ const FileSecurityScanner = () => {
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4">
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 min-w-0 flex flex-col">
-              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-4 flex items-center gap-2 flex-shrink-0">
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 min-w-0 flex flex-col h-auto soc-fluid-card">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-2 flex items-center gap-2 flex-shrink-0">
                 Top Scanner Sources
               </div>
-              <div className="w-full flex-1 min-h-[120px] md:min-h-[150px]">
+              <div className="w-full h-auto">
                 <CompactBarChart items={analytics.topScanners} emptyLabel="No scanner source data found" />
               </div>
             </div>
 
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 min-w-0 flex flex-col">
-              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-4 flex items-center gap-2 flex-shrink-0">
+            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 min-w-0 flex flex-col h-auto soc-fluid-card">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-2 flex items-center gap-2 flex-shrink-0">
                 Top Scanned Folders
               </div>
-              <div className="w-full flex-1 min-h-[120px] md:min-h-[150px]">
+              <div className="w-full h-auto">
                 <CompactBarChart items={analytics.topFolders} emptyLabel="No folder data found" />
               </div>
             </div>
@@ -1489,8 +1490,8 @@ const FileSecurityScanner = () => {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-[10px] md:text-[11px]">
+          <div className="overflow-x-auto soc-table-scroll">
+            <table className="w-full min-w-[760px] text-[10px] md:text-[11px] soc-responsive-table">
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-800/70">
                   <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">File</th>
@@ -1506,7 +1507,11 @@ const FileSecurityScanner = () => {
               </thead>
               <tbody>
                 {loading ? (
-                  <EmptyState message="Loading file scan data from backend..." />
+                  <tr>
+                    <td colSpan={9} className="px-4 py-10">
+                      <PageLoader message="Loading file scan data..." size="sm" />
+                    </td>
+                  </tr>
                 ) : filteredFiles.length === 0 ? (
                   <EmptyState message="No suspicious file scan data found on this page." />
                 ) : (

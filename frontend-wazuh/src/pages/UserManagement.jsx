@@ -16,6 +16,7 @@ import {
   restoreUserAccount,
   suspendUserAccount,
 } from "../services/userApi";
+import PageLoader from "../components/PageLoader";
 
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
@@ -235,9 +236,7 @@ const UserManagement = () => {
               </div>
               <div className="overflow-x-auto">
               {loading ? (
-                <div className="flex justify-center items-center py-10">
-                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-sky-400 border-t-transparent" />
-                </div>
+                <PageLoader message="Loading users..." size="sm" />
               ) : users.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-10 text-center">
                   <p className="text-sm text-slate-400 font-medium">No users found</p>

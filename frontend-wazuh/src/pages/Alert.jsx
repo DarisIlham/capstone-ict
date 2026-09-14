@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Bell, Clock, Shield, Search, CalendarRange } from "lucide-react";
 import DateRangeFilter from "../components/DateRangeFilter";
 import RangeFilter from "../components/RangeFilter";
+import PageLoader from "../components/PageLoader";
 import {
   createDefaultDateRange,
   normalizeDateRange,
@@ -47,6 +48,7 @@ export default function Alert() {
   const [customDateRange, setCustomDateRange] = useState(() =>
     createDefaultDateRange(1)
   );
+  const [lastUpdated, setLastUpdated] = useState(null);
   // Presentation-only viewport width for the responsive search placeholder.
   // Filtering logic is untouched; only the placeholder text adapts.
   const [viewportWidth, setViewportWidth] = useState(() =>
@@ -148,6 +150,7 @@ export default function Alert() {
 
       combined.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
       setAlerts(combined);
+      setLastUpdated(new Date());
     } catch (err) {
       console.error("Failed to load alerts:", err);
     } finally {
@@ -196,7 +199,7 @@ export default function Alert() {
             Aggregated security alerts from all monitoring sources
           </p>
         </div>
-        <div className="soc-filter-toolbar flex flex-wrap items-center gap-2">
+        <div className="soc-filter-toolbar flex flex-row items-center flex-nowrap gap-2 min-[700px]:gap-2.5 min-[900px]:gap-3">
           <RangeFilter
             rangeKey={rangeKey}
             onRangeChange={(k) => {
@@ -213,6 +216,69 @@ export default function Alert() {
             }}
             className={filterMode === "range" ? "opacity-50" : ""}
           />
+          {lastUpdated && (
+            <span
+              title={`Updated ${new Date(lastUpdated).toLocaleString("en-US", {
+                month: "short",
+                day: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              })}`}
+              className="dashboard-current-time shrink-0 text-[8px] min-[500px]:text-[8.5px] min-[700px]:text-[9px] min-[900px]:text-[9.5px] min-[1200px]:text-[11px] text-slate-600 flex items-center gap-1"
+            >
+              <Clock className="h-2.5 w-2.5 min-[900px]:h-3 min-[900px]:w-3" />
+              <span className="hidden min-[770px]:inline">
+                {`${new Date(lastUpdated).toLocaleDateString("en-US", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}, ${new Date(lastUpdated).toLocaleTimeString("en-US", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })}`}
+              </span>
+              <span className="hidden min-[700px]:inline min-[770px]:hidden">
+                {`${new Date(lastUpdated).toLocaleDateString("en-US", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}, ${new Date(lastUpdated).toLocaleTimeString("en-US", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: false,
+                })}`}
+              </span>
+              <span className="hidden min-[500px]:inline min-[700px]:hidden">
+                {`${new Date(lastUpdated).toLocaleDateString("en-US", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}, ${new Date(lastUpdated).toLocaleTimeString("en-US", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: false,
+                })}`}
+              </span>
+              <span className="inline min-[500px]:hidden">
+                {`${new Date(lastUpdated).toLocaleDateString("en-US", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}, ${new Date(lastUpdated).toLocaleTimeString("en-US", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: false,
+                })}`}
+              </span>
+            </span>
+          )}
           <span className="hidden lg:flex items-center gap-1 text-[11px] text-slate-600">
             <CalendarRange className="h-3 w-3" />
             {filterMode === "custom"
@@ -279,9 +345,7 @@ export default function Alert() {
       {/* Alert Feed */}
       <div className="alert-feed-panel bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-10">
-            <div className="animate-spin rounded-full h-8 w-8 border-2 border-sky-400 border-t-transparent" />
-          </div>
+          <PageLoader message="Loading alerts..." size="sm" />
         ) : filteredAlerts.length === 0 ? (
           <div className="alert-empty-state flex flex-col items-center justify-center py-10 text-center">
             <Shield className="h-8 w-8 text-slate-600 mb-3" />

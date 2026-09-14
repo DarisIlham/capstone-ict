@@ -72,7 +72,7 @@ export default function AppLayout({ children }) {
   const sidebarWidth = collapsed ? "w-16" : "w-60";
 
   const SidebarContent = ({ isMobile = false }) => (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col flex-1 min-h-0 min-w-0">
       {/* Logo */}
       <div
         className={`flex items-center ${isMobile ? "gap-2 px-3 h-14" : "gap-2.5 px-4 h-16"} border-b border-slate-700/50 shrink-0 ${
@@ -149,8 +149,8 @@ export default function AppLayout({ children }) {
         })}
       </nav>
 
-      {/* Bottom section */}
-      <div className="border-t border-slate-700/50 p-2 space-y-1">
+      {/* Bottom section — pinned footer, never shrinks or scrolls away */}
+      <div className="border-t border-slate-700/50 p-2 space-y-1 shrink-0 mt-auto">
         {(!collapsed || isMobile) && (
           <div className="px-2.5 py-2">
             <p className="text-xs font-medium text-[var(--soc-text-primary)] truncate">
@@ -194,8 +194,8 @@ export default function AppLayout({ children }) {
             className="fixed inset-0 bg-black/60 z-40 lg:hidden"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="fixed left-0 top-0 bottom-0 w-48 bg-[var(--soc-surface)] border-r border-[var(--soc-border)] z-50 lg:hidden animate-slide-in-left">
-            <div className="flex items-center justify-end p-2">
+          <aside className="soc-mobile-drawer fixed left-0 top-0 bottom-0 w-48 max-w-[80vw] max-h-[100dvh] bg-[var(--soc-surface)] border-r border-[var(--soc-border)] z-50 lg:hidden animate-slide-in-left flex flex-col min-h-0 min-w-0">
+            <div className="flex items-center justify-end p-2 shrink-0">
               <button
                 onClick={() => setMobileOpen(false)}
                 className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"

@@ -1,18 +1,12 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import PageLoader from "./PageLoader";
 
 const PrivateRoute = ({ children, requiredRole = null }) => {
   const { isAuthenticated, user, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--soc-bg)]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-sky-600 border-t-sky-400 mx-auto mb-4"></div>
-          <p className="text-slate-400 font-medium">Loading...</p>
-        </div>
-      </div>
-    );
+    return <PageLoader message="Loading..." size="lg" fullScreen />;
   }
 
   if (!isAuthenticated) {

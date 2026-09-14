@@ -4,6 +4,7 @@ import { Activity, CalendarRange, ChevronDown, FileText, Search, X } from "lucid
 import { API_BASE_URL } from "../config/Api";
 import DateRangeFilter from "../components/DateRangeFilter";
 import RangeFilter from "../components/RangeFilter";
+import PageLoader from "../components/PageLoader";
 import {
   createDefaultDateRange,
   normalizeDateRange,
@@ -564,9 +565,9 @@ const PayloadWordCloud = ({ words, compact = false, activeWord = null, onWordCli
     return () => observer.disconnect();
   }, []);
 
-  if (!words || words.length === 0) return <div className="flex items-center justify-center h-full text-slate-600 text-xs">No payload data</div>;
-  const W = Math.max(size.width || (compact ? 520 : 620), compact ? 240 : 300);
-  const H = Math.max(size.height || (compact ? 180 : 200), 160);
+  if (!words || words.length === 0) return <div className="flex items-center justify-center h-auto min-h-16 px-3 py-6 text-center text-slate-600 text-xs">No payload data</div>;
+  const W = Math.max(size.width || 0, 140);
+  const H = Math.max(size.height || 0, 120);
   const wScale = W / (compact ? 520 : 620);
   const maxCount = words[0].count;
   const minCount = words[words.length - 1].count;
@@ -631,7 +632,7 @@ const PayloadWordCloud = ({ words, compact = false, activeWord = null, onWordCli
   }
   return (
     <div ref={wrapRef} className="relative w-full h-full min-h-0">
-      <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="block w-full h-full">
+      <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="command-word-cloud block w-full h-full">
         <defs><radialGradient id="wcGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#0f172a" stopOpacity="0" /><stop offset="100%" stopColor="#020617" stopOpacity="0.6" /></radialGradient></defs>
         <rect className="command-word-cloud-bg" width={W} height={H} fill="url(#wcGlow)" rx={12} />
         {placed.map((w) => (
@@ -856,6 +857,7 @@ const FimEvents = ({ agentId = "all" }) => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalHits, setTotalHits] = useState(0);
   const [pageSize, setPageSize] = useState(25);
+  const [distributionData, setDistributionData] = useState(null);
 
   useLayoutEffect(() => {
     if (typeof window === "undefined") return;
@@ -1044,6 +1046,34 @@ const FimEvents = ({ agentId = "all" }) => {
     }
   }, [agentId, getEffectiveRange]);
 
+  const fetchDistribution = useCallback(async (rk) => {
+    try {
+      const rangeWindow = getEffectiveRange(rk);
+      const { start, end } = rangeWindow;
+
+      const baseEndpoint =
+        agentId === "all"
+          ? `${API_BASE_URL}/api/events/distribution/stats`
+          : `${API_BASE_URL}/api/events/${agentId}/distribution/stats`;
+
+      const endpoint =
+        `${baseEndpoint}?` +
+        `&start=${encodeURIComponent(start)}` +
+        `&end=${encodeURIComponent(end)}`;
+
+      const resp = await fetch(endpoint);
+      if (!resp.ok) throw new Error(`API Error ${resp.status}`);
+      const r = await resp.json();
+      if (!r.success) throw new Error(r.message || "Failed to fetch distribution");
+      setDistributionData(r);
+      return r;
+    } catch (err) {
+      console.error("Distribution fetch error:", err.message);
+      setDistributionData(null);
+      return null;
+    }
+  }, [agentId, getEffectiveRange]);
+
   const refreshAllData = useCallback(async (page = 1, rk, options = {}) => {
     const result = await fetchEvents(page, rk, null, null, options);
     const sampleSize = Math.min(1000, Number(result?.total_hits) || 1000);
@@ -1052,6 +1082,7 @@ const FimEvents = ({ agentId = "all" }) => {
       fetchAggregated(sampleSize, rk),
       fetchDomains(rk),
       fetchAgentStats(rk),
+      fetchDistribution(rk),
     ]);
 
     if (result) {
@@ -1059,7 +1090,7 @@ const FimEvents = ({ agentId = "all" }) => {
     }
 
     return result;
-  }, [fetchAggregated, fetchDomains, fetchAgentStats, fetchEvents]);
+  }, [fetchAggregated, fetchDomains, fetchAgentStats, fetchDistribution, fetchEvents]);
 
   useEffect(() => {
     if (skipNextFetchRef.current) {
@@ -1326,16 +1357,26 @@ const FimEvents = ({ agentId = "all" }) => {
       series.push({ t, v: buckets.get(t) || 0, bucketMs: stepMs });
     }
 
+    const distEventTypes = Array.isArray(distributionData?.eventTypes) ? distributionData.eventTypes : [];
+    const distSeverity = Array.isArray(distributionData?.severity) ? distributionData.severity : [];
+
     const byEvent = new Map();
 
-    for (const e of filtered) {
-      const k = e.syscheckEvent || "unknown";
-      byEvent.set(k, (byEvent.get(k) || 0) + 1);
+    if (!distEventTypes.length) {
+      for (const e of filtered) {
+        const k = e.syscheckEvent || "unknown";
+        byEvent.set(k, (byEvent.get(k) || 0) + 1);
+      }
     }
 
     const eventItemsAll = Array.from(byEvent.entries()).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
     const eventTop = eventItemsAll.slice(0, 6);
-    const eventItems = eventTop.map((it, i) => ({ ...it, color: ["#38bdf8", "#34D399", "#FBBF24", "#F87171", "#A78BFA", "#F472B6", "#9CA3AF"][i % 7] }));
+    const eventItems = distEventTypes.length
+      ? distEventTypes
+          .filter((it) => it && it.value > 0)
+          .slice(0, 6)
+          .map((it, i) => ({ ...it, color: ["#38bdf8", "#34D399", "#FBBF24", "#F87171", "#A78BFA", "#F472B6", "#9CA3AF"][i % 7] }))
+      : eventTop.map((it, i) => ({ ...it, color: ["#38bdf8", "#34D399", "#FBBF24", "#F87171", "#A78BFA", "#F472B6", "#9CA3AF"][i % 7] }));
 
     const byAgent = new Map();
     for (const e of filtered) {
@@ -1393,19 +1434,27 @@ const FimEvents = ({ agentId = "all" }) => {
     const payloadWords = Array.from(byPayload.entries()).map(([text, count]) => ({ text, count })).sort((a, b) => b.count - a.count).slice(0, 40);
 
     const bySeverity = new Map();
-    for (const e of filtered) {
-      const level = e.ruleLevel || 0;
-      let severityLabel = "Low";
-      if (level >= 12) severityLabel = "Critical";
-      else if (level >= 8) severityLabel = "High";
-      else if (level >= 5) severityLabel = "Medium";
-      bySeverity.set(severityLabel, (bySeverity.get(severityLabel) || 0) + 1);
+    if (!distSeverity.length) {
+      for (const e of filtered) {
+        const level = e.ruleLevel || 0;
+        let severityLabel = "Low";
+        if (level >= 12) severityLabel = "Critical";
+        else if (level >= 8) severityLabel = "High";
+        else if (level >= 5) severityLabel = "Medium";
+        bySeverity.set(severityLabel, (bySeverity.get(severityLabel) || 0) + 1);
+      }
     }
     const severityItemsAll = Array.from(bySeverity.entries()).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
-    const severityItems = severityItemsAll.map((it) => {
-      const colorMap = { "Critical": "#ef4444", "High": "#f97316", "Medium": "#eab308", "Low": "#3b82f6" };
-      return { ...it, color: colorMap[it.label] || "#64748b" };
-    });
+    const severityColorMap = { "Critical": "#ef4444", "High": "#f97316", "Medium": "#eab308", "Low": "#3b82f6" };
+    const severityItems = distSeverity.length
+      ? distSeverity
+          .filter((it) => it && it.value > 0)
+          .map((it) => ({ ...it, color: severityColorMap[it.label] || "#64748b" }))
+          .sort((a, b) => b.value - a.value)
+      : severityItemsAll.map((it) => ({
+          ...it,
+          color: severityColorMap[it.label] || "#64748b",
+        }));
     const totalForUI = Number(totalHits) || filtered.length;
     const eps = totalForUI ? totalForUI / (rangeMs / 1000) : 0;
 
@@ -1442,7 +1491,7 @@ const FimEvents = ({ agentId = "all" }) => {
       uniqueFiles,
       mostSevereEvent: mostSevere,
     };
-  }, [events, rangeKey, totalHits, aggregatedEvents, agentStats, now, filterMode, customDateRange]);
+  }, [events, rangeKey, totalHits, aggregatedEvents, agentStats, now, filterMode, customDateRange, distributionData]);
 
   const filterOptions = useMemo(() => {
     const base = (aggregatedEvents && aggregatedEvents.length) ? aggregatedEvents : events;
@@ -1524,12 +1573,7 @@ const FimEvents = ({ agentId = "all" }) => {
   }, [vizFiltersActive, displayPages, goToPage]);
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-sky-400 gap-3">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-sky-400"></div>
-        <div className="text-sm font-medium">Loading data</div>
-      </div>
-    );
+    return <PageLoader message="Loading data..." />;
   }
 
   if (error) return <div className="min-h-screen bg-slate-950 flex items-center justify-center"><div className="bg-red-950/60 border border-red-800/60 rounded-xl px-6 py-4 text-red-300 text-sm">⚠ Error: {error}</div></div>;
@@ -1632,15 +1676,15 @@ const FimEvents = ({ agentId = "all" }) => {
           </div>
         </div>
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch">
-          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full overflow-visible">
-            <div className="flex justify-between items-center mb-4 md:mb-4 gap-2">
-              <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
-                <Activity className="h-3 md:h-4 w-3 md:w-4 text-emerald-400" />
-                FIM Timeline
+          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full overflow-visible soc-fluid-card">
+            <div className="soc-chart-header flex flex-wrap justify-between items-start gap-x-3 gap-y-1.5 mb-4 md:mb-4">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2 min-w-0">
+                <Activity className="h-3 md:h-4 w-3 md:w-4 text-emerald-400 shrink-0" />
+                <span className="truncate">FIM Timeline</span>
               </div>
-              <div className="text-right">
-                <div className="text-xs text-slate-500">Last {rangeKey}</div>
-                <div className="text-[11px] text-slate-600">Updated {formatLiveTimestamp(lastUpdated)}</div>
+              <div className="soc-chart-meta text-right min-w-0">
+                <div className="text-xs text-slate-500 whitespace-nowrap">Last {rangeKey}</div>
+                <div className="text-[11px] text-slate-600 break-words">Updated {formatLiveTimestamp(lastUpdated)}</div>
               </div>
             </div>
             <div className="flex-1 min-h-0 min-w-0 soc-chart--fim rounded-lg bg-[var(--soc-card)] p-2 md:p-4 overflow-visible">
@@ -1676,7 +1720,7 @@ const FimEvents = ({ agentId = "all" }) => {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
           {/* Kotak 1: Event + Severity Distribution */}
-          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 shadow-lg flex flex-col min-h-[200px] md:min-h-[240px]">
+          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 shadow-lg flex flex-col h-auto soc-fluid-card">
             <div className="w-full text-[11px] md:text-xs font-semibold text-slate-300 mb-4">Event & Severity Distribution</div>
             {derived.total === 0 ? (
               <div className="flex flex-1 items-center justify-center gap-1 text-xs text-slate-600">
@@ -1841,8 +1885,8 @@ const FimEvents = ({ agentId = "all" }) => {
           </div>
         )}
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-[10px] md:text-[11px] text-left whitespace-nowrap">
+        <div className="overflow-x-auto soc-table-scroll">
+          <table className="w-full min-w-[720px] text-[10px] md:text-[11px] text-left soc-responsive-table">
             <thead>
               <tr className="border-b border-slate-800 bg-slate-800/70">
                 {["↓ time", "agent", "user", "path", "event", "payload", "severity"].map(h => (

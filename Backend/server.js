@@ -454,6 +454,151 @@ async function handleEventsAgentsRequest(req, res) {
 app.get("/api/events/agents/stats", handleEventsAgentsRequest);
 app.get("/api/events/:agent_id/agents/stats", handleEventsAgentsRequest);
 
+// Severity + event-type distribution aggregated across the FULL selected
+// range (range agg + scripted terms agg), so the Event & Severity legend
+// sums to the exact total instead of a paginated page-1 sample.
+async function handleEventsDistributionRequest(req, res) {
+  try {
+    const agent_id_param = req.params.agent_id;
+    const agent_id =
+      agent_id_param === "all" || !agent_id_param
+        ? undefined
+        : String(agent_id_param).padStart(3, "0");
+
+    const rangeKey = String(req.query.range || "30d").trim();
+    let { start, end } = req.query;
+    if (!start && !end) {
+      const preset = buildPresetRange(rangeKey);
+      start = preset.start;
+      end = preset.end;
+    }
+    const timeRange = buildTimeRange(start, end);
+
+    const queryFilters = [
+      {
+        bool: {
+          should: [
+            { term: { "rule.groups": "syscheck" } },
+            { term: { location: "syscheck" } },
+            { exists: { field: "syscheck.path" } },
+          ],
+          minimum_should_match: 1,
+        },
+      },
+    ];
+    if (agent_id) {
+      queryFilters.push({ term: { "agent.id": agent_id } });
+    }
+    if (timeRange) {
+      queryFilters.push(timeRange);
+    }
+
+    const baseBody = {
+      query: {
+        bool: {
+          filter: queryFilters,
+          must_not: [{ terms: { "agent.id": EXCLUDED_AGENT_IDS } }],
+        },
+      },
+    };
+
+    const authConfig = {
+      auth: { username: INDEXER_USER, password: INDEXER_PASS },
+      httpsAgent,
+    };
+
+    // --- Search #1: total + severity range buckets ---
+    const severityResponse = await axios.post(
+      `${INDEXER_URL}/wazuh-alerts-*/_search`,
+      {
+        ...baseBody,
+        size: 0,
+        track_total_hits: true,
+        aggs: {
+          by_severity: {
+            range: {
+              field: "rule.level",
+              keyed: true,
+              ranges: [
+                { key: "Low", to: 5 },
+                { key: "Medium", from: 5, to: 8 },
+                { key: "High", from: 8, to: 12 },
+                { key: "Critical", from: 12 },
+              ],
+            },
+          },
+        },
+      },
+      authConfig
+    );
+
+    const hitsTotal = severityResponse?.data?.hits?.total;
+    const total =
+      typeof hitsTotal === "object" ? hitsTotal.value : Number(hitsTotal || 0);
+    const buckets = severityResponse?.data?.aggregations?.by_severity?.buckets || {};
+    const pick = (key) => Number(buckets[key]?.doc_count || 0);
+    const medium = pick("Medium");
+    const high = pick("High");
+    const critical = pick("Critical");
+    // Dokumen tanpa rule.level ikut kategori Low agar jumlah persis = total.
+    const low = Math.max(0, total - medium - high - critical);
+    const severity = [
+      { label: "Critical", value: critical },
+      { label: "High", value: high },
+      { label: "Medium", value: medium },
+      { label: "Low", value: low },
+    ];
+
+    // --- Search #2: event-type buckets (scripted, toleran terhadap mapping) ---
+    let eventTypes = [];
+    try {
+      const eventResponse = await axios.post(
+        `${INDEXER_URL}/wazuh-alerts-*/_search`,
+        {
+          ...baseBody,
+          size: 0,
+          track_total_hits: false,
+          aggs: {
+            by_event: {
+              terms: {
+                size: 20,
+                script: {
+                  lang: "painless",
+                  source:
+                    "def se = '';" +
+                    "try { if (doc.containsKey('syscheck.event') && doc['syscheck.event'].size() > 0) { se = doc['syscheck.event'].value; } } catch (Exception e) {}" +
+                    "if (se != '') { return se; }" +
+                    "try { if (doc.containsKey('decoder.name') && doc['decoder.name'].size() > 0) { return doc['decoder.name'].value; } } catch (Exception e) {}" +
+                    "return 'unknown';",
+                },
+              },
+            },
+          },
+        },
+        authConfig
+      );
+      const eventBuckets = eventResponse?.data?.aggregations?.by_event?.buckets || [];
+      eventTypes = eventBuckets.map((b) => ({ label: b.key, value: b.doc_count }));
+    } catch (error) {
+      console.warn("⚠️ Event-type aggregation failed (FIM distribution):", error.message);
+    }
+
+    return res.json({
+      success: true,
+      total,
+      severity,
+      eventTypes,
+      applied_range: { rangeKey, start, end },
+    });
+  } catch (error) {
+    console.error("❌ API ERROR (distribution):", error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+}
+
+app.get("/api/events/distribution/stats", handleEventsDistributionRequest);
+app.get("/api/events/:agent_id/distribution/stats", handleEventsDistributionRequest);
+
 
 async function handleDomainSummaryRequest(req, res) {
   try {

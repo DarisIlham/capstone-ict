@@ -4,6 +4,7 @@ import { BrainCircuit, BarChart3, LineChart, Globe, CalendarRange, ChevronDown, 
 import mlApi from '../services/mlApi';
 import DateRangeFilter from "../components/DateRangeFilter";
 import RangeFilter from "../components/RangeFilter";
+import PageLoader from "../components/PageLoader";
 import {
   createDefaultDateRange,
   normalizeDateRange,
@@ -34,18 +35,19 @@ const HorizontalBarChart = ({ data }) => {
   }, []);
 
   if (!data || data.length === 0) {
-    return <div className="h-32 flex items-center justify-center text-slate-500">No data</div>;
+    return <div className="flex h-auto min-h-16 items-center justify-center px-3 py-6 text-center text-slate-500 text-xs">No data</div>;
   }
 
-  const width = Math.max(wrapWidth, 480);
+  const width = Math.max(wrapWidth || 0, 280);
   const maxCount = Math.max(1, ...data.map(d => d.count));
-  const rowHeight = 42;
-  const barHeight = 28;
+  const isNarrow = width < 420;
+  const rowHeight = isNarrow ? 36 : 42;
+  const barHeight = isNarrow ? 22 : 28;
   const chartHeight = data.length * rowHeight + 12;
-  const labelWidth = Math.round(width * 0.18);
-  const barStartX = labelWidth + 25;
-  const rankX = width - 32;
-  const barMaxWidth = Math.max(60, rankX - barStartX - 40);
+  const labelWidth = Math.round(width * (isNarrow ? 0.24 : 0.18));
+  const barStartX = labelWidth + (isNarrow ? 12 : 25);
+  const rankX = width - (isNarrow ? 16 : 32);
+  const barMaxWidth = Math.max(40, rankX - barStartX - (isNarrow ? 20 : 40));
 
   const getGradientColor = (index) => {
     // Red (rank 1) → Orange → Yellow → Green → Cyan → Blue (rank 10)
@@ -1268,12 +1270,7 @@ export default function MlDashboard() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-sky-400 gap-3">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-400"></div>
-        <div className="text-sm font-medium">Loading ML Dashboard...</div>
-      </div>
-    );
+    return <PageLoader message="Loading ML Dashboard..." size="lg" />;
   }
 
   if (error) {
@@ -1383,18 +1380,18 @@ export default function MlDashboard() {
 
         {/* Timeline Wave Chart + Top Source IPs */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch">
-          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full overflow-visible">
-            <div className="flex justify-between items-center mb-4 md:mb-4 gap-2">
-              <div>
+          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full overflow-visible soc-fluid-card">
+            <div className="soc-chart-header flex flex-wrap justify-between items-start gap-x-3 gap-y-1.5 mb-4 md:mb-4">
+              <div className="min-w-0">
                 <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
-                  <BarChart3 className="h-3 md:h-4 w-3 md:w-4 text-violet-400" />
-                  ML Predictions Timeline
+                  <BarChart3 className="h-3 md:h-4 w-3 md:w-4 text-violet-400 shrink-0" />
+                  <span className="truncate">ML Predictions Timeline</span>
                 </div>
                 <div className="mt-1 text-[11px] text-slate-500">Click a point to filter predictions by time bucket</div>
               </div>
-              <div className="text-right">
-                <div className="text-xs text-slate-500">Last {getTimelineRangeDescription(timeRange)}</div>
-                <div className="text-[11px] text-slate-600">Updated {formatLiveTimestamp(lastUpdated)}</div>
+              <div className="soc-chart-meta text-right min-w-0">
+                <div className="text-xs text-slate-500 whitespace-nowrap">Last {getTimelineRangeDescription(timeRange)}</div>
+                <div className="text-[11px] text-slate-600 break-words">Updated {formatLiveTimestamp(lastUpdated)}</div>
               </div>
             </div>
             <div className="flex-1 min-h-0 min-w-0 soc-chart--ml p-2 md:p-4 overflow-visible">
@@ -1424,7 +1421,7 @@ export default function MlDashboard() {
               </div>
             </div>
             {topSourceIps.length === 0 ? (
-              <div className="h-48 flex items-center justify-center text-xs text-slate-600">No data</div>
+              <div className="flex h-auto min-h-16 items-center justify-center px-3 py-6 text-center text-xs text-slate-600">No data</div>
             ) : (
               <TopSourceIpsCard sourceIps={topSourceIps} />
             )}
@@ -1459,7 +1456,7 @@ export default function MlDashboard() {
               </div>
             </div>
             {topDestIps.length === 0 ? (
-              <div className="h-48 flex items-center justify-center text-xs text-slate-600">No data</div>
+              <div className="flex h-auto min-h-16 items-center justify-center px-3 py-6 text-center text-xs text-slate-600">No data</div>
             ) : (
               <TopSourceIpsCard sourceIps={topDestIps} colors={TOP_DEST_IPS_COLORS} />
             )}
@@ -1531,8 +1528,8 @@ export default function MlDashboard() {
           </div>
 
           {/* Table */}
-          <div className="overflow-x-auto" ref={predictionsTableRef}>
-            <table className="w-full text-[10px] md:text-[11px] text-left whitespace-nowrap">
+          <div className="overflow-x-auto soc-table-scroll" ref={predictionsTableRef}>
+            <table className="w-full min-w-[680px] text-[10px] md:text-[11px] text-left soc-responsive-table">
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-800/70">
                   <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Timestamp</th>
