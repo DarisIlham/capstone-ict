@@ -196,8 +196,15 @@ function buildFileAgentRanking(files) {
   return buildTopRanking(files, (f) => f?.agentName || f?.agent_name);
 }
 
-function buildMlSourceRanking(events) {
-  return buildTopRanking(events, (p) => p?.sourceIp || p?.source_ip || p?.src);
+function buildMlAgentRanking(predictions) {
+  const byAgent = buildTopRanking(
+    predictions,
+    (p) => p?.agent || p?.agentName || p?.agent_name || (p?.agent && p?.agent?.name)
+  );
+  // Fallback: kalau agent.hostname kosong ("-"), pakai sourceIp dari prediksi yang sama
+  // supaya tab ML tetap menampilkan data yang sesuai, bukan kosong.
+  if (byAgent.length > 0) return byAgent;
+  return buildTopRanking(predictions, (p) => p?.sourceIp || p?.source_ip || p?.src);
 }
 
 function buildHostAgentRanking(logs) {
@@ -214,7 +221,6 @@ function resolveAgentName(item) {
 
 function buildMostChangedFiles(events) {
   const pathMap = new Map();
-  const agentCounts = new Map();
 
   safeArray(events).forEach((event) => {
     const path = String(resolveFimPath(event) || "").trim();
@@ -348,17 +354,83 @@ function buildRiskDistribution({
   ];
 }
 
+function aggregateMlTimelineLabels(timeline) {
+  const totals = new Map();
+
+  safeArray(timeline).forEach((bucket) => {
+    safeArray(bucket?.labels).forEach((entry) => {
+      const label = entry?.label ?? entry?.key ?? entry?.name;
+      if (label === undefined || label === null || label === "") return;
+      totals.set(label, (totals.get(label) || 0) + toCount(entry?.count ?? entry?.doc_count ?? entry?.value));
+    });
+  });
+
+  return Array.from(totals.entries()).map(([label, count]) => ({ label, count }));
+}
+
+function resolveMlLabels(mlStats, mlTimelineRaw, mlPredictionsRaw) {
+  const statsLabels = safeArray(mlStats?.labels).filter(
+    (item) => item && (item.label !== undefined || item.key !== undefined)
+  ).map((item) => ({
+    label: item.label ?? item.key,
+    count: toCount(item.count ?? item.doc_count ?? item.value),
+    avgConfidence: item.avgConfidence ?? null,
+  }));
+
+  if (statsLabels.some((item) => toCount(item.count) > 0)) return statsLabels;
+
+  // Fallback 1: rangkum label per-bucket dari timeline supaya grafik
+  // Threat Classification tetap menampilkan sinyal ML berbahaya/suspicious
+  // meski endpoint stats gagal / kosong untuk rentang tanggal terpilih.
+  const timelineLabels = aggregateMlTimelineLabels(mlTimelineRaw);
+  if (timelineLabels.some((item) => toCount(item.count) > 0)) return timelineLabels;
+
+  // Fallback 2 (seperti MlDashboard): hitung langsung dari daftar prediksi
+  // mentah /api/ml/predictions agar label berbahaya tetap muncul di UI.
+  return aggregateMlPredictionLabels(mlPredictionsRaw);
+}
+
+function aggregateMlPredictionLabels(predictions) {
+  const totals = new Map();
+
+  safeArray(predictions).forEach((prediction) => {
+    const label =
+      prediction?.predictedLabel ?? prediction?.predicted_label ??
+      prediction?.label ?? prediction?.ml?.predicted_label ?? "unknown";
+    if (!label) return;
+    totals.set(label, (totals.get(label) || 0) + 1);
+  });
+
+  return Array.from(totals.entries()).map(([label, count]) => ({ label, count }));
+}
+
+const ML_THREAT_COLOR = "#a78bfa";
+
 function buildThreatTypes({
   attackSuspicious,
   fileThreats,
   fimTotal,
   mlAnomalies,
+  mlLabels = [],
 }) {
-  return [
+  // ML dijadikan 1 bar agregat saja ("ML Threats") = total semua label
+  // berbahaya/suspicious, agar tidak memecah grafik per label.
+  const mlDetailTotal = safeArray(mlLabels)
+    .filter((item) => classifyMlLabel(item?.label) !== "low")
+    .reduce((sum, item) => sum + toCount(item?.count), 0);
+  const mlValue = mlDetailTotal > 0 ? mlDetailTotal : toCount(mlAnomalies);
+
+  // Bar ML selalu disertakan (walau 0) agar grafik Threat Classification
+  // selalu menampilkan section ML di UI dashboard.
+  const baseItems = [
     { label: "Suspicious Commands", value: attackSuspicious, color: "#ef4444" },
     { label: "Malicious Files", value: fileThreats, color: "#f97316" },
     { label: "FIM Changes", value: fimTotal, color: "#eab308" },
-    { label: "ML Anomalies", value: mlAnomalies, color: "#a78bfa" },
+  ].filter((item) => toCount(item.value) > 0);
+
+  return [
+    ...baseItems,
+    { label: "ML Threats", value: mlValue, color: ML_THREAT_COLOR },
   ];
 }
 
@@ -394,6 +466,7 @@ function createEmptyDashboardData(dateRange = createDefaultDateRange()) {
       fileThreats: 0,
       fimTotal: 0,
       mlAnomalies: 0,
+      mlLabels: [],
     }),
     commandEvents: emptySeries,
     fileEvents: emptySeries,
@@ -405,6 +478,7 @@ function createEmptyDashboardData(dateRange = createDefaultDateRange()) {
       fim: { totalEvents: 0, peak: 0, avg: 0, suspicious: 0 },
       ml: { predictions: 0, anomalies: 0, confidence: 0, topRisk: "-" },
     },
+    mlMeta: { totalLabels: 0, suspiciousLabels: 0, source: "none" },
     warnings: [],
     lastUpdated: null,
   };
@@ -430,6 +504,7 @@ function buildWarningMessage(key, error) {
     fimDistribution: "FIM severity distribution",
     mlStats: "ML stats",
     mlTimeline: "ML timeline",
+    mlPredictions: "ML predictions",
   };
 
   return `${sourceNames[key] || key}: ${error?.message || "request failed"}`;
@@ -462,6 +537,18 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
     start,
     end,
   });
+  // NOTE: Grafik Threat Classification TIDAK memakai /ml/predictions (paginated hits).
+  // Ia memakai /ml/predictions/stats + /ml/predictions/timeline yang merupakan
+  // agregasi Elasticsearch full-range sesuai start/end (size:0, tanpa limit hits).
+  // Request predictions di bawah ini HANYA untuk ranking agent ML (top-5) +
+  // fallback darurat bila stats & timeline gagal, jadi limit kecil sudah cukup
+  // dan tidak memengaruhi grafik.
+  const mlRankingParams = new URLSearchParams({
+    page: "1",
+    limit: "200",
+    start,
+    end,
+  });
 
   const requestEntries = [
     ["attackStats", fetchJson(`${API_ROOT}/linux-commands/stats?${rangeParams.toString()}`)],
@@ -477,6 +564,7 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
     ["fimDistribution", fetchJson(`${API_ROOT}/events/distribution/stats?${rangeParams.toString()}`)],
     ["mlStats", fetchJson(`${API_ROOT}/ml/predictions/stats?${rangeParams.toString()}`)],
     ["mlTimeline", fetchMlTimeline(minutes, dateRange)],
+    ["mlPredictions", fetchJson(`${API_ROOT}/ml/predictions?${mlRankingParams.toString()}`)],
   ];
 
   const settled = await Promise.allSettled(requestEntries.map(([, request]) => request));
@@ -501,6 +589,15 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
     throw new Error("All dashboard data sources are currently unavailable.");
   }
 
+  // mlPredictions hanya sumber enrichment opsional untuk Threat Classification.
+  // Jangan tampilkan warning "partial data" kalau stats/timeline ML sudah OK.
+  if (responses.mlStats || responses.mlTimeline) {
+    const mlPredWarningIndex = warnings.findIndex((message) =>
+      String(message).startsWith("ML predictions")
+    );
+    if (mlPredWarningIndex >= 0) warnings.splice(mlPredWarningIndex, 1);
+  }
+
   const attackStats = responses.attackStats?.data || {};
   const attackLogs = safeArray(responses.attackLogs?.data);
   const attackTimelineRaw = safeArray(responses.attackTimeline?.data);
@@ -511,28 +608,66 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
   const fimTotalHits = toCount(responses.fimEvents?.total_hits);
   const mlStats = responses.mlStats?.data || {};
   const mlTimelineRaw = safeArray(responses.mlTimeline?.data);
+  const mlPredictionsRaw = safeArray(responses.mlPredictions?.data);
 
   const attackSuspicious = toCount(attackStats.suspiciousCommands);
   const fileThreats = toCount(fileStats.suspiciousScans);
   const fileScanned = toCount(fileStats.totalSuccessScans);
-  // Full-range severity aggregation (no 1000-sample cap): the distribution
-  // endpoint counts every event in range via a rule.level range agg.
-  // Falls back to the page-1 sample only if that request fails.
+  // Full-range severity (no 1000-sample cap). Preferred source is the
+  // lightweight distribution aggregation; if that endpoint is unavailable
+  // (e.g. production backend predates the route), fall back to one adaptive
+  // full-range fetch sized to the actual total_hits (capped by the index
+  // max_result_window of 10000). Page-1 sample is the last resort.
   const fimDistSeverity = safeArray(responses.fimDistribution?.severity);
-  const fimSeverityCounts = fimDistSeverity.length
-    ? fimDistSeverity.reduce(
-        (accumulator, item) => {
-          const label = String(item?.label || "");
-          if (label in accumulator) accumulator[label] = toCount(item?.value);
-          return accumulator;
-        },
-        { Critical: 0, High: 0, Medium: 0, Low: 0 }
-      )
-    : buildFimSeverityCounts(fimEventsRaw);
+  let fimSeverityCounts = null;
+  let fimSeverityExact = false;
+  if (fimDistSeverity.length) {
+    fimSeverityCounts = fimDistSeverity.reduce(
+      (accumulator, item) => {
+        const label = String(item?.label || "");
+        if (label in accumulator) accumulator[label] = toCount(item?.value);
+        return accumulator;
+      },
+      { Critical: 0, High: 0, Medium: 0, Low: 0 }
+    );
+    fimSeverityExact = true;
+  } else {
+    const adaptiveSize = Math.min(Math.max(fimTotalHits, 1), 10000);
+    if (adaptiveSize > fimEventsRaw.length) {
+      try {
+        const fullParams = new URLSearchParams({
+          page: "1",
+          size: String(adaptiveSize),
+          start,
+          end,
+        });
+        const fullRes = await fetchJson(`${API_ROOT}/events?${fullParams.toString()}`);
+        const fullData = safeArray(fullRes?.data);
+        if (fullData.length) {
+          fimSeverityCounts = buildFimSeverityCounts(fullData);
+          fimSeverityExact = fullData.length >= fimTotalHits;
+        }
+      } catch {
+        // fall through to sample counting below
+      }
+    }
+    if (!fimSeverityCounts) {
+      fimSeverityCounts = buildFimSeverityCounts(fimEventsRaw);
+    }
+  }
+  if (fimSeverityExact) {
+    const warningIndex = warnings.findIndex((message) =>
+      String(message).startsWith("FIM severity distribution")
+    );
+    if (warningIndex >= 0) warnings.splice(warningIndex, 1);
+  }
   const fileSeverityCounts = buildFileSeverityCounts(suspiciousFiles);
   const fimSuspicious = fimSeverityCounts.Critical + fimSeverityCounts.High;
-  const mlCounts = buildMlCounts(mlStats.labels);
-  const mlPredictions = toCount(mlStats.totalPredictions);
+  const mlLabels = resolveMlLabels(mlStats, mlTimelineRaw, mlPredictionsRaw);
+  const mlCounts = buildMlCounts(mlLabels);
+  const mlPredictions =
+    toCount(mlStats.totalPredictions) ||
+    mlLabels.reduce((sum, item) => sum + toCount(item.count), 0);
 
   const commandEvents = bucketSeries(
     attackTimelineRaw,
@@ -578,10 +713,10 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
 
   const avgRiskScore = totalRiskSignals
     ? round(
-        ((riskIndex.Critical * 4 + riskIndex.High * 3 + riskIndex.Medium * 1.5) /
-          (totalRiskSignals * 4)) *
-          10
-      )
+      ((riskIndex.Critical * 4 + riskIndex.High * 3 + riskIndex.Medium * 1.5) /
+        (totalRiskSignals * 4)) *
+      10
+    )
     : 0;
 
   const attackHealth = toCount(attackStats.totalCommands)
@@ -589,12 +724,12 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
     : 100;
   const fileHealth = toCount(fileStats.totalEvents)
     ? clamp(
-        ((toCount(fileStats.totalEvents) - toCount(fileStats.totalErrorScans)) /
-          toCount(fileStats.totalEvents)) *
-          100,
-        0,
-        100
-      )
+      ((toCount(fileStats.totalEvents) - toCount(fileStats.totalErrorScans)) /
+        toCount(fileStats.totalEvents)) *
+      100,
+      0,
+      100
+    )
     : 100;
   const fimHealth = fimTotalHits
     ? clamp(100 - (fimSuspicious / fimTotalHits) * 100, 0, 100)
@@ -607,7 +742,6 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
   );
 
   const commandSummary = getSeriesSummary(commandEvents);
-  const fileSummary = getSeriesSummary(fileEvents);
   const fimSummary = getSeriesSummary(fimEvents);
 
   const userRanking =
@@ -619,7 +753,7 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
     host: buildHostAgentRanking(attackLogs),
     fimAgents: buildFimAgentRanking(fimEventsRaw),
     file: buildFileAgentRanking(suspiciousFiles),
-    ml: buildMlSourceRanking(mlTimelineRaw),
+    ml: buildMlAgentRanking(mlPredictionsRaw),
   };
 
   const mostChangedFiles = buildMostChangedFiles(fimEventsRaw);
@@ -643,6 +777,7 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
       fileThreats,
       fimTotal: fimTotalHits,
       mlAnomalies: mlCounts.anomalies,
+      mlLabels,
     }),
     commandEvents,
     fileEvents,
@@ -673,6 +808,20 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
         confidence: round(toCount(mlStats.overallAvgConfidence) * 100),
         topRisk: formatLabel(mlCounts.topRiskLabel),
       },
+    },
+    mlMeta: {
+      totalLabels: mlLabels.length,
+      suspiciousLabels: safeArray(mlLabels).filter(
+        (item) =>
+          classifyMlLabel(item?.label) !== "low" && toCount(item?.count) > 0
+      ).length,
+      source: responses.mlStats
+        ? "stats"
+        : responses.mlTimeline
+          ? "timeline"
+          : responses.mlPredictions
+            ? "predictions"
+            : "none",
     },
     warnings,
     lastUpdated: new Date().toISOString(),

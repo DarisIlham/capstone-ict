@@ -812,7 +812,12 @@ export default function MainDashboard() {
               <span className="text-[11px] sm:text-xs font-semibold text-slate-300">Top Active Users</span>
             </div>
             <button
-              onClick={() => navigate("/attack-dashboard")}
+              onClick={() => navigate({
+                host: "/attack-dashboard",
+                fimAgents: "/fim-events",
+                file: "/file-security",
+                ml: "/ml-dashboard",
+              }[topUsersSource] ?? "/attack-dashboard")}
               className="text-[10px] sm:text-[11px] text-sky-400 hover:text-sky-300 transition-colors flex items-center gap-1"
             >
               View all <ArrowRight className="h-3 w-3" />

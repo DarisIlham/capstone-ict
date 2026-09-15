@@ -3906,6 +3906,24 @@ span {
   max-height: 280px;
 }
 
+/* File Security Scanner (.soc-fluid-page): File Type Distribution and
+   Severity Distribution reuse the exact Risk Indicators chart stack
+   (CategoryLineChart + .soc-chart--category + .cat-chart-plot) from Host
+   Monitoring so they share the same size, aspect ratio and behaviour. */
+.soc-fluid-page .attack-split-grid > div > .soc-chart.soc-chart--category {
+  height: auto !important;
+  min-height: 0 !important;
+  flex: 1 1 auto !important;
+}
+
+.soc-fluid-page .soc-chart--category .cat-chart-plot {
+  flex: 1 1 auto;
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  min-height: 170px;
+  max-height: 280px;
+}
+
 /* CompactBarChart (dangerous commands): fixed 13px rows + 12px gaps
    dominated phones — fluid sizing keeps rows tight and readable. */
 .attack-page .attack-split-grid .flex.flex-col.gap-3 {
@@ -4557,6 +4575,16 @@ aside.w-60 {
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
+}
+/* Let the row highlight (zebra stripes and hover) also flow into the
+   sticky first column, so the highlight band reaches the timestamp
+   cell instead of stopping at the next column (e.g. Agent). Matches
+   the translucent Tailwind row backgrounds against the card color. */
+.soc-responsive-table tbody tr:nth-child(even) td:first-child {
+  background: color-mix(in srgb, var(--color-slate-900) 60%, var(--soc-card)) !important;
+}
+.soc-responsive-table tbody tr:hover td:first-child {
+  background: color-mix(in srgb, var(--color-slate-800) 40%, var(--soc-card)) !important;
 }
 .soc-responsive-table td .truncate,
 .soc-responsive-table td > div[class*="truncate"],

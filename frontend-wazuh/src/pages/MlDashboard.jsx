@@ -5,6 +5,9 @@ import mlApi from '../services/mlApi';
 import DateRangeFilter from "../components/DateRangeFilter";
 import RangeFilter from "../components/RangeFilter";
 import PageLoader from "../components/PageLoader";
+import FilterSelect from "../components/FilterSelect";
+import ExportCsvButton from "../components/ExportCsvButton";
+import { exportCsv } from "../utils/exportCsv";
 import {
   createDefaultDateRange,
   normalizeDateRange,
@@ -188,6 +191,7 @@ const withAlpha = (hex, alpha) => {
 
 const TOP_SOURCE_IPS_COLORS = ["#34d399", "#38bdf8", "#fbbf24", "#f97316", "#a78bfa"];
 const TOP_DEST_IPS_COLORS = ["#a78bfa", "#818cf8", "#60a5fa", "#22d3ee", "#f472b6"];
+const TOP_AGENT_COLORS = ["#34d399", "#38bdf8", "#fbbf24", "#f97316", "#a78bfa"];
 
 const getValidDate = (value) => {
   if (!value) return null;
@@ -208,6 +212,53 @@ const formatDetailedTimestamp = (timestamp) => {
     minute: '2-digit',
     second: '2-digit',
   });
+};
+
+const TopAgentsCard = ({ agents }) => {
+  if (!agents || agents.length === 0) {
+    return <div className="flex h-full items-center justify-center text-xs text-slate-600">No agent data</div>;
+  }
+
+  const maxValue = Math.max(...agents.map((a) => Number(a.count) || 0), 1);
+
+  return (
+    <div className="flex flex-col gap-3">
+      {agents.map((item, i) => {
+        const count = Number(item.count) || 0;
+        const color = TOP_AGENT_COLORS[i % TOP_AGENT_COLORS.length];
+        return (
+          <div key={`${item.name}-${i}`} className="flex flex-col gap-1 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="w-5 text-[13px] font-bold text-slate-500 shrink-0">
+                {i + 1}.
+              </span>
+              <span className="flex-1 min-w-0 text-[13px] font-mono text-slate-300 truncate" title={item.name}>
+                {item.name}
+              </span>
+              <span className="text-[13px] font-bold text-slate-400 tabular-nums shrink-0 ml-1">
+                {new Intl.NumberFormat("en-US").format(count)}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="w-5 shrink-0" />
+              <div
+                className="flex-1 bg-[var(--soc-bg)] rounded h-4 overflow-hidden"
+                title={item.lastSeen ? `Last seen ${formatDetailedTimestamp(item.lastSeen)}` : `${item.name}: ${count} events`}
+              >
+                <div
+                  className="h-full rounded transition-all"
+                  style={{
+                    width: `${(count / maxValue) * 100}%`,
+                    backgroundColor: color,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 };
 
 const TopSourceIpsCard = ({ sourceIps, colors = TOP_SOURCE_IPS_COLORS }) => {
@@ -247,6 +298,80 @@ const TopSourceIpsCard = ({ sourceIps, colors = TOP_SOURCE_IPS_COLORS }) => {
           </div>
         );
       })}
+    </div>
+  );
+};
+const TopIpRankedList = ({ ips, colors, emptyLabel }) => {
+  if (!ips || ips.length === 0) {
+    return <div className="flex h-full items-center justify-center text-xs text-slate-600">{emptyLabel || 'No data'}</div>;
+  }
+  const peakCount = Math.max(1, ...ips.map((d) => Number(d.count) || 0));
+  return (
+    <div className="space-y-3">
+      {ips.map((item, idx) => {
+        const accent = (colors || TOP_SOURCE_IPS_COLORS)[idx % (colors || TOP_SOURCE_IPS_COLORS).length];
+        const count = Number(item.count) || 0;
+        const label = String(item.label ?? '');
+        const tip = `${label} • ${new Intl.NumberFormat('en-US').format(count)} events`;
+        return (
+          <div key={`${label}-${idx}`} className="flex flex-col">
+            <div className="flex items-center gap-1.5">
+              <span className="w-5 text-[13px] font-bold text-slate-500 shrink-0">{idx + 1}.</span>
+              <span className="flex-1 min-w-0 text-[13px] font-mono text-slate-300 truncate" title={tip}>
+                {label}
+              </span>
+              <span className="text-[13px] font-bold text-slate-400 tabular-nums shrink-0 ml-1">
+                {new Intl.NumberFormat("en-US").format(count)}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="w-5 shrink-0" />
+              <div
+                className="flex-1 bg-[var(--soc-bg)] rounded h-4 overflow-hidden"
+                title={tip}
+              >
+                <div
+                  className="h-full rounded transition-all"
+                  style={{ width: `${Math.max((count / peakCount) * 100, 3)}%`, backgroundColor: accent }}
+                />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const TopIpsTabbedCard = ({ sourceIps = [], destIps = [] }) => {
+  const [activeTab, setActiveTab] = useState('source');
+  const isSrc = activeTab === 'source';
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="mb-2 mt-1.5 flex flex-wrap items-center gap-1 sm:mb-3">
+        {[
+          { key: 'source', label: 'Source' },
+          { key: 'dest', label: 'Destination' },
+        ].map((option) => (
+          <button
+            key={option.key}
+            onClick={() => setActiveTab(option.key)}
+            className={`rounded-md px-1.5 py-1 text-[9px] sm:px-2 sm:py-1.5 sm:text-[11px] font-medium transition-colors ${activeTab === option.key
+              ? 'border border-sky-600/30 bg-sky-600/20 text-sky-400'
+              : 'border border-transparent text-slate-500 hover:text-slate-300'
+              }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col">
+        {isSrc ? (
+          <TopIpRankedList ips={sourceIps} colors={TOP_SOURCE_IPS_COLORS} emptyLabel="No source IP data" />
+        ) : (
+          <TopIpRankedList ips={destIps} colors={TOP_DEST_IPS_COLORS} emptyLabel="No destination IP data" />
+        )}
+      </div>
     </div>
   );
 };
@@ -326,7 +451,9 @@ const SourceIpRankingPanel = ({ data }) => {
 const clamp = (n, a, b) => Math.min(Math.max(n, a), b);
 
 const WORD_COLORS = ['#f472b6', '#38bdf8', '#4ade80', '#a78bfa', '#fb923c', '#34d399', '#f87171', '#facc15', '#60a5fa', '#e879f9'];
-const COLORS = ['#10b981', '#ef4444', '#f97316', '#3b82f6', '#a78bfa', '#ec4899', '#14b8a6', '#8b5cf6'];
+// Warna ranking untuk Label Distribution: rank 1 = merah (paling banyak), dst.
+const LABEL_RANK_COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#a78bfa', '#ec4899', '#14b8a6', '#6366f1'];
+const COLORS = LABEL_RANK_COLORS;
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const PREDICTIONS_FETCH_BATCH_SIZE = 1000;
 const TIME_RANGE_OPTIONS = [
@@ -344,6 +471,21 @@ const RANGE_TO_MINUTES = {
 };
 
 const formatTime = (isoString) => {
+  const date = getValidDate(isoString);
+  if (!date) return '-';
+  // Samakan dengan format Time di halaman Host Monitoring (AttackDashboard):
+  // "Sep 14, 2026, 08:00:49 AM"
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+};
+
+const formatTimeFull = (isoString) => {
   const date = getValidDate(isoString);
   if (!date) return '-';
   return date.toLocaleString('en-US', {
@@ -850,9 +992,9 @@ const WaveChart = ({ data, width = 1000, height = 320, rangeKey, onPointSelect, 
               <line x1={x} y1={padding.t + innerH} x2={x} y2={padding.t + innerH + 4} stroke="var(--soc-border)" />
               <text
                 x={x}
-                y={padding.t + innerH + 14}
+                y={padding.t + innerH + 16}
                 textAnchor={i === 0 ? "start" : i === data.length - 1 ? "end" : "middle"}
-                fontSize="8"
+                fontSize="10"
                 fill="#64748b"
               >
                 {formatBucketLabel(d.t, rangeKey)}
@@ -878,20 +1020,44 @@ const WaveChart = ({ data, width = 1000, height = 320, rangeKey, onPointSelect, 
     </div>
   );
 };
-const ConfidenceBadge = ({ score }) => {
-  if (score === undefined || score === null || score === '') return <span className="text-slate-400">-</span>;
-  const val = typeof score === 'number' ? score : parseFloat(score);
-  if (isNaN(val)) return <span className="text-slate-400">-</span>;
-  const pct = Math.round(val * 100);
+const getConfidenceScore = (p) => {
+  const raw = typeof p.confidence === 'number' ? p.confidence : parseFloat(p.confidence);
+  if (Number.isNaN(raw)) return null;
+  return Math.min(Math.max(raw > 1 ? raw : raw * 100, 0), 100);
+};
 
-  let bg = 'bg-red-900/30';
-  let text = 'text-red-400';
-  if (pct >= 80) { bg = 'bg-green-900/30'; text = 'text-green-400'; }
-  else if (pct >= 60) { bg = 'bg-yellow-900/30'; text = 'text-yellow-400'; }
-  else if (pct >= 40) { bg = 'bg-orange-900/30'; text = 'text-orange-400'; }
+const ConfidenceBadge = ({ score, label }) => {
+  if (score === undefined || score === null || score === '') return <span className="text-slate-400">-</span>;
+  const raw = typeof score === 'number' ? score : parseFloat(score);
+  if (isNaN(raw)) return <span className="text-slate-400">-</span>;
+  // Normalisasi: backend bisa mengirim 0-1 atau 0-100
+  const pct = Math.round(Math.min(Math.max(raw > 1 ? raw : raw * 100, 0), 100));
+
+  const lowerLabel = String(label || '').toLowerCase();
+  const isBenign = lowerLabel.includes('benign') || lowerLabel.includes('normal');
+
+  // Attack/suspicious: makin yakin model = makin bahaya (merah paling tinggi).
+  // Benign: makin yakin model = makin aman (hijau paling tinggi).
+  let bg = 'bg-slate-800/60';
+  let text = 'text-slate-400';
+  let border = 'border-slate-700/50';
+  if (isBenign) {
+    if (pct >= 80) { bg = 'bg-green-900/30'; text = 'text-green-400'; border = 'border-green-700/50'; }
+    else if (pct >= 60) { bg = 'bg-lime-900/30'; text = 'text-lime-400'; border = 'border-lime-700/50'; }
+    else if (pct >= 40) { bg = 'bg-yellow-900/30'; text = 'text-yellow-400'; border = 'border-yellow-700/50'; }
+    else { bg = 'bg-orange-900/30'; text = 'text-orange-400'; border = 'border-orange-700/50'; }
+  } else {
+    if (pct >= 80) { bg = 'bg-red-900/30'; text = 'text-red-400'; border = 'border-red-700/50'; }
+    else if (pct >= 60) { bg = 'bg-orange-900/30'; text = 'text-orange-400'; border = 'border-orange-700/50'; }
+    else if (pct >= 40) { bg = 'bg-yellow-900/30'; text = 'text-yellow-400'; border = 'border-yellow-700/50'; }
+    else { bg = 'bg-slate-800/60'; text = 'text-slate-300'; border = 'border-slate-700/50'; }
+  }
 
   return (
-    <span className={`text-[9px] md:text-[10px] px-1.5 py-0.5 rounded border font-semibold inline-block ${bg} ${text}`}>
+    <span
+      className={`text-[9px] md:text-[10px] px-1.5 py-0.5 rounded border font-semibold inline-block ${bg} ${text} ${border}`}
+      title={isBenign ? `Model ${pct}% yakin ini benign` : `Model ${pct}% yakin ini ancaman`}
+    >
       {pct}%
     </span>
   );
@@ -923,7 +1089,14 @@ export default function MlDashboard() {
   const [timeline, setTimeline] = useState([]);
   const [totalPredictionsCount, setTotalPredictionsCount] = useState(0);
 
-  const [filters, setFilters] = useState({ label: '' });
+  const [filters, setFilters] = useState({
+    label: 'all',
+    agent: 'all',
+    sourceIp: 'all',
+    destinationIp: 'all',
+    service: 'all',
+    confidenceRange: 'all',
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [timeRange, setTimeRange] = useState(() =>
     urlRange && ["1h", "24h", "7d", "30d"].includes(urlRange) ? urlRange : DEFAULT_TIME_RANGE
@@ -1088,17 +1261,20 @@ export default function MlDashboard() {
   }, [loadAll]);
 
   const uniqueOptions = useMemo(() => {
+    const agents = new Set();
     const labels = new Set();
     const srcs = new Set();
     const dests = new Set();
     const services = new Set();
     for (const p of predictions) {
+      if (p.agent) agents.add(p.agent);
       if (p.predictedLabel) labels.add(p.predictedLabel);
       if (p.sourceIp) srcs.add(p.sourceIp);
       if (p.destinationIp) dests.add(p.destinationIp);
       if (p.service) services.add(p.service);
     }
     return {
+      agents: Array.from(agents).sort(),
       labels: Array.from(labels).sort(),
       srcs: Array.from(srcs).sort(),
       dests: Array.from(dests).sort(),
@@ -1108,13 +1284,24 @@ export default function MlDashboard() {
 
   const filtered = useMemo(() => {
     let result = predictions.filter((p) => {
-      if (filters.label && String(p.predictedLabel) !== String(filters.label)) return false;
+      if (filters.label && filters.label !== "all" && String(p.predictedLabel) !== String(filters.label)) return false;
+      if (filters.agent !== "all" && String(p.agent || "-") !== String(filters.agent)) return false;
+      if (filters.sourceIp !== "all" && String(p.sourceIp || "-") !== String(filters.sourceIp)) return false;
+      if (filters.destinationIp !== "all" && String(p.destinationIp || "-") !== String(filters.destinationIp)) return false;
+      if (filters.service !== "all" && String(p.service || "-") !== String(filters.service)) return false;
+      if (filters.confidenceRange && filters.confidenceRange !== "all") {
+        const confidence = getConfidenceScore(p);
+        if (confidence === null) return false;
+        const [minC, maxC] = filters.confidenceRange.split("-").map(Number);
+        if (confidence < minC || confidence > maxC) return false;
+      }
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         const source = String(p.sourceIp || '').toLowerCase();
         const dest = String(p.destinationIp || '').toLowerCase();
         const service = String(p.service || '').toLowerCase();
-        if (!source.includes(q) && !dest.includes(q) && !service.includes(q)) return false;
+        const agent = String(p.agent || '').toLowerCase();
+        if (!source.includes(q) && !dest.includes(q) && !service.includes(q) && !agent.includes(q)) return false;
       }
       return true;
     });
@@ -1142,31 +1329,41 @@ export default function MlDashboard() {
     return filtered.slice(start, start + pageSize);
   }, [filtered, page, pageSize]);
 
+  const handleExportCsv = async () => {
+    const rows = predictions.map((p) => {
+      const conf = getConfidenceScore(p);
+      return [
+        formatTime(p.timestamp),
+        p.agent || "-",
+        p.predictedLabel || "-",
+        p.sourceIp || "-",
+        p.destinationIp || "-",
+        p.service || "-",
+        conf == null ? "-" : `${conf}%`,
+      ];
+    });
+    exportCsv({
+      filename: `ml-predictions-${new Date().toISOString().slice(0, 10)}.csv`,
+      header: ["Timestamp", "Agent", "Label", "Source IP", "Destination IP", "Service", "Confidence (%)"],
+      rows,
+    });
+  };
+
   const distribution = useMemo(() => {
     const map = new Map();
     for (const p of filtered) {
       const key = p.predictedLabel || 'unknown';
       map.set(key, (map.get(key) || 0) + 1);
     }
-    return Array.from(map.entries()).map(([name, value], i) => ({
-      name,
-      label: name,
-      value,
-      color: COLORS[i % COLORS.length],
-    }));
+    // Urutkan dari yang paling banyak dulu supaya rank 1 (merah) = jumlah terbesar.
+    return Array.from(map.entries())
+      .map(([name, value]) => ({ name, label: name, value }))
+      .sort((a, b) => b.value - a.value)
+      .map((entry, i) => ({
+        ...entry,
+        color: LABEL_RANK_COLORS[i % LABEL_RANK_COLORS.length],
+      }));
   }, [filtered]);
-
-  const suspiciousCount = useMemo(
-    () =>
-      filtered.filter((p) => {
-        const l = String(p.predictedLabel || '').toLowerCase();
-        return !(l.includes('benign') || l.includes('normal'));
-      }).length,
-    [filtered]
-  );
-  const suspiciousPercentage = filtered.length
-    ? Math.round((suspiciousCount / filtered.length) * 100)
-    : 0;
 
   const avgConfidence = useMemo(() => {
     let total = 0;
@@ -1179,6 +1376,18 @@ export default function MlDashboard() {
       }
     }
     return count ? (total / count) * 100 : 0;
+  }, [filtered]);
+
+  const uniqueSourceIpCount = useMemo(() => {
+    const set = new Set();
+    for (const p of filtered) set.add(p.sourceIp || "unknown");
+    return set.size;
+  }, [filtered]);
+
+  const uniqueDestIpCount = useMemo(() => {
+    const set = new Set();
+    for (const p of filtered) set.add(p.destinationIp || "unknown");
+    return set.size;
   }, [filtered]);
 
   const topSourceIps = useMemo(() => {
@@ -1207,6 +1416,28 @@ export default function MlDashboard() {
     return Array.from(map.values())
       .sort((a, b) => b.count - a.count)
       .slice(0, 5); // Top 5 destination IPs
+  }, [predictions]);
+
+  const topAgents = useMemo(() => {
+    const map = new Map();
+    for (const p of predictions) { // Use ALL predictions, not filtered
+      const name = String(p.agent || 'unknown');
+      const existing = map.get(name) || { name, count: 0, lastSeen: 0 };
+      existing.count += 1;
+      existing.lastSeen = Math.max(existing.lastSeen, getTimestampMs(p.timestamp) || 0);
+      map.set(name, existing);
+    }
+    return Array.from(map.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5); // Top 5 agents
+  }, [predictions]);
+
+  const uniqueAgents = useMemo(() => {
+    const set = new Set();
+    for (const p of predictions) {
+      set.add(String(p.agent || 'unknown'));
+    }
+    return set.size;
   }, [predictions]);
 
   const waveData = useMemo(() => {
@@ -1243,7 +1474,22 @@ export default function MlDashboard() {
       .map(([bucketStartMs, count]) => createTimelineBucketPoint(bucketStartMs, count, bucketMs))
       .filter(Boolean);
 
-    return result.length > 0 ? result : buildEmptySeries();
+    if (result.length === 0) return buildEmptySeries();
+
+    const rangeStartMs = range.start ? getTimestampMs(range.start) : Date.now() - minutes * 60000;
+    const rangeEndMs = range.end ? getTimestampMs(range.end) : Date.now();
+    if (!Number.isFinite(rangeStartMs) || !Number.isFinite(rangeEndMs) || rangeEndMs < rangeStartMs) {
+      return result;
+    }
+    const firstBucket = Math.floor(rangeStartMs / bucketMs) * bucketMs;
+    const lastBucket = Math.floor(rangeEndMs / bucketMs) * bucketMs;
+    const countByBucket = new Map(result.map((p) => [p.t, p.v]));
+    const full = [];
+    for (let t = firstBucket; t <= lastBucket; t += bucketMs) {
+      const existing = countByBucket.get(t);
+      full.push(createTimelineBucketPoint(t, Number.isFinite(existing) ? existing : 0, bucketMs));
+    }
+    return full.length > 0 ? full.filter(Boolean) : result;
   }, [timeline, timeRange, filterMode, customDateRange]);
 
   const handleTimelinePointSelect = (pointData) => {
@@ -1308,14 +1554,14 @@ export default function MlDashboard() {
               <label className="hidden items-center gap-1 text-[10px] text-slate-400 sm:flex whitespace-nowrap">
                 <span>Rows</span>
               </label>
-            <div className="relative flex items-center bg-[var(--soc-card)] rounded border border-[var(--soc-border)]">
+            <div className="relative flex items-center bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)]">
               <select
                 value={pageSize}
                 onChange={(e) => {
                   setPage(1);
                   setPageSize(Number(e.target.value));
                 }}
-                className="appearance-none bg-transparent py-1.5 pl-2 pr-5 text-left text-[11px] font-medium leading-tight text-slate-100 focus:outline-none"
+                className="appearance-none bg-transparent py-2 pl-2.5 pr-5 text-left text-[11px] font-medium leading-tight text-slate-100 focus:outline-none"
               >
                 {PAGE_SIZE_OPTIONS.map((size) => (
                   <option key={size} value={size} className="bg-white text-black">{size}</option>
@@ -1323,6 +1569,7 @@ export default function MlDashboard() {
               </select>
               <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
             </div>
+            <ExportCsvButton accent="violet" onClick={handleExportCsv} />
           </div>
 
           <div className="soc-filter-toolbar ml-auto flex flex-wrap items-center gap-2">
@@ -1354,20 +1601,20 @@ export default function MlDashboard() {
         </div>
 
         <div className="soc-kpi-grid">
-          <div className="bg-sky-500/10 border border-sky-500/30 rounded p-2 md:p-3">
-            <div className="text-[8px] md:text-[10px] text-sky-400 uppercase font-semibold">Predictions</div>
-            <div className="text-sm md:text-lg font-black text-sky-300 mt-0.5 md:mt-1">{totalPredictionsCount || predictions.length}</div>
+          <div className="bg-violet-500/10 border border-violet-500/30 rounded p-2 md:p-3">
+            <div className="text-[8px] md:text-[10px] text-violet-400 uppercase font-semibold">Predictions</div>
+            <div className="text-sm md:text-lg font-black text-violet-300 mt-0.5 md:mt-1">{totalPredictionsCount || predictions.length}</div>
             <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">total in range</div>
           </div>
-          <div className="bg-violet-500/10 border border-violet-500/30 rounded p-2 md:p-3">
-            <div className="text-[8px] md:text-[10px] text-violet-400 uppercase font-semibold">Filtered</div>
-            <div className="text-sm md:text-lg font-black text-violet-300 mt-0.5 md:mt-1">{filtered.length}</div>
-            <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">matching current filters</div>
+          <div className="bg-sky-500/10 border border-sky-500/30 rounded p-2 md:p-3">
+            <div className="text-[8px] md:text-[10px] text-sky-400 uppercase font-semibold">Unique Source IPs</div>
+            <div className="text-sm md:text-lg font-black text-sky-300 mt-0.5 md:mt-1">{uniqueSourceIpCount}</div>
+            <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">from filtered predictions</div>
           </div>
-          <div className="bg-red-500/10 border border-red-500/30 rounded p-2 md:p-3">
-            <div className="text-[8px] md:text-[10px] text-red-400 uppercase font-semibold">Suspicious / Attacks</div>
-            <div className="text-sm md:text-lg font-black text-red-300 mt-0.5 md:mt-1">{suspiciousCount}</div>
-            <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">{suspiciousPercentage}% of filtered</div>
+          <div className="bg-teal-500/10 border border-teal-500/30 rounded p-2 md:p-3">
+            <div className="text-[8px] md:text-[10px] text-teal-400 uppercase font-semibold">Unique Dest IPs</div>
+            <div className="text-sm md:text-lg font-black text-teal-300 mt-0.5 md:mt-1">{uniqueDestIpCount}</div>
+            <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">from filtered predictions</div>
           </div>
           <div className="bg-amber-500/10 border border-amber-500/30 rounded p-2 md:p-3">
             <div className="text-[8px] md:text-[10px] text-amber-400 uppercase font-semibold">Avg Confidence</div>
@@ -1381,7 +1628,7 @@ export default function MlDashboard() {
           </div>
         )}
 
-        {/* Timeline Wave Chart + Top Source IPs */}
+        {/* Timeline + Top 5 Agents (1 row, 2 kolom) */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch">
           <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full overflow-visible soc-fluid-card">
             <div className="soc-chart-header flex flex-wrap justify-between items-start gap-x-3 gap-y-1.5 mb-4 md:mb-4">
@@ -1408,26 +1655,18 @@ export default function MlDashboard() {
               </div>
             </div>
           </div>
-
-          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 h-full">
-            <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 h-full flex flex-col min-w-0">
+            <div className="mb-1 flex items-start justify-between gap-3">
               <div>
-                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
-                  <Globe className="h-3 md:h-4 w-3 md:w-4 text-emerald-400" />
-                  Top 5 Source IPs
-                </div>
-                <div className="mt-1 text-[11px] text-slate-500">Ranked traffic sources within the selected ML range</div>
+                <div className="text-[11px] md:text-xs font-semibold text-slate-300">Top 5 Agents</div>
+                <div className="mt-1 text-[11px] text-slate-500">Most active agents from ML predictions</div>
               </div>
               <div className="text-right">
-                <div className="text-xs text-slate-500">Unique sources</div>
-                <div className="text-sm font-black text-emerald-300">{uniqueOptions.srcs.length}</div>
+                <div className="text-xs text-slate-500">Unique agents</div>
+                <div className="text-xs font-black text-emerald-300">{uniqueAgents}</div>
               </div>
             </div>
-            {topSourceIps.length === 0 ? (
-              <div className="flex h-auto min-h-16 items-center justify-center px-3 py-6 text-center text-xs text-slate-600">No data</div>
-            ) : (
-              <TopSourceIpsCard sourceIps={topSourceIps} />
-            )}
+            <TopAgentsCard agents={topAgents} />
           </div>
         </div>
 
@@ -1445,24 +1684,14 @@ export default function MlDashboard() {
           </div>
 
           <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col">
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
-                  <Globe className="h-3 md:h-4 w-3 md:w-4 text-violet-400" />
-                  Top 5 Destination IPs
-                </div>
-                <div className="mt-1 text-[11px] text-slate-500">Ranked traffic destinations within the selected ML range</div>
-              </div>
-              <div className="text-right">
-                <div className="text-xs text-slate-500">Unique destinations</div>
-                <div className="text-sm font-black text-violet-300">{uniqueOptions.dests.length}</div>
+            <div className="flex items-center justify-between mb-2 sm:mb-3">
+              <div className="flex items-center gap-1 min-[600px]:gap-1.5 min-[1200px]:gap-2">
+                <Globe className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-400" />
+                <span className="text-[11px] sm:text-xs font-semibold text-slate-300">Top 5 Source &amp; Destination IPs</span>
               </div>
             </div>
-            {topDestIps.length === 0 ? (
-              <div className="flex h-auto min-h-16 items-center justify-center px-3 py-6 text-center text-xs text-slate-600">No data</div>
-            ) : (
-              <TopSourceIpsCard sourceIps={topDestIps} colors={TOP_DEST_IPS_COLORS} />
-            )}
+            <div className="mb-1 text-[11px] text-slate-500">Ranked traffic endpoints within the selected ML range</div>
+            <TopIpsTabbedCard sourceIps={topSourceIps} destIps={topDestIps} />
           </div>
         </div>
 
@@ -1511,37 +1740,100 @@ export default function MlDashboard() {
                 </button>
               )}
             </div>
-            <div className="relative">
-              <select
+            <div className="flex flex-wrap items-center gap-2">
+              <FilterSelect
                 value={filters.label}
-                onChange={(e) => {
-                  setFilters((s) => ({ ...s, label: e.target.value }));
+                allLabel="All labels"
+                options={uniqueOptions.labels}
+                accent="violet"
+                onChange={(nextValue) => {
+                  setFilters((s) => ({ ...s, label: nextValue }));
                   setPage(1);
                 }}
-                className="appearance-none rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-3 pr-8 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-500/50"
-              >
-                <option value="" className="bg-white text-black">All labels</option>
-                {uniqueOptions.labels.map((l) => (
-                  <option key={l} value={l} className="bg-white text-black">{l}</option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              />
+              <FilterSelect
+                value={filters.agent}
+                allLabel="All agents"
+                options={uniqueOptions.agents}
+                accent="violet"
+                onChange={(nextValue) => {
+                  setFilters((s) => ({ ...s, agent: nextValue }));
+                  setPage(1);
+                }}
+              />
+              <FilterSelect
+                value={filters.sourceIp}
+                allLabel="All source IPs"
+                options={uniqueOptions.srcs}
+                accent="violet"
+                onChange={(nextValue) => {
+                  setFilters((s) => ({ ...s, sourceIp: nextValue }));
+                  setPage(1);
+                }}
+              />
+              <FilterSelect
+                value={filters.destinationIp}
+                allLabel="All destination IPs"
+                options={uniqueOptions.dests}
+                accent="violet"
+                onChange={(nextValue) => {
+                  setFilters((s) => ({ ...s, destinationIp: nextValue }));
+                  setPage(1);
+                }}
+              />
+              <FilterSelect
+                value={filters.service}
+                allLabel="All services"
+                options={uniqueOptions.services}
+                accent="violet"
+                onChange={(nextValue) => {
+                  setFilters((s) => ({ ...s, service: nextValue }));
+                  setPage(1);
+                }}
+              />
+<FilterSelect
+                value={filters.confidenceRange}
+                allLabel="All confidences"
+                options={[
+                  { value: "80-100", label: "\u2265 80%" },
+                  { value: "60-79", label: "60 \u2013 79%" },
+                  { value: "40-59", label: "40 \u2013 59%" },
+                  { value: "0-39", label: "< 40%" },
+                ]}
+                accent="violet"
+                onChange={(nextValue) => {
+                  setFilters((s) => ({ ...s, confidenceRange: nextValue }));
+                  setPage(1);
+                }}
+              />
             </div>
             </div>
-          </div>
+            </div>
 
           {/* Table */}
           <div className="overflow-x-auto soc-table-scroll" ref={predictionsTableRef}>
-            <table className="w-full min-w-[680px] text-[10px] md:text-[11px] text-left soc-responsive-table">
+            <table
+              className="ml-table-compact w-max min-w-full mx-auto text-[10px] md:text-[11px] text-left soc-responsive-table"
+              style={{ borderCollapse: "collapse", borderSpacing: 0, tableLayout: "auto" }}
+            >
+              <colgroup>
+                <col className="ml-col-timestamp" style={{ width: "270px" }} />
+                <col className="ml-col-agent" style={{ width: "250px", minWidth: "230px" }} />
+                <col />
+                <col />
+                <col />
+                <col />
+                <col />
+              </colgroup>
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-800/70">
-                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Timestamp</th>
-                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Label</th>
-                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Source IP</th>
-                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Destination IP</th>
-                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Service</th>
-                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Confidence</th>
-                  <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Meaning</th>
+                  <th style={{ padding: "8px 14px", width: "270px", minWidth: "260px", maxWidth: "300px" }} className="text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase whitespace-nowrap">Timestamp</th>
+                  <th style={{ padding: "8px 14px", minWidth: "230px", width: "250px", whiteSpace: "normal", overflowWrap: "break-word" }} className="text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Agent</th>
+                  <th style={{ padding: "8px 4px" }} className="text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase whitespace-nowrap">Label</th>
+                  <th style={{ padding: "8px 4px" }} className="text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase whitespace-nowrap">Source IP</th>
+                  <th style={{ padding: "8px 4px" }} className="text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase whitespace-nowrap">Destination IP</th>
+                  <th style={{ padding: "8px 4px" }} className="text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase whitespace-nowrap">Service</th>
+                  <th style={{ padding: "8px 4px" }} className="text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase whitespace-nowrap">Confidence</th>
                 </tr>
               </thead>
               <tbody>
@@ -1557,26 +1849,26 @@ export default function MlDashboard() {
                     className={`border-b border-slate-800/60 hover:bg-slate-800/40 transition-colors ${idx % 2 !== 0 ? 'bg-slate-900/60' : ''
                       }`}
                   >
-                    <td className="px-2 md:px-4 py-1.5 md:py-2 text-slate-500 text-[10px] md:text-[11px] whitespace-nowrap">
+                    <td style={{ padding: "6px 14px", width: "270px", minWidth: "260px", maxWidth: "300px" }} className="text-slate-500 text-[10px] md:text-[11px] whitespace-nowrap" title={formatTimeFull(p.timestamp)}>
                       {formatTime(p.timestamp)}
                     </td>
-                    <td className="px-2 md:px-4 py-1.5 md:py-2">
+                    <td style={{ padding: "6px 14px", minWidth: "230px", width: "250px" }} className="text-sky-300 text-[10px] md:text-[11px] whitespace-nowrap">
+                      {p.agent || '-'}
+                    </td>
+                    <td style={{ padding: "6px 4px" }} className="whitespace-nowrap">
                       <PredictionBadge label={p.predictedLabel} />
                     </td>
-                    <td className="px-2 md:px-4 py-1.5 md:py-2 text-emerald-400 font-mono text-[10px] md:text-[11px]">
+                    <td style={{ padding: "6px 4px" }} className="text-emerald-400 font-mono text-[10px] md:text-[11px] whitespace-nowrap">
                       {p.sourceIp || '-'}
                     </td>
-                    <td className="px-2 md:px-4 py-1.5 md:py-2 text-violet-400 font-mono text-[10px] md:text-[11px]">
+                    <td style={{ padding: "6px 4px" }} className="text-violet-400 font-mono text-[10px] md:text-[11px] whitespace-nowrap">
                       {p.destinationIp || '-'}
                     </td>
-                    <td className="px-2 md:px-4 py-1.5 md:py-2 text-slate-300 text-[10px] md:text-[11px]">
+                    <td style={{ padding: "6px 4px" }} className="text-slate-300 text-[10px] md:text-[11px] whitespace-nowrap">
                       {p.service || '-'}
                     </td>
-                    <td className="px-2 md:px-4 py-1.5 md:py-2">
-                      <ConfidenceBadge score={p.confidence} />
-                    </td>
-                    <td className="px-2 md:px-4 py-1.5 md:py-2 text-[10px] md:text-[11px] text-slate-400">
-                      {getConfidenceMeaning(p.predictedLabel, p.confidence)}
+                    <td style={{ padding: "6px 4px" }} className="whitespace-nowrap">
+                      <ConfidenceBadge score={p.confidence} label={p.predictedLabel} />
                     </td>
                   </tr>
                 ))}

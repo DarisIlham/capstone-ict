@@ -51,6 +51,7 @@ export default function AppLayout({ children }) {
     () => localStorage.getItem("sidebar-collapsed") === "1"
   );
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   useEffect(() => {
     localStorage.setItem("sidebar-collapsed", collapsed ? "1" : "0");
@@ -64,7 +65,12 @@ export default function AppLayout({ children }) {
     navigate(href);
   };
 
-  const handleLogout = () => {
+  const handleLogoutClick = () => {
+    setShowLogoutConfirm(true);
+  };
+
+  const confirmLogout = () => {
+    setShowLogoutConfirm(false);
     logout();
     navigate("/login");
   };
@@ -165,7 +171,7 @@ export default function AppLayout({ children }) {
           </div>
         )}
         <button
-          onClick={handleLogout}
+          onClick={handleLogoutClick}
           title={collapsed && !isMobile ? "Logout" : undefined}
           className={`w-full flex items-center rounded-lg font-medium text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors ${isMobile ? "gap-1.5 px-1.5 py-1 text-[11px]" : "gap-2.5 px-2.5 py-2 text-[13px]"} ${
             collapsed && !isMobile ? "justify-center px-0" : ""
@@ -262,6 +268,30 @@ export default function AppLayout({ children }) {
           </div>
         </main>
       </div>
+
+      {/* Logout Confirmation */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-5 max-w-sm w-full">
+            <h2 className="text-base md:text-lg font-bold text-white mb-2">Confirm Logout</h2>
+            <p className="text-sm text-slate-400 mb-5">Are you sure you want to log out?</p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                className="px-4 py-2 text-xs font-medium rounded-lg text-slate-300 border border-[var(--soc-border)] hover:bg-slate-700/50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmLogout}
+                className="px-4 py-2 text-xs font-medium rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
+              >
+                Yes, Log Out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

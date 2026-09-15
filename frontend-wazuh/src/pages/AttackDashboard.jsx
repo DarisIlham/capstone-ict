@@ -12,6 +12,9 @@ import {
 } from "lucide-react";
 import DateRangeFilter from "../components/DateRangeFilter";
 import RangeFilter from "../components/RangeFilter";
+import FilterSelect from "../components/FilterSelect";
+import ExportCsvButton from "../components/ExportCsvButton";
+import { exportCsv } from "../utils/exportCsv";
 import {
   createDefaultDateRange,
   normalizeDateRange,
@@ -825,7 +828,7 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
     return f;
   };
 
-  const fontSize = (count) => Math.round((10 + ((count - minCount) / range) * 27) * Math.min(1, Math.max(0.5, wScale)));
+  const fontSize = (count) => Math.round((11 + ((count - minCount) / range) * 31) * Math.min(1, Math.max(0.6, wScale)));
   const placed = [];
   const rects = [];
   const overlaps = (nx, ny, nw, nh) => {
@@ -854,9 +857,9 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
       // Wider spiral fills short-wide boxes edge-to-edge so the cloud
       // does not collapse into a flat band in the middle (closer to
       // the File Integrity cloud behaviour).
-      const radius = step * 0.62;
+      const radius = step * 0.8;
       const cx = W / 2 + radius * Math.cos(angle);
-      const cy = H / 2 + radius * Math.sin(angle) * 0.8;
+      const cy = H / 2 + radius * Math.sin(angle) * 0.6;
       if (cx - tw / 2 >= SAFE_X && cx + tw / 2 <= W - SAFE_X && cy - th / 2 >= SAFE_Y && cy + th / 2 <= H - SAFE_Y && !overlaps(cx, cy, tw, th)) {
         placedX = cx;
         placedY = cy;
@@ -1022,7 +1025,10 @@ const HostMonitoring = () => {
   const urlEnd = searchParams.get("end");
   const urlRange = searchParams.get("rangeKey");
   const [searchQuery, setSearchQuery] = useState("");
-  const [suspiciousOnly, setSuspiciousOnly] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [userFilter, setUserFilter] = useState("all");
+  const [agentFilter, setAgentFilter] = useState("all");
+  const [sessionFilter, setSessionFilter] = useState("all");
   const [selectedSession, setSelectedSession] = useState(null);
   const [selectedTimelinePoint, setSelectedTimelinePoint] = useState(() =>
     urlStart && urlEnd ? { key: "custom", start: urlStart, end: urlEnd } : null
@@ -1085,7 +1091,23 @@ const HostMonitoring = () => {
       analyticsParams.set("contains", searchQuery.trim());
       dangerousParams.set("contains", searchQuery.trim());
     }
-    if (suspiciousOnly) params.set("suspicious", "true");
+    if (statusFilter === "suspicious") params.set("suspicious", "true");
+    else if (statusFilter === "normal") params.set("suspicious", "false");
+    if (userFilter !== "all") {
+      params.set("user", userFilter);
+      analyticsParams.set("user", userFilter);
+      dangerousParams.set("user", userFilter);
+    }
+    if (agentFilter !== "all") {
+      params.set("agentName", agentFilter);
+      analyticsParams.set("agentName", agentFilter);
+      dangerousParams.set("agentName", agentFilter);
+    }
+    if (sessionFilter !== "all") {
+      params.set("session", sessionFilter);
+      analyticsParams.set("session", sessionFilter);
+      dangerousParams.set("session", sessionFilter);
+    }
 
     const filterDateRange =
       filterMode === "custom"
@@ -1157,7 +1179,69 @@ const HostMonitoring = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [page, pageSize, rangeKey, filterMode, customDateRange, searchQuery, selectedTimelinePoint, suspiciousOnly]);
+  }, [page, pageSize, rangeKey, filterMode, customDateRange, searchQuery, selectedTimelinePoint, statusFilter, userFilter, agentFilter, sessionFilter]);
+
+  const handleExportCsv = async () => {
+    try {
+      const filterDateRange =
+        filterMode === "custom"
+          ? getIsoDateRange(normalizeDateRange(customDateRange))
+          : rangeKeyToDateRange(rangeKey);
+      const start = selectedTimelinePoint?.start || filterDateRange.start;
+      const end = selectedTimelinePoint?.end || filterDateRange.end;
+      const collected = [];
+      for (let pg = 1; pg <= 50; pg++) {
+        const params = new URLSearchParams({
+          page: String(pg),
+          limit: String(100),
+          start,
+          end,
+        });
+        if (searchQuery.trim()) params.set("contains", searchQuery.trim());
+        if (statusFilter === "suspicious") params.set("suspicious", "true");
+        else if (statusFilter === "normal") params.set("suspicious", "false");
+        if (userFilter !== "all") params.set("user", userFilter);
+        if (agentFilter !== "all") params.set("agentName", agentFilter);
+        if (sessionFilter !== "all") params.set("session", sessionFilter);
+        const response = await fetchJson(`${API_BASE_URL}/linux-commands?${params.toString()}`);
+        const data = (response.data || []).map(normalizeLinuxCommand);
+        collected.push(...data);
+        const totalPages = Number(response.pagination?.totalPages || 1);
+        if (pg >= totalPages || data.length < 100) break;
+      }
+      const formatTs = (v) =>
+        v
+          ? new Date(v).toLocaleString("en-US", {
+            month: "short",
+            day: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          })
+          : "-";
+      const rows = collected.map((log) => [
+        formatTs(log.timestamp),
+        log.agentName || "-",
+        log.user || "-",
+        log.sessionId || "-",
+        log.command?.cmd || "-",
+        log.command?.risk || "-",
+        log.hostIp || "-",
+        Array.isArray(log.command?.indicator) && log.command.indicator.length
+          ? log.command.indicator.join(", ")
+          : "-",
+        log.logFilePath || "-",
+      ]);
+      exportCsv({
+        filename: `host-monitoring-commands-${new Date().toISOString().slice(0, 10)}.csv`,
+        header: ["Timestamp", "Agent", "User", "Session", "Command", "Risk", "Host IP", "Indicators", "Log File"],
+        rows,
+      });
+    } catch (err) {
+      console.error("Export failed:", err);
+    }
+  };
 
   useEffect(() => {
     loadDashboardData();
@@ -1383,6 +1467,20 @@ const HostMonitoring = () => {
     [wordCloudSourceLogs]
   );
 
+  const filterOptions = useMemo(() => {
+    const source = analyticsLogs.length ? analyticsLogs : logs;
+    const toOptions = (getKey) =>
+      Array.from(
+        new Set(source.map(getKey).filter((value) => value && value !== "-"))
+      ).sort((a, b) => String(a).localeCompare(String(b)));
+
+    return {
+      users: toOptions((log) => log.user),
+      agents: toOptions((log) => log.agentName),
+      sessions: toOptions((log) => log.sessionId),
+    };
+  }, [analyticsLogs, logs]);
+
   // Height is now controlled by CSS (.soc-panel--responsive-height) for
   // responsiveness; no inline fixed height needed.
 
@@ -1407,12 +1505,26 @@ const HostMonitoring = () => {
       );
     }
 
-    if (suspiciousOnly) {
+    if (statusFilter === "suspicious") {
       result = result.filter((l) => l.command.risk === "suspicious");
+    } else if (statusFilter === "normal") {
+      result = result.filter((l) => l.command.risk === "normal");
+    }
+
+    if (userFilter !== "all") {
+      result = result.filter((l) => String(l.user) === userFilter);
+    }
+
+    if (agentFilter !== "all") {
+      result = result.filter((l) => String(l.agentName) === agentFilter);
+    }
+
+    if (sessionFilter !== "all") {
+      result = result.filter((l) => String(l.sessionId) === sessionFilter);
     }
 
     return [...result].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  }, [logs, searchQuery, selectedTimelinePoint, suspiciousOnly]);
+  }, [logs, searchQuery, selectedTimelinePoint, statusFilter, userFilter, agentFilter, sessionFilter]);
 
   const keywordFilterActive = Boolean(selectedKeyword);
 
@@ -1439,8 +1551,22 @@ const HostMonitoring = () => {
       );
     }
 
-    if (suspiciousOnly) {
+    if (statusFilter === "suspicious") {
       result = result.filter((l) => l.command.risk === "suspicious");
+    } else if (statusFilter === "normal") {
+      result = result.filter((l) => l.command.risk === "normal");
+    }
+
+    if (userFilter !== "all") {
+      result = result.filter((l) => String(l.user) === userFilter);
+    }
+
+    if (agentFilter !== "all") {
+      result = result.filter((l) => String(l.agentName) === agentFilter);
+    }
+
+    if (sessionFilter !== "all") {
+      result = result.filter((l) => String(l.sessionId) === sessionFilter);
     }
 
     if (selectedKeyword) {
@@ -1449,7 +1575,7 @@ const HostMonitoring = () => {
     }
 
     return [...result].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  }, [wordCloudSourceLogs, keywordFilterActive, selectedKeyword, selectedTimelinePoint, searchQuery, suspiciousOnly]);
+  }, [wordCloudSourceLogs, keywordFilterActive, selectedKeyword, selectedTimelinePoint, searchQuery, statusFilter, userFilter, agentFilter, sessionFilter]);
 
   const handleSelectKeyword = useCallback(
     (word) => {
@@ -1579,7 +1705,7 @@ const HostMonitoring = () => {
               <label className="hidden items-center gap-1 text-[10px] text-slate-400 sm:flex whitespace-nowrap">
                 <span>Rows</span>
               </label>
-              <div className="relative flex items-center bg-[var(--soc-card)] rounded border border-[var(--soc-border)]">
+              <div className="relative flex items-center bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)]">
                 <select
                   value={pageSize}
                   onChange={(event) => {
@@ -1596,7 +1722,7 @@ const HostMonitoring = () => {
                       }
                     }, 100);
                   }}
-                  className="appearance-none bg-transparent py-1.5 pl-2 pr-5 text-left text-[11px] font-medium leading-tight text-slate-100 focus:outline-none"
+                  className="appearance-none bg-transparent py-2 pl-2.5 pr-5 text-left text-[11px] font-medium leading-tight text-slate-100 focus:outline-none"
                 >
                   {[10, 25, 50, 100].map((size) => (
                     <option key={size} value={size} className="bg-white text-black">{size}</option>
@@ -1604,6 +1730,7 @@ const HostMonitoring = () => {
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
               </div>
+              <ExportCsvButton accent="orange" onClick={handleExportCsv} />
             </div>
 
             <div className="soc-filter-toolbar ml-auto flex flex-wrap items-center gap-2">
@@ -1689,7 +1816,7 @@ const HostMonitoring = () => {
                   <div className="text-[11px] text-slate-600 break-words">Updated {formatLiveTimestamp(lastUpdated)}</div>
                 </div>
               </div>
-              <div className="min-w-0 soc-chart--timeline rounded-lg bg-[var(--soc-card)] p-2 md:p-4 overflow-hidden" style={{ height: `${timelineChartHeight}px` }}>
+              <div className="min-w-0 soc-chart--timeline rounded-lg bg-[var(--soc-card)] p-2 md:p-4 overflow-visible" style={{ height: `${timelineChartHeight}px` }}>
                 <div className="min-w-0 h-full w-full">
                   <WaveChart
                     data={timelineData}
@@ -1704,7 +1831,7 @@ const HostMonitoring = () => {
             </div>
 
             <div ref={topAgentsPanelRef} className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full min-w-0 attack-card">
-              <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="mb-1 flex items-start justify-between gap-3">
                 <div>
                   <div className="text-[11px] md:text-xs font-semibold text-slate-300">Top 5 Agents</div>
                   <div className="mt-1 text-[11px] text-slate-500">Most active agents from host monitoring events</div>
@@ -1797,18 +1924,45 @@ const HostMonitoring = () => {
                   className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500"
                 />
               </div>
-              <button
-                onClick={() => {
+              <FilterSelect
+                value={statusFilter}
+                allLabel="All statuses"
+                options={[
+                  { value: "suspicious", label: "Suspicious" },
+                  { value: "normal", label: "Normal" },
+                ]}
+                onChange={(nextValue) => {
                   setPage(1);
-                  setSuspiciousOnly(!suspiciousOnly);
+                  setStatusFilter(nextValue);
                 }}
-                className={`px-4 py-2 text-[13px] rounded-lg font-medium transition-colors ${suspiciousOnly
-                    ? "bg-red-600 text-white"
-                    : "bg-slate-700 text-slate-400 hover:bg-slate-600"
-                  }`}
-              >
-                Suspicious Only
-              </button>
+              />
+              <FilterSelect
+                value={userFilter}
+                allLabel="All users"
+                options={filterOptions.users}
+                onChange={(nextValue) => {
+                  setPage(1);
+                  setUserFilter(nextValue);
+                }}
+              />
+              <FilterSelect
+                value={agentFilter}
+                allLabel="All agents"
+                options={filterOptions.agents}
+                onChange={(nextValue) => {
+                  setPage(1);
+                  setAgentFilter(nextValue);
+                }}
+              />
+              <FilterSelect
+                value={sessionFilter}
+                allLabel="All sessions"
+                options={filterOptions.sessions}
+                onChange={(nextValue) => {
+                  setPage(1);
+                  setSessionFilter(nextValue);
+                }}
+              />
             </div>
           </div>
 

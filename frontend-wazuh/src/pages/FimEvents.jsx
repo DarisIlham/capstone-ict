@@ -5,6 +5,9 @@ import { API_BASE_URL } from "../config/Api";
 import DateRangeFilter from "../components/DateRangeFilter";
 import RangeFilter from "../components/RangeFilter";
 import PageLoader from "../components/PageLoader";
+import FilterSelect from "../components/FilterSelect";
+import ExportCsvButton from "../components/ExportCsvButton";
+import { exportCsv } from "../utils/exportCsv";
 import {
   createDefaultDateRange,
   normalizeDateRange,
@@ -507,12 +510,12 @@ const TopAgentsCard = ({ agents }) => {
   const maxValue = Math.max(...agents.map((a) => a.count), 1);
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       {agents.map((item, i) => {
         const color = TOP_AGENT_COLORS[i % TOP_AGENT_COLORS.length];
         return (
-          <div key={item.name} className="flex flex-col">
-            <div className="flex items-center gap-1.5">
+          <div key={item.name} className="flex flex-col gap-1 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0">
               <span className="w-5 text-[13px] font-bold text-slate-500 shrink-0">
                 {i + 1}.
               </span>
@@ -523,7 +526,7 @@ const TopAgentsCard = ({ agents }) => {
                 {new Intl.NumberFormat("en-US").format(item.count)}
               </span>
             </div>
-            <div className="flex items-center gap-1.5 mt-1">
+            <div className="flex items-center gap-1.5 min-w-0">
               <span className="w-5 shrink-0" />
               <div
                 className="flex-1 bg-[var(--soc-bg)] rounded h-4 overflow-hidden"
@@ -1558,6 +1561,49 @@ const FimEvents = ({ agentId = "all" }) => {
   const safeDisplayPage = Math.min(vizFiltersActive ? clientPage : currentPage, Math.max(displayPages, 1));
   const visibleEvents = vizFiltersActive ? (crossFilteredEvents || []).slice((safeDisplayPage - 1) * pageSize, safeDisplayPage * pageSize) : tableEvents;
 
+  const handleExportCsv = async () => {
+    try {
+      const rangeWindow = getEffectiveRange(rangeKey);
+      const start = selectedTimelinePoint?.start || rangeWindow.start;
+      const end = selectedTimelinePoint?.end || rangeWindow.end;
+      const baseEndpoint = agentId === "all"
+        ? `${API_BASE_URL}/api/events`
+        : `${API_BASE_URL}/api/events/${agentId}`;
+      const collected = [];
+      const size = 1000;
+      for (let pg = 1; pg <= 50; pg++) {
+        const endpoint =
+          `${baseEndpoint}?page=${pg}&size=${size}` +
+          `&start=${encodeURIComponent(start)}` +
+          `&end=${encodeURIComponent(end)}`;
+        const resp = await fetch(endpoint);
+        if (!resp.ok) throw new Error(`API Error ${resp.status}`);
+        const r = await resp.json();
+        const data = Array.isArray(r.data) ? r.data : [];
+        collected.push(...data);
+        const totalPages = Number(r.total_pages) || 0;
+        if (pg >= totalPages || data.length < size) break;
+      }
+      const rows = collected.map((evt) => [
+        formatTime(evt.timestamp),
+        evt.agentName || "-",
+        evt.username || "-",
+        evt.syscheckPath || "-",
+        evt.syscheckEvent || "-",
+        evt.ruleDescription || evt.rule_description || "-",
+        evt.ruleLevel ?? "-",
+        evt.fileDiff || evt.file_diff || "-",
+      ]);
+      exportCsv({
+        filename: `file-integrity-events-${new Date().toISOString().slice(0, 10)}.csv`,
+        header: ["Timestamp", "Agent", "User", "Path", "Event", "Rule", "Severity", "Diff"],
+        rows,
+      });
+    } catch (err) {
+      console.error("Export failed:", err);
+    }
+  };
+
   const goToDisplayPage = useCallback((next) => {
     if (vizFiltersActive) {
       setClientPage(Math.max(1, Math.min(next, Math.max(displayPages, 1))));
@@ -1601,11 +1647,11 @@ const FimEvents = ({ agentId = "all" }) => {
           <label className="hidden items-center gap-1 text-[10px] text-slate-400 sm:flex whitespace-nowrap">
             <span>Rows</span>
           </label>
-          <div className="relative flex items-center bg-[var(--soc-card)] rounded border border-[var(--soc-border)]">
+          <div className="relative flex items-center bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)]">
             <select
               value={pageSize}
               onChange={(e) => setPageSize(Number(e.target.value))}
-              className="appearance-none bg-transparent py-1.5 pl-2 pr-5 text-left text-[11px] font-medium leading-tight text-slate-100 focus:outline-none"
+              className="appearance-none bg-transparent py-2 pl-2.5 pr-5 text-left text-[11px] font-medium leading-tight text-slate-100 focus:outline-none"
             >
               {[10, 25, 50, 100].map((s) => (
                 <option key={s} value={s} className="bg-white text-black">{s}</option>
@@ -1613,6 +1659,7 @@ const FimEvents = ({ agentId = "all" }) => {
             </select>
             <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
           </div>
+          <ExportCsvButton accent="emerald" onClick={handleExportCsv} />
           </div>
 
           <div className="soc-filter-toolbar ml-auto flex flex-wrap items-center gap-2">
@@ -1651,9 +1698,9 @@ const FimEvents = ({ agentId = "all" }) => {
         </div>
 
         <div className="soc-kpi-grid">
-          <div className="bg-violet-500/10 border border-violet-500/30 rounded p-2 md:p-3">
-            <div className="text-[8px] md:text-[10px] text-violet-400 uppercase font-semibold">Total Events</div>
-            <div className="text-sm md:text-lg font-black text-violet-300 mt-0.5 md:mt-1">{derived.total}</div>
+          <div className="bg-emerald-500/10 border border-emerald-500/30 rounded p-2 md:p-3">
+            <div className="text-[8px] md:text-[10px] text-emerald-400 uppercase font-semibold">Total Events</div>
+            <div className="text-sm md:text-lg font-black text-emerald-300 mt-0.5 md:mt-1">{derived.total}</div>
             <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">events in range</div>
           </div>
           <div className="bg-sky-500/10 border border-sky-500/30 rounded p-2 md:p-3">
@@ -1666,9 +1713,9 @@ const FimEvents = ({ agentId = "all" }) => {
             <div className="text-sm md:text-lg font-black text-red-300 mt-0.5 md:mt-1">{derived.criticalCount}</div>
             <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">rule level ≥ 12</div>
           </div>
-          <div className="bg-emerald-500/10 border border-emerald-500/30 rounded p-2 md:p-3">
-            <div className="text-[8px] md:text-[10px] text-emerald-400 uppercase font-semibold">Most Severe Event</div>
-            <div className="text-sm md:text-lg font-black text-emerald-300 mt-0.5 md:mt-1">
+          <div className="bg-violet-500/10 border border-violet-500/30 rounded p-2 md:p-3">
+            <div className="text-[8px] md:text-[10px] text-violet-400 uppercase font-semibold">Most Severe Event</div>
+            <div className="text-sm md:text-lg font-black text-violet-300 mt-0.5 md:mt-1">
               {derived.mostSevereEvent ? `Lvl ${derived.mostSevereEvent.ruleLevel}` : "—"}
             </div>
             <div className="text-[8px] md:text-[9px] text-slate-400 mt-0.5 truncate" title={derived.mostSevereEvent?.description}>
@@ -1702,8 +1749,8 @@ const FimEvents = ({ agentId = "all" }) => {
               </div>
             </div>
           </div>
-          <div ref={topAgentsPanelRef} className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 h-full flex flex-col">
-            <div className="mb-4 flex items-start justify-between gap-3">
+          <div ref={topAgentsPanelRef} className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full min-w-0">
+            <div className="mb-1 flex items-start justify-between gap-3">
               <div>
                 <div className="text-[11px] md:text-xs font-semibold text-slate-300">Top 5 Agents</div>
                 <div className="mt-1 text-[11px] text-slate-500">Most active agents from FIM events</div>
@@ -1713,9 +1760,7 @@ const FimEvents = ({ agentId = "all" }) => {
                 <div className="text-xs font-black text-emerald-300">{derived.uniqueAgents}</div>
               </div>
             </div>
-            <div className="flex-1 flex flex-col">
-              <TopAgentsCard agents={derived.topAgents} />
-            </div>
+            <TopAgentsCard agents={derived.topAgents} />
           </div>
         </div>
 
@@ -1783,7 +1828,7 @@ const FimEvents = ({ agentId = "all" }) => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search agent, user, path, event, rule..."
-              className="w-full rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-8 pr-8 text-[11px] text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+              className="w-full rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-8 pr-8 text-[11px] text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500/50"
             />
             {searchQuery && (
               <button
@@ -1796,58 +1841,34 @@ const FimEvents = ({ agentId = "all" }) => {
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
-              <select
-                value={agentFilter}
-                onChange={(e) => setAgentFilter(e.target.value)}
-                className="appearance-none rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-3 pr-8 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
-              >
-                <option value="all" className="bg-white text-black">All agents</option>
-                {filterOptions.agents.map((agent) => (
-                  <option key={agent} value={agent} className="bg-white text-black">{agent}</option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-            </div>
-            <div className="relative">
-              <select
-                value={userFilter}
-                onChange={(e) => setUserFilter(e.target.value)}
-                className="appearance-none rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-3 pr-8 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
-              >
-                <option value="all" className="bg-white text-black">All users</option>
-                {filterOptions.users.map((user) => (
-                  <option key={user} value={user} className="bg-white text-black">{user}</option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-            </div>
-            <div className="relative">
-              <select
-                value={eventFilter}
-                onChange={(e) => setEventFilter(e.target.value)}
-                className="appearance-none rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-3 pr-8 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
-              >
-                <option value="all" className="bg-white text-black">All events</option>
-                {EVENT_TYPE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value} className="bg-white text-black">{opt.label}</option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-            </div>
-            <div className="relative">
-              <select
-                value={severityFilter}
-                onChange={(e) => setSeverityFilter(e.target.value)}
-                className="appearance-none rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-3 pr-8 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
-              >
-                <option value="all" className="bg-white text-black">All severities</option>
-                {SEVERITY_LABELS.map((sev) => (
-                  <option key={sev} value={sev} className="bg-white text-black">{sev}</option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-            </div>
+            <FilterSelect
+              value={agentFilter}
+              allLabel="All agents"
+              options={filterOptions.agents}
+              accent="emerald"
+              onChange={(nextValue) => setAgentFilter(nextValue)}
+            />
+            <FilterSelect
+              value={userFilter}
+              allLabel="All users"
+              options={filterOptions.users}
+              accent="emerald"
+              onChange={(nextValue) => setUserFilter(nextValue)}
+            />
+            <FilterSelect
+              value={eventFilter}
+              allLabel="All events"
+              options={EVENT_TYPE_OPTIONS}
+              accent="emerald"
+              onChange={(nextValue) => setEventFilter(nextValue)}
+            />
+            <FilterSelect
+              value={severityFilter}
+              allLabel="All severities"
+              options={SEVERITY_LABELS}
+              accent="emerald"
+              onChange={(nextValue) => setSeverityFilter(nextValue)}
+            />
           </div>
           </div>
         </div>
