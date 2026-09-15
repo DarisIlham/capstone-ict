@@ -31,7 +31,7 @@ export const getLatestPrediction = asyncHandler(async (req, res) => {
 });
 
 export const getPredictionStats = asyncHandler(async (req, res) => {
-  const data = await mlService.getPredictionStats();
+  const data = await mlService.getPredictionStats(req.query);
 
   res.json({
     success: true,

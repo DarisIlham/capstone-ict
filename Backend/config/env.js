@@ -14,3 +14,5 @@ export const elastic = {
   password: process.env.ELASTIC_PASSWORD || "",
   index: process.env.ELASTIC_INDEX || "filebeat-*"
 };
+
+export const virusTotalApiKey = process.env.VIRUSTOTAL_API_KEY || "";
