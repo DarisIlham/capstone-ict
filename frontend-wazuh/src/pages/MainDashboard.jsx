@@ -806,22 +806,25 @@ export default function MainDashboard() {
       <div className="dashboard-analytics-grid grid grid-cols-1 min-[400px]:grid-cols-2 gap-3 sm:gap-4 items-stretch">
         {/* Top Users */}
         <div className="min-w-0 bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-2.5 sm:p-3 lg:p-4 flex flex-col h-full">
-          <div className="flex items-center justify-between mb-2 sm:mb-3">
-            <div className="flex items-center gap-1 min-[600px]:gap-1.5 min-[1200px]:gap-2">
-              <Activity className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-sky-400" />
-              <span className="text-[11px] sm:text-xs font-semibold text-slate-300">Top Active Users</span>
+          <div className="mb-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1 min-[600px]:gap-1.5 min-[1200px]:gap-2">
+                <Activity className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-sky-400" />
+                <span className="text-[11px] sm:text-xs font-semibold text-slate-300">Top Active Users</span>
+              </div>
+              <button
+                onClick={() => navigate({
+                  host: "/attack-dashboard",
+                  fimAgents: "/fim-events",
+                  file: "/file-security",
+                  ml: "/ml-dashboard",
+                }[topUsersSource] ?? "/attack-dashboard")}
+                className="text-[10px] sm:text-[11px] text-sky-400 hover:text-sky-300 transition-colors flex items-center gap-1"
+              >
+                View all <ArrowRight className="h-3 w-3" />
+              </button>
             </div>
-            <button
-              onClick={() => navigate({
-                host: "/attack-dashboard",
-                fimAgents: "/fim-events",
-                file: "/file-security",
-                ml: "/ml-dashboard",
-              }[topUsersSource] ?? "/attack-dashboard")}
-              className="text-[10px] sm:text-[11px] text-sky-400 hover:text-sky-300 transition-colors flex items-center gap-1"
-            >
-              View all <ArrowRight className="h-3 w-3" />
-            </button>
+            <div className="mt-1 text-[10px] sm:text-[11px] text-slate-500">Most active users in the selected source</div>
           </div>
           <div className="flex flex-wrap items-center gap-1 mb-2 sm:mb-3">
             {[
@@ -851,11 +854,12 @@ export default function MainDashboard() {
 
         {/* Risk Distribution */}
         <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-2.5 sm:p-3 lg:p-4 flex flex-col h-full min-w-0">
-          <div className="flex items-center justify-between mb-2 sm:mb-3">
+          <div className="mb-2">
             <div className="flex items-center gap-1 min-[600px]:gap-1.5 min-[1200px]:gap-2">
               <BarChart3 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-orange-400" />
               <span className="text-[11px] sm:text-xs font-semibold text-slate-300">Risk Distribution</span>
             </div>
+            <div className="mt-1 text-[10px] sm:text-[11px] text-slate-500">Incidents grouped by risk level</div>
           </div>
           <div className="flex flex-1 flex-col items-stretch gap-2 sm:gap-3 w-full min-h-0 soc-dashboard-category-chart">
             <CategoryLineChart items={dashboardData.riskDistribution} color="#f97316" totalLabel="incidents" />
@@ -864,17 +868,20 @@ export default function MainDashboard() {
 
         {/* Most Changed Files */}
         <div className="min-w-0 bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-2.5 sm:p-3 lg:p-4 flex flex-col h-full">
-          <div className="flex items-center justify-between mb-2 sm:mb-3">
-            <div className="flex items-center gap-1 min-[600px]:gap-1.5 min-[1200px]:gap-2">
-              <BarChart3 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-sky-400" />
-              <span className="min-w-0 text-[11px] sm:text-xs font-semibold text-slate-300">Most Changed Files</span>
+          <div className="mb-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1 min-[600px]:gap-1.5 min-[1200px]:gap-2">
+                <BarChart3 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-sky-400" />
+                <span className="min-w-0 text-[11px] sm:text-xs font-semibold text-slate-300">Most Changed Files</span>
+              </div>
+              <button
+                onClick={() => navigate("/fim-events")}
+                className="shrink-0 text-[9px] min-[600px]:text-[10px] min-[1200px]:text-[11px] text-sky-400 hover:text-sky-300 transition-colors flex items-center gap-0.5 min-[1200px]:gap-1"
+              >
+                View all <ArrowRight className="h-3 w-3" />
+              </button>
             </div>
-            <button
-              onClick={() => navigate("/fim-events")}
-              className="shrink-0 text-[9px] min-[600px]:text-[10px] min-[1200px]:text-[11px] text-sky-400 hover:text-sky-300 transition-colors flex items-center gap-0.5 min-[1200px]:gap-1"
-            >
-              View all <ArrowRight className="h-3 w-3" />
-            </button>
+            <div className="mt-1 text-[10px] sm:text-[11px] text-slate-500">Files with the highest change activity</div>
           </div>
           <div className="flex flex-1 min-h-24 min-w-0 flex-col">
             <DomainBarChart
@@ -887,11 +894,12 @@ export default function MainDashboard() {
 
         {/* Threat Classification */}
         <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-2.5 sm:p-3 lg:p-4 flex flex-col h-full min-w-0">
-          <div className="flex items-center justify-between mb-2 sm:mb-3">
+          <div className="mb-2">
             <div className="flex items-center gap-1 min-[600px]:gap-1.5 min-[1200px]:gap-2">
               <AlertTriangle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-red-400" />
               <span className="text-[11px] sm:text-xs font-semibold text-slate-300">Threat Classification</span>
             </div>
+            <div className="mt-1 text-[10px] sm:text-[11px] text-slate-500">Detected threats grouped by category</div>
           </div>
           <div className="flex flex-1 flex-col items-stretch gap-2 sm:gap-3 w-full min-h-0 soc-dashboard-category-chart">
             <CategoryLineChart items={dashboardData.threatTypes} color="#ef4444" totalLabel="threats" />

@@ -9,6 +9,9 @@ import {
   CalendarRange,
   ChevronDown,
   X,
+  Users,
+  MonitorPlay,
+  ShieldAlert,
 } from "lucide-react";
 import DateRangeFilter from "../components/DateRangeFilter";
 import RangeFilter from "../components/RangeFilter";
@@ -293,15 +296,15 @@ const WaveChart = ({ data, color = "#f97316", rangeKey = "24h", height = 80, com
       </svg>
       {hoveredPoint && (
         <div
-          className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-slate-700 bg-slate-900/95 px-3 py-2 text-xs shadow-lg"
+          className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-lg"
           style={{
             left: `${Math.min(Math.max((hoveredPoint.x / width) * 100, 10), 82)}%`,
             top: `${Math.max(((hoveredPoint.y - 40) / height) * 100, 6)}%`,
             transform: "translate(-50%, -100%)",
           }}
         >
-          <div className="font-semibold text-white">{hoveredPoint.value} commands</div>
-          <div className="mt-1 text-slate-400">{formatDetailedTimestamp(hoveredPoint.start || hoveredPoint.time)}</div>
+          <div className="font-semibold text-[var(--soc-text-primary)]">{hoveredPoint.value} commands</div>
+          <div className="mt-1 text-[var(--soc-text-secondary)]">{formatDetailedTimestamp(hoveredPoint.start || hoveredPoint.time)}</div>
         </div>
       )}
     </div>
@@ -339,7 +342,7 @@ const Donut = ({ items, size = 120, stroke = 12, centerLabelTop, centerLabelBott
             </circle>
           );
         })}
-        <text y={-3} textAnchor="middle" fontSize="11" fill="#f1f5f9" fontWeight="700">
+        <text y={-3} textAnchor="middle" fontSize="11" fill="var(--soc-text-primary)" fontWeight="700">
           {centerLabelTop}
         </text>
         <text y={10} textAnchor="middle" fontSize="8" fill="#64748b">
@@ -880,7 +883,7 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
   return (
     <div ref={rootRef} className="relative w-full h-full min-h-0">
       <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="command-word-cloud block w-full h-full">
-        <defs><radialGradient id="wcGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#0f172a" stopOpacity="0" /><stop offset="100%" stopColor="#020617" stopOpacity="0.6" /></radialGradient></defs>
+        <defs><radialGradient id="wcGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="var(--soc-wc-center, #0f172a)" stopOpacity="0" /><stop offset="100%" stopColor="var(--soc-wc-edge, #020617)" stopOpacity="var(--soc-wc-edge-opacity, 0.6)" /></radialGradient></defs>
         <rect className="command-word-cloud-bg" width={W} height={H} fill="url(#wcGlow)" rx={12} />
         {placed.map((w) => (
           <text
@@ -1806,10 +1809,13 @@ const HostMonitoring = () => {
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch attack-panel-grid">
             <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full min-w-0 overflow-visible attack-card soc-fluid-card">
-              <div className="soc-chart-header flex flex-wrap justify-between items-start gap-x-3 gap-y-1.5 mb-4 md:mb-4">
-                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2 min-w-0">
-                  <Activity className="h-3 md:h-4 w-3 md:w-4 text-orange-400 shrink-0" />
-                  <span className="truncate">Command Timeline</span>
+              <div className="soc-chart-header flex flex-wrap justify-between items-start gap-x-3 gap-y-1.5 mb-0">
+                <div className="min-w-0">
+                  <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
+                    <Activity className="h-3 md:h-4 w-3 md:w-4 text-orange-400 shrink-0" />
+                    <span className="truncate">Command Timeline</span>
+                  </div>
+                  <div className="mt-1 text-[11px] text-slate-500">Commands executed by agents. Click a point to filter logs.</div>
                 </div>
                 <div className="soc-chart-meta text-right min-w-0">
                   <div className="text-xs text-slate-500 whitespace-nowrap">Last {rangeKey}</div>
@@ -1831,9 +1837,12 @@ const HostMonitoring = () => {
             </div>
 
             <div ref={topAgentsPanelRef} className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full min-w-0 attack-card">
-              <div className="mb-1 flex items-start justify-between gap-3">
+              <div className="mb-0 flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-[11px] md:text-xs font-semibold text-slate-300">Top 5 Agents</div>
+                  <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <Users className="h-3 md:h-4 w-3 md:w-4 text-orange-400 shrink-0" />
+                    Top 5 Agents
+                  </div>
                   <div className="mt-1 text-[11px] text-slate-500">Most active agents from host monitoring events</div>
                 </div>
                 <div className="text-right">
@@ -1847,14 +1856,26 @@ const HostMonitoring = () => {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 items-stretch attack-split-grid">
             <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col h-full min-w-0">
-              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-2 w-full">Top Sessions</div>
+              <div className="mb-0 w-full">
+                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <MonitorPlay className="h-3.5 w-3.5 text-orange-400 shrink-0" />
+                  Top Sessions
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500">Most active sessions by command activity</div>
+              </div>
               <div className="flex-1 min-h-0 w-full soc-chart soc-chart--category overflow-visible flex flex-col">
                 <CategoryLineChart items={analytics.topSessions} color="#f97316" totalLabel="sessions" />
               </div>
             </div>
 
             <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col h-full min-w-0">
-              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-2 w-full">Risk Indicators</div>
+              <div className="mb-0 w-full">
+                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <ShieldAlert className="h-3.5 w-3.5 text-orange-400 shrink-0" />
+                  Risk Indicators
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500">High-risk signals flagged in host monitoring</div>
+              </div>
               <div className="flex-1 min-h-0 w-full soc-chart soc-chart--category overflow-visible flex flex-col">
                 <CategoryLineChart items={analytics.riskIndicators} color="#ef4444" totalLabel="risks" />
               </div>
@@ -1865,9 +1886,12 @@ const HostMonitoring = () => {
             <div
               className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 min-w-0 flex flex-col h-auto soc-fluid-card"
             >
-              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-3 flex items-center gap-2 flex-shrink-0">
-                <AlertTriangle className="h-4 w-4" />
-                Top 5 Dangerous Commands Executed
+              <div className="mb-0 flex-shrink-0">
+                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <AlertTriangle className="h-4 w-4 text-orange-400 shrink-0" />
+                  Top 5 Dangerous Commands Executed
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500">Most frequently executed dangerous commands</div>
               </div>
               <div className="w-full flex-1 min-h-0">
                 <CompactBarChart
@@ -1878,9 +1902,12 @@ const HostMonitoring = () => {
             </div>
 
             <div className="soc-payload-distribution-card bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 shadow-lg min-w-0 flex flex-col h-full">
-              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-3 flex items-center gap-2 flex-shrink-0">
-                <Terminal className="h-4 w-4" />
-                Command Keywords Distribution
+              <div className="mb-0 flex-shrink-0">
+                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Terminal className="h-4 w-4 text-orange-400 shrink-0" />
+                  Command Keywords Distribution
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500">Command payload keywords ranked by frequency</div>
               </div>
               <div className={`command-keywords-distribution-box w-full h-0 flex-1 min-h-0 rounded-xl overflow-hidden ${(commandPayloadWords?.length ?? 0) > 0 ? "" : "is-empty"}`}>
                 <PayloadWordCloud words={commandPayloadWords} activeWord={selectedKeyword} onWordClick={handleSelectKeyword} />

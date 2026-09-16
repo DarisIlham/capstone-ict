@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Activity, CalendarRange, ChevronDown, FileText, Search, X } from "lucide-react";
+import { Activity, CalendarRange, ChevronDown, FileText, Search, X, Users, PieChart, Cloud } from "lucide-react";
 import { API_BASE_URL } from "../config/Api";
 import DateRangeFilter from "../components/DateRangeFilter";
 import RangeFilter from "../components/RangeFilter";
@@ -212,15 +212,15 @@ const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey, compact = f
 
       {selectedPoint && (
         <div
-          className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-slate-700 bg-slate-900/95 px-3 py-2 text-xs shadow-lg"
+          className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-lg"
           style={{
             left: `${Math.min(Math.max((selectedPoint.x / width) * 100, 10), 82)}%`,
             top: `${Math.max(((selectedPoint.y - 40) / height) * 100, 6)}%`,
             transform: "translate(-50%, -100%)",
           }}
         >
-          <div className="font-semibold text-white">{selectedPoint.value} events</div>
-          <div className="mt-1 text-slate-400">{formatDetailedTimestamp(selectedPoint.time)}</div>
+          <div className="font-semibold text-[var(--soc-text-primary)]">{selectedPoint.value} events</div>
+          <div className="mt-1 text-[var(--soc-text-secondary)]">{formatDetailedTimestamp(selectedPoint.time)}</div>
         </div>
       )}
     </div>
@@ -381,7 +381,7 @@ const Donut = ({ items, size = 140, stroke = 14, centerLabelTop, centerLabelBott
             </path>
           );
         })}
-        <text y={compact ? -2 : -4} textAnchor="middle" fontSize={compact ? "14" : "18"} fill="#f1f5f9" fontWeight="700">{centerLabelTop}</text>
+        <text y={compact ? -2 : -4} textAnchor="middle" fontSize={compact ? "14" : "18"} fill="var(--soc-text-primary)" fontWeight="700">{centerLabelTop}</text>
         <text y={compact ? 13 : 16} textAnchor="middle" fontSize={compact ? "10" : "12"} fill="#64748b">{centerLabelBottom}</text>
       </g>
     </svg>
@@ -637,7 +637,7 @@ const PayloadWordCloud = ({ words, compact = false, activeWord = null, onWordCli
   return (
     <div ref={wrapRef} className="relative w-full h-full min-h-0">
       <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="command-word-cloud block w-full h-full">
-        <defs><radialGradient id="wcGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#0f172a" stopOpacity="0" /><stop offset="100%" stopColor="#020617" stopOpacity="0.6" /></radialGradient></defs>
+        <defs><radialGradient id="wcGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="var(--soc-wc-center, #0f172a)" stopOpacity="0" /><stop offset="100%" stopColor="var(--soc-wc-edge, #020617)" stopOpacity="var(--soc-wc-edge-opacity, 0.6)" /></radialGradient></defs>
         <rect className="command-word-cloud-bg" width={W} height={H} fill="url(#wcGlow)" rx={12} />
         {placed.map((w) => (
           <text
@@ -1725,10 +1725,13 @@ const FimEvents = ({ agentId = "all" }) => {
         </div>
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch">
           <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full overflow-visible soc-fluid-card">
-            <div className="soc-chart-header flex flex-wrap justify-between items-start gap-x-3 gap-y-1.5 mb-4 md:mb-4">
-              <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2 min-w-0">
-                <Activity className="h-3 md:h-4 w-3 md:w-4 text-emerald-400 shrink-0" />
-                <span className="truncate">FIM Timeline</span>
+            <div className="soc-chart-header flex flex-wrap justify-between items-start gap-x-3 gap-y-1.5 mb-2">
+              <div className="min-w-0">
+                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
+                  <Activity className="h-3 md:h-4 w-3 md:w-4 text-emerald-400 shrink-0" />
+                  <span className="truncate">FIM Timeline</span>
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500">File integrity changes over time. Click a point to filter events.</div>
               </div>
               <div className="soc-chart-meta text-right min-w-0">
                 <div className="text-xs text-slate-500 whitespace-nowrap">Last {rangeKey}</div>
@@ -1750,9 +1753,12 @@ const FimEvents = ({ agentId = "all" }) => {
             </div>
           </div>
           <div ref={topAgentsPanelRef} className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full min-w-0">
-            <div className="mb-1 flex items-start justify-between gap-3">
+            <div className="mb-2 flex items-start justify-between gap-3">
               <div>
-                <div className="text-[11px] md:text-xs font-semibold text-slate-300">Top 5 Agents</div>
+                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Users className="h-3 md:h-4 w-3 md:w-4 text-emerald-400 shrink-0" />
+                  Top 5 Agents
+                </div>
                 <div className="mt-1 text-[11px] text-slate-500">Most active agents from FIM events</div>
               </div>
               <div className="text-right">
@@ -1767,7 +1773,13 @@ const FimEvents = ({ agentId = "all" }) => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
           {/* Kotak 1: Event + Severity Distribution */}
           <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 shadow-lg flex flex-col h-auto soc-fluid-card">
-            <div className="w-full text-[11px] md:text-xs font-semibold text-slate-300 mb-4">Event & Severity Distribution</div>
+            <div className="w-full mb-2">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                <PieChart className="h-4 w-4 text-emerald-400 shrink-0" />
+                Event &amp; Severity Distribution
+              </div>
+              <div className="mt-1 text-[11px] text-slate-500">Share of events by type and severity level</div>
+            </div>
             {derived.total === 0 ? (
               <div className="flex flex-1 items-center justify-center gap-1 text-xs text-slate-600">
                 <span>No </span><span className="font-semibold">event &amp; severity distribution</span><span> data</span>
@@ -1787,7 +1799,13 @@ const FimEvents = ({ agentId = "all" }) => {
           </div>
           {/* Kotak 2: Payload Pattern Cloud */}
           <div className="soc-payload-distribution-card bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 shadow-lg flex flex-col">
-            <div className="w-full text-[11px] md:text-xs font-semibold text-slate-300 mb-4">Payload Pattern Cloud</div>
+            <div className="w-full mb-2">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                <Cloud className="h-4 w-4 text-emerald-400 shrink-0" />
+                Payload Pattern Cloud
+              </div>
+              <div className="mt-1 text-[11px] text-slate-500">Frequent patterns found in FIM event payloads</div>
+            </div>
             <div className="command-keywords-distribution-box w-full h-0 flex-1 min-h-0 rounded-xl overflow-hidden">
               <PayloadWordCloud words={derived.payloadWords} activeWord={selectedPayloadPattern} onWordClick={handleSelectPayload} />
             </div>
@@ -1813,7 +1831,7 @@ const FimEvents = ({ agentId = "all" }) => {
                     // ignore
                   }
                 }}
-                className="shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-200 transition-colors hover:bg-emerald-500/20"
+                className="shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-[var(--soc-text-primary)] transition-colors hover:bg-emerald-500/20"
               >
                 Reset Time Filter
               </button>
@@ -1960,7 +1978,7 @@ const FimEvents = ({ agentId = "all" }) => {
                             <div className="text-[8px] md:text-[9px] text-sky-500 uppercase font-bold mb-1 tracking-tight">
                               Changes:
                             </div>
-                            <pre className="p-1 md:p-2 bg-black/60 text-[8px] md:text-[10px] rounded border border-slate-700/50 font-mono text-emerald-400 overflow-x-auto leading-normal whitespace-pre-wrap">
+                            <pre className="p-1 md:p-2 bg-[var(--soc-payload-bg)] text-[8px] md:text-[10px] rounded border border-[var(--soc-payload-border)] font-mono text-[var(--soc-payload-text)] overflow-x-auto leading-normal whitespace-pre-wrap">
                               {String(diffData)
                                 .replace(/\\n/g, "\n")
                                 .replace(/\\u003e/g, "→")

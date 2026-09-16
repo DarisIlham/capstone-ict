@@ -11,12 +11,19 @@ export default function PageLoader({
         ? "h-12 w-12 border-b-2"
         : "h-10 w-10 border-b-2";
 
+  const sizeClass =
+    size === "sm"
+      ? "soc-page-loader--sm"
+      : size === "lg"
+        ? "soc-page-loader--lg"
+        : "soc-page-loader--md";
+
   return (
     <div
       role="status"
       aria-live="polite"
       aria-label={message}
-      className={`soc-page-loader ${fullScreen ? "soc-page-loader--fullscreen" : ""} ${className}`}
+      className={`soc-page-loader ${sizeClass} ${fullScreen ? "soc-page-loader--fullscreen" : ""} ${className}`}
     >
       <div className="soc-page-loader-inner">
         <div

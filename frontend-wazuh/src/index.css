@@ -40,6 +40,16 @@
   --soc-high: #FB923C;
   --soc-critical: #F87171;
 
+  /* Word cloud (payload) container glow */
+  --soc-wc-center: #0f172a;
+  --soc-wc-edge: #020617;
+  --soc-wc-edge-opacity: 0.6;
+
+  /* FIM payload CHANGES boxes (PAYLOAD detail) */
+  --soc-payload-bg: rgba(0, 0, 0, 0.6);
+  --soc-payload-border: rgba(51, 65, 85, 0.5);
+  --soc-payload-text: #34d399;
+
   /* Tailwind slate remap for existing pages (dark navy) */
   --color-slate-950: #0B1220;
   --color-slate-900: #0F172A;
@@ -81,6 +91,16 @@
   --soc-warning: #D97706;
   --soc-high: #EA580C;
   --soc-critical: #DC2626;
+
+  /* Word cloud (payload) container glow — subtle warm tint, never dark gray */
+  --soc-wc-center: #ffffff;
+  --soc-wc-edge: #fb923c;
+  --soc-wc-edge-opacity: 0.16;
+
+  /* FIM payload CHANGES boxes — orange/krem like Payload Pattern Cloud light */
+  --soc-payload-bg: #FFF7ED;
+  --soc-payload-border: #FED7AA;
+  --soc-payload-text: #9A3412;
 
   /* Tailwind slate remap for existing pages (light) */
   --color-slate-950: #F5F7FA;
@@ -1242,7 +1262,7 @@ input[type="password"] {
   box-shadow: none !important;
   background: #222 !important;
   /* Crop 1.5px tepi luar iframe (tempat garis terang Google berada).
-     Tidak menyentuh checkbox/logo di dalam; tanpa overlay; tanpa invert. */
+      Tidak menyentuh checkbox/logo di dalam; tanpa overlay; tanpa invert. */
   clip-path: inset(1.5px) !important;
   border-radius: 4px !important;
 }
@@ -4854,8 +4874,10 @@ aside.w-60 {
 
 /* ==========================================================================
    Centered page loading state (all pages share one centered animation).
-   Inside AppLayout <main> the loader fills the available content height so
-   the spinner sits in the true middle of the page at every breakpoint.
+   Inside AppLayout <main> the full-page loader fills the available height
+   below the 48px topbar (100dvh - 48px topbar - 24px container padding), so
+   flex centering puts the spinner in the true middle of the screen at every
+   breakpoint. Small inline variants (--sm) keep compact heights.
    ========================================================================== */
 .soc-page-loader {
   display: flex !important;
@@ -4863,9 +4885,14 @@ aside.w-60 {
   justify-content: center !important;
   width: 100% !important;
   min-width: 0 !important;
-  min-height: clamp(320px, 60vh, 560px) !important;
+  min-height: calc(100vh - 72px) !important;
+  min-height: calc(100dvh - 72px) !important;
   padding: clamp(20px, 5vw, 40px) !important;
   text-align: center !important;
+}
+
+.soc-page-loader--sm {
+  min-height: clamp(140px, 40vh, 280px) !important;
 }
 
 .soc-page-loader--fullscreen {

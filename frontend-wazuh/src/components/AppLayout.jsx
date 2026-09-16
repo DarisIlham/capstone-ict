@@ -273,12 +273,12 @@ export default function AppLayout({ children }) {
       {showLogoutConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-5 max-w-sm w-full">
-            <h2 className="text-base md:text-lg font-bold text-white mb-2">Confirm Logout</h2>
-            <p className="text-sm text-slate-400 mb-5">Are you sure you want to log out?</p>
+            <h2 className="text-base md:text-lg font-bold text-[var(--soc-text-primary)] mb-2">Confirm Logout</h2>
+            <p className="text-sm text-[var(--soc-text-secondary)] mb-5">Are you sure you want to log out?</p>
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setShowLogoutConfirm(false)}
-                className="px-4 py-2 text-xs font-medium rounded-lg text-slate-300 border border-[var(--soc-border)] hover:bg-slate-700/50 transition-colors"
+                className="px-4 py-2 text-xs font-medium rounded-lg text-[var(--soc-text-secondary)] border border-[var(--soc-border)] hover:bg-[var(--soc-elevated)] transition-colors"
               >
                 Cancel
               </button>

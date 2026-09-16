@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { BrainCircuit, BarChart3, LineChart, Globe, CalendarRange, ChevronDown, Search, X } from "lucide-react";
+import { BrainCircuit, BarChart3, LineChart, Globe, CalendarRange, ChevronDown, Search, X, Users } from "lucide-react";
 import mlApi from '../services/mlApi';
 import DateRangeFilter from "../components/DateRangeFilter";
 import RangeFilter from "../components/RangeFilter";
@@ -658,55 +658,6 @@ const buildTimelineFromPredictions = (predictions, minutes, start, end) => {
   return output;
 };
 
-const buildStatsFromPredictions = (predictions) => {
-  const labelMap = new Map();
-  let confidenceTotal = 0;
-  let confidenceCount = 0;
-
-  predictions.forEach((prediction) => {
-    const label = prediction.predictedLabel || 'unknown';
-    const current = labelMap.get(label) || { label, count: 0, confidenceTotal: 0, confidenceCount: 0 };
-    current.count += 1;
-
-    const confidence = typeof prediction.confidence === 'number'
-      ? prediction.confidence
-      : parseFloat(prediction.confidence);
-
-    if (!Number.isNaN(confidence)) {
-      current.confidenceTotal += confidence;
-      current.confidenceCount += 1;
-      confidenceTotal += confidence;
-      confidenceCount += 1;
-    }
-
-    labelMap.set(label, current);
-  });
-
-  return {
-    totalPredictions: predictions.length,
-    overallAvgConfidence: confidenceCount ? confidenceTotal / confidenceCount : null,
-    labels: Array.from(labelMap.values()).map((item) => ({
-      label: item.label,
-      count: item.count,
-      avgConfidence: item.confidenceCount ? item.confidenceTotal / item.confidenceCount : null,
-    })),
-  };
-};
-
-const getConfidenceMeaning = (label, score) => {
-  const value = typeof score === 'number' ? score : parseFloat(score);
-  if (Number.isNaN(value)) return '-';
-
-  const lowerLabel = String(label || '').toLowerCase();
-  const subject = lowerLabel.includes('benign') || lowerLabel.includes('normal')
-    ? 'benign prediction'
-    : 'attack prediction';
-
-  if (value >= 0.8) return `High confidence in ${subject}`;
-  if (value >= 0.6) return `Moderate confidence in ${subject}`;
-  return `Low confidence in ${subject}`;
-};
-
 const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items" }) => {
   const [selected, setSelected] = useState(null);
   const rootRef = useRef(null);
@@ -1006,15 +957,15 @@ const WaveChart = ({ data, width = 1000, height = 320, rangeKey, onPointSelect, 
 
       {selectedPoint && (
         <div
-          className="pointer-events-none absolute z-10 min-w-[160px] rounded-lg border border-slate-700 bg-slate-900/95 px-3 py-2 text-xs shadow-lg"
+          className="pointer-events-none absolute z-10 min-w-[160px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-lg"
           style={{
             left: `${Math.min(Math.max((selectedPoint.x / width) * 100, 10), 82)}%`,
             top: `${Math.max(((selectedPoint.y - 48) / height) * 100, 4)}%`,
             transform: "translate(-50%, -100%)",
           }}
         >
-          <div className="font-semibold text-white">{selectedPoint.value} predictions</div>
-          <div className="mt-1 text-slate-400">{formatTimelineBucketLabel(selectedPoint, rangeKey)}</div>
+          <div className="font-semibold text-[var(--soc-text-primary)]">{selectedPoint.value} predictions</div>
+          <div className="mt-1 text-[var(--soc-text-secondary)]">{formatTimelineBucketLabel(selectedPoint, rangeKey)}</div>
         </div>
       )}
     </div>
@@ -1085,7 +1036,6 @@ export default function MlDashboard() {
   const [dataNotice, setDataNotice] = useState('');
 
   const [predictions, setPredictions] = useState([]);
-  const [stats, setStats] = useState(null);
   const [timeline, setTimeline] = useState([]);
   const [totalPredictionsCount, setTotalPredictionsCount] = useState(0);
 
@@ -1204,8 +1154,6 @@ export default function MlDashboard() {
         }
       }
 
-      const nextStats = buildStatsFromPredictions(preds);
-
       let nextTimeline = [];
 
       if (timelineResult.status === 'fulfilled' && Array.isArray(timelineResult.value?.data) && timelineResult.value.data.length) {
@@ -1225,7 +1173,6 @@ export default function MlDashboard() {
       if (predictionsResult.status === 'fulfilled' || timelineResult.status === 'fulfilled') {
         setPredictions(Array.isArray(preds) ? preds : []);
         setTotalPredictionsCount(responseTotalPredictions);
-        setStats(nextStats);
         setTimeline(nextTimeline);
         setLastUpdated(new Date().toISOString());
         if (!preds.length && !nextTimeline.length) {
@@ -1237,7 +1184,6 @@ export default function MlDashboard() {
 
       setPredictions([]);
       setTotalPredictionsCount(0);
-      setStats(null);
       setTimeline([]);
       setError(new Error('Real ML data is not available.'));
       setDataNotice('Real ML data is not available. Check the connection to the backend.');
@@ -1245,7 +1191,6 @@ export default function MlDashboard() {
       console.error('ML API error:', err);
       setPredictions([]);
       setTotalPredictionsCount(0);
-      setStats(null);
       setTimeline([]);
       setError(err);
       setDataNotice(`An error occurred while loading ML data: ${err?.message || 'unknown error'}`);
@@ -1255,9 +1200,17 @@ export default function MlDashboard() {
   }, [timeRange, filterMode, customDateRange]);
 
   useEffect(() => {
-    loadAll();
-    const interval = setInterval(() => loadAll(), 60_000);
-    return () => clearInterval(interval);
+    // Jadwalkan panggilan pertama dan interval polling lewat timer agar
+    // setState internal loadAll tidak dieksekusi sinkron dalam efek.
+    const run = () => {
+      void loadAll();
+    };
+    const timer = setTimeout(run, 0);
+    const interval = setInterval(run, 60_000);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
   }, [loadAll]);
 
   const uniqueOptions = useMemo(() => {
@@ -1320,14 +1273,12 @@ export default function MlDashboard() {
   }, [predictions, filters, searchQuery, selectedTimelinePoint]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  useEffect(() => {
-    if (page > totalPages) setPage(1);
-  }, [page, totalPages]);
+  const activePage = page > totalPages ? 1 : page;
 
   const pageItems = useMemo(() => {
-    const start = (page - 1) * pageSize;
+    const start = (activePage - 1) * pageSize;
     return filtered.slice(start, start + pageSize);
-  }, [filtered, page, pageSize]);
+  }, [filtered, activePage, pageSize]);
 
   const handleExportCsv = async () => {
     const rows = predictions.map((p) => {
@@ -1476,8 +1427,10 @@ export default function MlDashboard() {
 
     if (result.length === 0) return buildEmptySeries();
 
-    const rangeStartMs = range.start ? getTimestampMs(range.start) : Date.now() - minutes * 60000;
-    const rangeEndMs = range.end ? getTimestampMs(range.end) : Date.now();
+    const firstBucketMs = result[0].t;
+    const lastBucketEndMs = result[result.length - 1].t + bucketMs - 1;
+    const rangeStartMs = range.start ? getTimestampMs(range.start) : firstBucketMs;
+    const rangeEndMs = range.end ? getTimestampMs(range.end) : lastBucketEndMs;
     if (!Number.isFinite(rangeStartMs) || !Number.isFinite(rangeEndMs) || rangeEndMs < rangeStartMs) {
       return result;
     }
@@ -1631,7 +1584,7 @@ export default function MlDashboard() {
         {/* Timeline + Top 5 Agents (1 row, 2 kolom) */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch">
           <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full overflow-visible soc-fluid-card">
-            <div className="soc-chart-header flex flex-wrap justify-between items-start gap-x-3 gap-y-1.5 mb-4 md:mb-4">
+            <div className="soc-chart-header flex flex-wrap justify-between items-start gap-x-3 gap-y-1.5 mb-2">
               <div className="min-w-0">
                 <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
                   <BarChart3 className="h-3 md:h-4 w-3 md:w-4 text-violet-400 shrink-0" />
@@ -1656,9 +1609,12 @@ export default function MlDashboard() {
             </div>
           </div>
           <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 h-full flex flex-col min-w-0">
-            <div className="mb-1 flex items-start justify-between gap-3">
+            <div className="mb-2 flex items-start justify-between gap-3">
               <div>
-                <div className="text-[11px] md:text-xs font-semibold text-slate-300">Top 5 Agents</div>
+                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Users className="h-3 md:h-4 w-3 md:w-4 text-violet-400 shrink-0" />
+                  Top 5 Agents
+                </div>
                 <div className="mt-1 text-[11px] text-slate-500">Most active agents from ML predictions</div>
               </div>
               <div className="text-right">
@@ -1672,25 +1628,28 @@ export default function MlDashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
           <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
-                <LineChart className="h-4 w-4 text-sky-400" />
+                <LineChart className="h-4 w-4 text-violet-400" />
                 <span className="text-xs font-semibold text-slate-300">Label Distribution</span>
               </div>
             </div>
+            <div className="mb-2 text-[11px] text-slate-500">Distribution of prediction labels in the selected range</div>
             <div className="flex flex-1 flex-col items-stretch gap-3 py-1 w-full min-h-0 soc-chart">
               <CategoryLineChart items={distribution} totalLabel="predictions" />
             </div>
           </div>
 
           <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col">
-            <div className="flex items-center justify-between mb-2 sm:mb-3">
-              <div className="flex items-center gap-1 min-[600px]:gap-1.5 min-[1200px]:gap-2">
-                <Globe className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-400" />
-                <span className="text-[11px] sm:text-xs font-semibold text-slate-300">Top 5 Source &amp; Destination IPs</span>
+            <div className="mb-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1 min-[600px]:gap-1.5 min-[1200px]:gap-2">
+                  <Globe className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-violet-400" />
+                  <span className="text-[11px] sm:text-xs font-semibold text-slate-300">Top 5 Source &amp; Destination IPs</span>
+                </div>
               </div>
+              <div className="mt-1 text-[11px] text-slate-500">Ranked traffic endpoints within the selected ML range</div>
             </div>
-            <div className="mb-1 text-[11px] text-slate-500">Ranked traffic endpoints within the selected ML range</div>
             <TopIpsTabbedCard sourceIps={topSourceIps} destIps={topDestIps} />
           </div>
         </div>
@@ -1710,7 +1669,7 @@ export default function MlDashboard() {
                   setSelectedTimelinePoint(null);
                   setPage(1);
                 }}
-                className="shrink-0 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-xs font-medium text-violet-200 transition-colors hover:bg-violet-500/20"
+                className="shrink-0 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-xs font-medium text-[var(--soc-text-primary)] transition-colors hover:bg-violet-500/20"
               >
                 Reset Time Filter
               </button>
@@ -1883,12 +1842,12 @@ export default function MlDashboard() {
                 <div className="text-[10px] md:text-[11px] font-mono text-slate-500">
                   <span className="hidden md:inline">SHOWING </span>
                   <span className="font-bold text-sky-400">
-                    {filtered.length === 0 ? 0 : (page - 1) * pageSize + 1}
+                    {filtered.length === 0 ? 0 : (activePage - 1) * pageSize + 1}
                   </span>
                   <span className="hidden md:inline"> - </span>
                   <span className="md:hidden">-</span>
                   <span className="font-bold text-sky-400">
-                    {Math.min(page * pageSize, filtered.length)}
+                    {Math.min(activePage * pageSize, filtered.length)}
                   </span>
                   <span className="hidden md:inline"> OF </span>
                   <span className="md:hidden"> / </span>
@@ -1898,7 +1857,7 @@ export default function MlDashboard() {
 
                 <div className="flex flex-wrap items-center gap-2">
                   <button
-                    disabled={page === 1 || loading}
+                    disabled={activePage === 1 || loading}
                     onClick={() => {
                       setPage(1);
                       scrollPredictionsTableIntoView();
@@ -1909,9 +1868,9 @@ export default function MlDashboard() {
                   </button>
 
                   <button
-                    disabled={page === 1 || loading}
+                    disabled={activePage === 1 || loading}
                     onClick={() => {
-                      setPage((v) => Math.max(1, v - 1));
+                      setPage(Math.max(1, activePage - 1));
                       scrollPredictionsTableIntoView();
                     }}
                     className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
@@ -1921,13 +1880,13 @@ export default function MlDashboard() {
 
                   <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400">
                     <span className="hidden md:inline">PAGE </span>
-                    <span className="text-white">{page}</span> / {totalPages}
+                    <span className="text-white">{activePage}</span> / {totalPages}
                   </span>
 
                   <button
-                    disabled={page >= totalPages || loading}
+                    disabled={activePage >= totalPages || loading}
                     onClick={() => {
-                      setPage((v) => Math.min(totalPages, v + 1));
+                      setPage(Math.min(totalPages, activePage + 1));
                       scrollPredictionsTableIntoView();
                     }}
                     className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
@@ -1936,7 +1895,7 @@ export default function MlDashboard() {
                   </button>
 
                   <button
-                    disabled={page >= totalPages || loading}
+                    disabled={activePage >= totalPages || loading}
                     onClick={() => {
                       setPage(totalPages);
                       scrollPredictionsTableIntoView();

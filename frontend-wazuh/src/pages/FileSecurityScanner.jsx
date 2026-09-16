@@ -26,6 +26,8 @@ import {
   ChevronDown,
   CalendarRange,
   X,
+  Users,
+  FolderSearch,
 } from "lucide-react";
 
 const API_ROOT = `${API_BASE_URL}/api`;
@@ -658,15 +660,15 @@ const WaveChart = ({
 
       {selectedPoint && (
         <div
-          className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-slate-700 bg-slate-900/95 px-3 py-2 text-xs shadow-lg"
+          className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-lg"
           style={{
             left: `${Math.min(Math.max((selectedPoint.x / width) * 100, 10), 82)}%`,
             top: `${Math.max(((selectedPoint.y - 40) / height) * 100, 6)}%`,
             transform: "translate(-50%, -100%)",
           }}
         >
-          <div className="font-semibold text-white">{selectedPoint.value} detections</div>
-          <div className="mt-1 text-slate-400">{formatDetailedTimestamp(selectedPoint.start || selectedPoint.time)}</div>
+          <div className="font-semibold text-[var(--soc-text-primary)]">{selectedPoint.value} detections</div>
+          <div className="mt-1 text-[var(--soc-text-secondary)]">{formatDetailedTimestamp(selectedPoint.start || selectedPoint.time)}</div>
         </div>
       )}
     </div>
@@ -701,7 +703,7 @@ const Donut = ({ items, size = 120, stroke = 12, centerLabelTop, centerLabelBott
             </circle>
           );
         })}
-        <text y={-3} textAnchor="middle" fontSize="11" fill="#f1f5f9" fontWeight="700">
+        <text y={-3} textAnchor="middle" fontSize="11" fill="var(--soc-text-primary)" fontWeight="700">
           {centerLabelTop}
         </text>
         <text y={10} textAnchor="middle" fontSize="8" fill="#64748b">
@@ -1609,10 +1611,13 @@ const FileSecurityScanner = () => {
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch attack-panel-grid">
             <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full min-w-0 overflow-visible attack-card soc-fluid-card">
-              <div className="soc-chart-header flex flex-wrap justify-between items-start gap-x-3 gap-y-1.5 mb-4 md:mb-4">
-                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2 min-w-0">
-                  <BarChart3 className="h-3 md:h-4 w-3 md:w-4 text-red-400 shrink-0" />
-                  <span className="truncate">Detection Timeline</span>
+              <div className="soc-chart-header flex flex-wrap justify-between items-start gap-x-3 gap-y-1.5 mb-2">
+                <div className="min-w-0">
+                  <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
+                    <BarChart3 className="h-3 md:h-4 w-3 md:w-4 text-red-400 shrink-0" />
+                    <span className="truncate">Detection Timeline</span>
+                  </div>
+                  <div className="mt-1 text-[11px] text-slate-500">File scan detections over time. Click a point to filter rows.</div>
                 </div>
                 <div className="soc-chart-meta text-right min-w-0">
                   <div className="text-xs text-slate-500 whitespace-nowrap">Last {rangeKey}</div>
@@ -1635,10 +1640,13 @@ const FileSecurityScanner = () => {
             </div>
 
             <div ref={topAgentsPanelRef} className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 h-full flex flex-col min-w-0">
-              <div className="mb-1 flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-[11px] md:text-xs font-semibold text-slate-300">Top 5 Agents</div>
-                  <div className="mt-1 text-[11px] text-slate-500">Most suspicious file findings by agent</div>
+<div className="mb-2 flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Users className="h-3 md:h-4 w-3 md:w-4 text-red-400 shrink-0" />
+                  Top 5 Agents
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500">Most suspicious file findings by agent</div>
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-slate-500">Unique agents</div>
@@ -1651,14 +1659,26 @@ const FileSecurityScanner = () => {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 items-stretch attack-split-grid">
             <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col h-full min-w-0">
-              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-2 w-full">Severity Distribution</div>
+              <div className="mb-2 w-full">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />
+                Severity Distribution
+              </div>
+              <div className="mt-1 text-[11px] text-slate-500">Scanned files grouped by detection severity</div>
+            </div>
               <div className="flex-1 min-h-0 w-full soc-chart soc-chart--category overflow-visible flex flex-col">
                 <CategoryLineChart items={analytics.severities} totalLabel="files" />
               </div>
             </div>
 
             <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col h-full min-w-0">
-              <div className="text-[11px] md:text-xs font-semibold text-slate-300 mb-2 w-full">Top Scanned Folders</div>
+              <div className="mb-2 w-full">
+              <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                <FolderSearch className="h-4 w-4 text-red-400 shrink-0" />
+                Top Scanned Folders
+              </div>
+              <div className="mt-1 text-[11px] text-slate-500">Folders with the most files scanned</div>
+            </div>
               <div className="flex-1 min-h-0 w-full soc-chart soc-chart--category overflow-visible flex flex-col">
                 <CompactBarChart items={analytics.topFolders} emptyLabel="No folder data found" />
               </div>
