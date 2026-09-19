@@ -1,109 +1,80 @@
-import React from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { CalendarDays, ChevronDown } from "lucide-react";
-import { getDateRangeError } from "../utils/dateRange";
 
 const shortDate = (dt) =>
   dt
-    ? new Date(dt).toLocaleDateString("en-US", {
-        month: "2-digit",
-        day: "2-digit",
-        year: "2-digit",
-      })
+    ? new Date(dt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
     : "--";
 
-export default function DateRangeFilter({
-  value,
-  onChange,
-  disabled = false,
-  className = "",
-}) {
-  const error = getDateRangeError(value);
+export default function DateRangeFilter({ value, onChange, disabled = false, className = "" }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
 
-  const updateField = (field, nextValue) => {
-    const nextRange = {
-      start: value?.start || "",
-      end: value?.end || "",
-      [field]: nextValue,
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
     };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
-    const startTime = new Date(nextRange.start).getTime();
-    const endTime = new Date(nextRange.end).getTime();
-
-    if (Number.isFinite(startTime) && Number.isFinite(endTime) && startTime > endTime) {
-      if (field === "start") {
-        nextRange.end = nextValue;
-      } else {
-        nextRange.start = nextValue;
-      }
-    }
-
-    onChange(nextRange);
-  };
+  const displayLabel = `${shortDate(value?.start)} - ${shortDate(value?.end)}`;
 
   return (
-    <div className={`soc-date-filter flex min-w-0 flex-col gap-1 ${className}`}>
-      <div className="soc-date-field-row hidden min-h-0 min-w-0 shrink items-center rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] p-0.5 min-[640px]:inline-flex">
-        <label className="flex min-w-0 shrink items-center gap-1 px-1 text-[9px] text-slate-400 whitespace-nowrap min-[700px]:text-[10px] min-[900px]:gap-1.5 min-[900px]:text-[11px]">
-          <span>From</span>
-          <input
-            type="datetime-local"
-            value={value?.start || ""}
-            max={value?.end || undefined}
-            disabled={disabled}
-            onChange={(event) => updateField("start", event.target.value)}
-            className="soc-date-time-input w-fit min-w-0 shrink rounded-md bg-transparent px-0.5 py-0.5 text-[9px] text-slate-300 focus:border-sky-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 min-[700px]:text-[10px] min-[900px]:text-[11px]"
-          />
-        </label>
-        <span className="shrink-0 px-0.5 text-[9px] text-slate-600 select-none min-[700px]:text-[10px] min-[900px]:text-[11px]">-</span>
-        <label className="flex min-w-0 shrink items-center gap-1 px-1 text-[9px] text-slate-400 whitespace-nowrap min-[700px]:text-[10px] min-[900px]:gap-1.5 min-[900px]:text-[11px]">
-          <span>To</span>
-          <input
-            type="datetime-local"
-            value={value?.end || ""}
-            min={value?.start || undefined}
-            disabled={disabled}
-            onChange={(event) => updateField("end", event.target.value)}
-            className="soc-date-time-input w-fit min-w-0 shrink rounded-md bg-transparent px-0.5 py-0.5 text-[9px] text-slate-300 focus:border-sky-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 min-[700px]:text-[10px] min-[900px]:text-[11px]"
-          />
-        </label>
-      </div>
+    <div className={`relative ${className}`} ref={ref}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] text-[10px] font-medium text-[var(--soc-text-primary)] hover:border-purple-500/40 hover:bg-[var(--soc-elevated)] transition-all disabled:opacity-50"
+      >
+        <CalendarDays className="h-3 w-3 text-purple-400" />
+        <span className="truncate max-w-[120px]">{displayLabel}</span>
+        <ChevronDown className={`h-3 w-3 text-[var(--soc-text-muted)] transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
 
-      <details className="soc-date-compact group relative min-[640px]:hidden">
-        <summary className="flex h-6 cursor-pointer list-none items-center gap-1 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-1.5 text-[9px] font-medium text-[var(--soc-text-primary)] whitespace-nowrap select-none">
-          <CalendarDays className="h-2.5 w-2.5 text-slate-500" />
-          <span>
-            {shortDate(value?.start)} - {shortDate(value?.end)}
-          </span>
-          <ChevronDown className="h-2 w-2 text-slate-500 transition-transform group-open:rotate-180" />
-        </summary>
-        <div className="soc-date-popover mt-1 flex w-full flex-col items-stretch gap-1 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] p-1.5 shadow-xl">
-          <label className="soc-date-popover-field flex min-h-0 items-center gap-1 text-[11px] text-slate-400 whitespace-nowrap">
-            <span>From</span>
-            <input
-              type="datetime-local"
-              value={value?.start || ""}
-              max={value?.end || undefined}
-              disabled={disabled}
-              onChange={(event) => updateField("start", event.target.value)}
-              className="soc-date-time-input soc-date-time-input--from w-fit rounded-md bg-transparent px-0.5 py-0.5 text-xs text-slate-300 focus:border-sky-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-            />
-          </label>
-          <label className="soc-date-popover-field flex min-h-0 items-center gap-1 text-[11px] text-slate-400 whitespace-nowrap">
-            <span>To</span>
-            <input
-              type="datetime-local"
-              value={value?.end || ""}
-              min={value?.start || undefined}
-              disabled={disabled}
-              onChange={(event) => updateField("end", event.target.value)}
-              className="soc-date-time-input soc-date-time-input--to w-fit rounded-md bg-transparent px-0.5 py-0.5 text-xs text-slate-300 focus:border-sky-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-            />
-          </label>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-[100] w-56 rounded-xl border border-[var(--soc-border)] shadow-2xl overflow-hidden" style={{ backgroundColor: "#0a0f2a" }}>
+          <div className="p-3 space-y-3" style={{ backgroundColor: "#0a0f2a" }}>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-slate-400 w-8">From</span>
+              <input
+                type="datetime-local"
+                value={value?.start || ""}
+                max={value?.end || undefined}
+                disabled={disabled}
+                onChange={(e) => {
+                  const next = { start: e.target.value, end: value?.end || "" };
+                  if (new Date(next.start) > new Date(next.end)) next.end = next.start;
+                  onChange(next);
+                }}
+                className="flex-1 text-[10px] rounded-md border border-[var(--soc-border)] px-2 py-1.5 text-slate-200 focus:border-purple-500/50 focus:outline-none" style={{ backgroundColor: "#141b3d" }}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-slate-400 w-8">To</span>
+              <input
+                type="datetime-local"
+                value={value?.end || ""}
+                min={value?.start || undefined}
+                disabled={disabled}
+                onChange={(e) => {
+                  const next = { start: value?.start || "", end: e.target.value };
+                  if (new Date(next.start) > new Date(next.end)) next.start = next.end;
+                  onChange(next);
+                }}
+                className="flex-1 text-[10px] rounded-md border border-[var(--soc-border)] px-2 py-1.5 text-slate-200 focus:border-purple-500/50 focus:outline-none" style={{ backgroundColor: "#141b3d" }}
+              />
+            </div>
+            <button
+              onClick={() => setOpen(false)}
+              className="w-full py-1.5 text-[10px] font-medium rounded-lg text-purple-400 hover:bg-purple-500/20 transition-colors" style={{ backgroundColor: "rgba(139, 92, 246, 0.15)" }}
+            >
+              Apply
+            </button>
+          </div>
         </div>
-      </details>
-
-      {error && <div className="w-full text-[11px] text-red-300">{error}</div>}
+      )}
     </div>
   );
 }
-

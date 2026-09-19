@@ -16,6 +16,7 @@ import {
 import DateRangeFilter from "../components/DateRangeFilter";
 import RangeFilter from "../components/RangeFilter";
 import FilterSelect from "../components/FilterSelect";
+import CombinedFilter from "../components/CombinedFilter";
 import ExportCsvButton from "../components/ExportCsvButton";
 import { exportCsv } from "../utils/exportCsv";
 import {
@@ -459,17 +460,17 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items" }) =
   }
 
   return (
-    <div className="relative w-full flex flex-col h-full min-h-0" onMouseLeave={() => setSelected(null)}>
-      <div className="flex items-center justify-between mb-1 px-1">
-        <span className="text-[11px] text-slate-600 uppercase font-semibold">Total</span>
-        <span className="text-sm font-bold text-slate-300">
+    <div className="relative w-full min-w-0 max-w-full flex flex-col h-full min-h-0 overflow-hidden" onMouseLeave={() => setSelected(null)}>
+      <div className="flex items-center justify-between mb-1 px-1 min-w-0">
+        <span className="text-[11px] text-slate-600 uppercase font-semibold shrink-0">Total</span>
+        <span className="text-sm font-bold text-slate-300 truncate">
           {total} <span className="text-xs font-normal text-slate-500">{totalLabel}</span>
         </span>
       </div>
-      <div ref={rootRef} className="relative w-full cat-chart-plot">
+      <div ref={rootRef} className="relative w-full min-w-0 max-w-full min-h-0 flex-1 overflow-hidden cat-chart-plot" style={{ minHeight: 0 }}>
         {/* "meet" keeps axis/legend glyphs proportional (never gepeng):
             the viewBox always matches this box via ResizeObserver. */}
-        <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" className="block">
+        <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" className="block w-full max-w-full overflow-hidden" style={{ display: "block" }}>
           {gridLines.map((grid, idx) => (
             <g key={`grid-${idx}`}>
               <line x1={padding.l} y1={grid.y} x2={padding.l + innerW} y2={grid.y} stroke="var(--soc-border)" strokeWidth="1" opacity={grid.y === padding.t || grid.y === padding.t + innerH ? "1" : "0.5"} />
@@ -522,12 +523,12 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items" }) =
             );
           })()}
       </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 justify-center px-1 mt-1">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 justify-center px-1 mt-1 min-w-0 max-w-full overflow-hidden">
         {points.map((p) => (
-          <div key={`${p.label}-${p.index}`} className="flex items-center gap-1.5 text-[11px] text-slate-400">
+          <div key={`${p.label}-${p.index}`} className="flex items-center gap-1.5 text-[11px] text-slate-400 min-w-0 max-w-full">
             <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color }} />
-            <span className="whitespace-nowrap">{p.label}</span>
-            <span className="text-slate-500 font-mono">{p.value}</span>
+            <span className="truncate min-w-0 max-w-[140px]">{p.label}</span>
+            <span className="text-slate-500 font-mono shrink-0">{p.value}</span>
           </div>
         ))}
       </div>
@@ -538,87 +539,95 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items" }) =
 const CompactBarChart = ({ items, emptyLabel = "No data available" }) => {
   if (!items || items.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center px-2 py-10 text-center text-xs text-slate-600">
-        {emptyLabel}
+      <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
+        <p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">{emptyLabel}</p>
+        <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">No data for the selected time range.</p>
       </div>
     );
   }
 
   const maxValue = Math.max(...items.map((d) => d.value), 1);
+  const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
 
   return (
-    <div className="flex flex-col gap-3">
-      {items.map((item, i) => (
-        <div key={item.label} className="flex flex-col gap-1 min-w-0">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="w-5 text-[13px] font-bold text-slate-500 shrink-0">
-              {i + 1}.
-            </span>
-            <span className="flex-1 min-w-0 text-[13px] font-mono text-slate-300 truncate" title={item.label}>
-              {item.label}
-            </span>
-            <span className="text-[13px] font-bold text-slate-400 tabular-nums shrink-0 ml-1">
-              {item.value}x
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="w-5 shrink-0" />
-            <div
-              className="flex-1 bg-[var(--soc-bg)] rounded h-4 overflow-hidden"
-              title={`${item.label}: ${item.value} executions`}
-            >
+    <div className="w-full min-w-0 max-w-full space-y-1.5">
+      {items.map((item, i) => {
+        const color = item.color || CHART_COLORS[i % CHART_COLORS.length];
+        const label = item.label;
+        const value = item.value;
+        return (
+          <div key={label} className="w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>
+                  {i + 1}
+                </span>
+                <span className="min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)]" title={label}>
+                  {label}
+                </span>
+              </div>
+              <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">
+                {new Intl.NumberFormat("en-US").format(value)}
+              </span>
+            </div>
+            <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
               <div
-                className="h-full rounded transition-all"
+                className="h-full rounded-full transition-all duration-500"
+                title={`${label}: ${value} executions`}
                 style={{
-                  width: `${(item.value / maxValue) * 100}%`,
-                  backgroundColor: item.color,
+                  width: `${(value / maxValue) * 100}%`,
+                  backgroundColor: color,
                 }}
               />
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
 
 const TopAgentsCard = ({ agents }) => {
   if (!agents || agents.length === 0) {
-    return <div className="flex h-full items-center justify-center text-xs text-slate-600">No agent data</div>;
+    return (
+      <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
+        <p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">No agent data</p>
+        <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">No agent activity available for the selected time range.</p>
+      </div>
+    );
   }
   const maxValue = Math.max(...agents.map((a) => a.value), 1);
-  const COLORS = ["#34d399", "#38bdf8", "#fbbf24", "#f97316", "#a78bfa"];
+  const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
   return (
-    <div className="flex flex-col gap-3">
+    <div className="w-full min-w-0 max-w-full space-y-1.5">
       {agents.map((item, i) => {
-        const color = COLORS[i % COLORS.length];
+        const color = CHART_COLORS[i % CHART_COLORS.length];
+        const value = item.value;
+        const label = item.label;
         return (
-          <div key={item.label} className="flex flex-col gap-1 min-w-0">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="w-5 text-[13px] font-bold text-slate-500 shrink-0">
-                {i + 1}.
-              </span>
-              <span className="flex-1 min-w-0 text-[13px] font-mono text-slate-300 truncate" title={item.label}>
-                {item.label}
-              </span>
-              <span className="text-[13px] font-bold text-slate-400 tabular-nums shrink-0 ml-1">
-                {new Intl.NumberFormat("en-US").format(item.value)}
+          <div key={label} className="w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>
+                  {i + 1}
+                </span>
+                <span className="min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)]" title={label}>
+                  {label}
+                </span>
+              </div>
+              <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">
+                {new Intl.NumberFormat("en-US").format(value)}
               </span>
             </div>
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="w-5 shrink-0" />
+            <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
               <div
-                className="flex-1 bg-[var(--soc-bg)] rounded h-4 overflow-hidden"
-                title={item.lastSeen ? `Last seen ${formatDetailedTimestamp(item.lastSeen)}` : `${item.label}: ${item.value} events`}
-              >
-                <div
-                  className="h-full rounded transition-all"
-                  style={{
-                    width: `${(item.value / maxValue) * 100}%`,
-                    backgroundColor: color,
-                  }}
-                />
-              </div>
+                className="h-full rounded-full transition-all duration-500"
+                title={item.lastSeen ? `Last seen ${formatDetailedTimestamp(item.lastSeen)}` : `${label}: ${value} events`}
+                style={{
+                  width: `${(value / maxValue) * 100}%`,
+                  backgroundColor: color,
+                }}
+              />
             </div>
           </div>
         );
@@ -1687,257 +1696,303 @@ const HostMonitoring = () => {
 
   return (
     <>
-      <div className="soc-page-shell attack-page flex flex-col gap-3 sm:gap-4 w-full min-w-0">
-        <div className="soc-page-heading attack-page-heading bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-3 md:p-4">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-4">
-            <div>
-              <h1 className="soc-page-title flex items-center gap-2">
-                <Terminal className="h-4 w-4 sm:h-5 sm:w-5 text-orange-400" />
-                Host Monitoring
-              </h1>
-              <p className="soc-page-subtitle">
-                Real-time Linux command auditing and user activity tracking
-              </p>
+      <div className="flex flex-col gap-4 w-full min-w-0">
+        {/* Header */}
+        <div className="flex flex-col min-[700px]:flex-row min-[700px]:items-center justify-between gap-3">
+          <div>
+            <h1 className="text-lg min-[600px]:text-xl font-bold text-[var(--soc-text-primary)]">
+              Host Monitoring
+            </h1>
+            <p className="text-[11px] text-[var(--soc-text-muted)] mt-0.5">
+              Real-time Linux command auditing and user activity tracking
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <RangeFilter
+              rangeKey={rangeKey}
+              onRangeChange={(nextRange) => {
+                if (rangeKey !== nextRange) {
+                  setPage(1);
+                  setSelectedTimelinePoint(null);
+                  setRangeKey(nextRange);
+                  setFilterMode("range");
+                }
+              }}
+            />
+            <DateRangeFilter
+              value={customDateRange}
+              onChange={(range) => {
+                setPage(1);
+                setSelectedTimelinePoint(null);
+                setCustomDateRange(range);
+                setFilterMode("custom");
+              }}
+            />
+            <div className="relative flex items-center bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)]">
+              <select
+                value={pageSize}
+                onChange={(event) => {
+                  setPage(1);
+                  setPageSize(Number(event.target.value));
+                  setTimeout(() => {
+                    if (logsTableRef.current && typeof logsTableRef.current.scrollIntoView === "function") {
+                      try {
+                        logsTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+                      } catch (e) {}
+                    }
+                  }, 100);
+                }}
+                className="appearance-none bg-transparent py-2 pl-2.5 pr-5 text-left text-[11px] font-medium leading-tight text-[var(--soc-text-primary)] focus:outline-none"
+              >
+                {[10, 25, 50, 100].map((size) => (
+                  <option key={size} value={size} className="bg-[var(--soc-card)] text-[var(--soc-text-primary)]">{size}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 text-[var(--soc-text-muted)]" />
             </div>
           </div>
         </div>
 
-        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-2 md:p-4 flex flex-col gap-3 md:gap-4 attack-filter-card">
-          <div className="soc-data-toolbar attack-toolbar flex flex-row flex-wrap items-center justify-between gap-2">
-            <div className="rows-selector flex items-center gap-2 min-w-0 flex-shrink-0">
-              <label className="hidden items-center gap-1 text-[10px] text-slate-400 sm:flex whitespace-nowrap">
-                <span>Rows</span>
-              </label>
-              <div className="relative flex items-center bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)]">
-                <select
-                  value={pageSize}
-                  onChange={(event) => {
-                    setPage(1);
-                    setPageSize(Number(event.target.value));
-                    // Scroll to logs table
-                    setTimeout(() => {
-                      if (logsTableRef.current && typeof logsTableRef.current.scrollIntoView === "function") {
-                        try {
-                          logsTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-                        } catch (e) {
-                          // ignore
-                        }
-                      }
-                    }, 100);
-                  }}
-                  className="appearance-none bg-transparent py-2 pl-2.5 pr-5 text-left text-[11px] font-medium leading-tight text-slate-100 focus:outline-none"
-                >
-                  {[10, 25, 50, 100].map((size) => (
-                    <option key={size} value={size} className="bg-white text-black">{size}</option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
-              </div>
-              <ExportCsvButton accent="orange" onClick={handleExportCsv} />
-            </div>
-
-            <div className="soc-filter-toolbar ml-auto flex flex-wrap items-center gap-2">
-              <RangeFilter
-                rangeKey={rangeKey}
-                onRangeChange={(nextRange) => {
-                  if (rangeKey !== nextRange) {
-                    setPage(1);
-                    setSelectedTimelinePoint(null);
-                    setRangeKey(nextRange);
-                    setFilterMode("range");
-                  }
-                }}
-                dimmed={filterMode === "custom"}
-              />
-              <DateRangeFilter
-                value={customDateRange}
-                onChange={(range) => {
-                  setPage(1);
-                  setSelectedTimelinePoint(null);
-                  setCustomDateRange(range);
-                  setFilterMode("custom");
-                }}
-                className={filterMode === "range" ? "opacity-50" : ""}
-              />
-              <span className="hidden lg:flex items-center gap-1 text-[11px] text-slate-600">
-                <CalendarRange className="h-3 w-3" />
-                {filterMode === "custom"
-                  ? new Date(getIsoDateRange(normalizeDateRange(customDateRange)).start).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }) +
-                  " - " +
-                  new Date(getIsoDateRange(normalizeDateRange(customDateRange)).end).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })
-                  : rangeKey}
-              </span>
-            </div>
+        {error && (
+          <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-xs text-red-200">
+            Failed to fetch backend data: {error}
           </div>
+        )}
 
-          {error && (
-            <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-xs text-red-200">
-              Failed to fetch backend data: {error}
-            </div>
-          )}
-
-          <div className="soc-kpi-grid attack-kpi-grid">
-            <div className="bg-orange-500/10 border border-orange-500/30 rounded p-2 md:p-3">
-              <div className="text-[8px] md:text-[10px] text-orange-400 uppercase font-semibold">Commands</div>
-              <div className="text-sm md:text-lg font-black text-orange-300 mt-0.5 md:mt-1">
-                {loading ? "..." : stats.totalCommands}
+        {/* KPI Cards — disamakan dengan MainDashboard (gambar 1): kpi-modern + stagger + p-2 icon wrapper */}
+        <div className="grid grid-cols-2 min-[700px]:grid-cols-4 gap-3">
+          <div className="kpi-modern animate-fadeInUp stagger-1" style={{ opacity: 0 }}>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">Commands</span>
+              <div className="p-2 rounded-lg text-purple-400 bg-opacity-10">
+                <Terminal className="h-4 w-4 text-purple-400" />
               </div>
-              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">Linux commands monitored</div>
             </div>
-            <div className="bg-red-500/10 border border-red-500/30 rounded p-2 md:p-3">
-              <div className="text-[8px] md:text-[10px] text-red-400 uppercase font-semibold">Suspicious</div>
-              <div className="text-sm md:text-lg font-black text-red-300 mt-0.5 md:mt-1">
-                {loading ? "..." : stats.suspiciousCount}
-              </div>
-              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">suspicious detected</div>
+            <div className="text-xl font-bold text-purple-400 mb-1">
+              {loading ? <div className="skeleton h-6 w-16"></div> : new Intl.NumberFormat("en-US").format(Number(stats.totalCommands || 0))}
             </div>
-            <div className="bg-sky-500/10 border border-sky-500/30 rounded p-2 md:p-3">
-              <div className="text-[8px] md:text-[10px] text-sky-400 uppercase font-semibold">Sessions</div>
-              <div className="text-sm md:text-lg font-black text-sky-300 mt-0.5 md:mt-1">
-                {loading ? "..." : stats.uniqueSessions}
-              </div>
-              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">unique sessions</div>
-            </div>
-            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded p-2 md:p-3">
-              <div className="text-[8px] md:text-[10px] text-emerald-400 uppercase font-semibold">Users</div>
-              <div className="text-sm md:text-lg font-black text-emerald-300 mt-0.5 md:mt-1">
-                {loading ? "..." : stats.uniqueUsers}
-              </div>
-              <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">unique users</div>
-            </div>
+            <div className="text-[9px] text-[var(--soc-text-muted)]">Linux commands monitored</div>
           </div>
-
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4 items-stretch attack-panel-grid">
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full min-w-0 overflow-visible attack-card soc-fluid-card">
-              <div className="soc-chart-header flex flex-wrap justify-between items-start gap-x-3 gap-y-1.5 mb-0">
-                <div className="min-w-0">
-                  <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1 md:gap-2">
-                    <Activity className="h-3 md:h-4 w-3 md:w-4 text-orange-400 shrink-0" />
-                    <span className="truncate">Command Timeline</span>
-                  </div>
-                  <div className="mt-1 text-[11px] text-slate-500">Commands executed by agents. Click a point to filter logs.</div>
-                </div>
-                <div className="soc-chart-meta text-right min-w-0">
-                  <div className="text-xs text-slate-500 whitespace-nowrap">Last {rangeKey}</div>
-                  <div className="text-[11px] text-slate-600 break-words">Updated {formatLiveTimestamp(lastUpdated)}</div>
-                </div>
-              </div>
-              <div className="min-w-0 soc-chart--timeline rounded-lg bg-[var(--soc-card)] p-2 md:p-4 overflow-visible" style={{ height: `${timelineChartHeight}px` }}>
-                <div className="min-w-0 h-full w-full">
-                  <WaveChart
-                    data={timelineData}
-                    rangeKey={rangeKey}
-                    height={timelineChartHeight}
-                    compact={isMobile}
-                    activePointKey={selectedTimelinePoint?.key ?? null}
-                    onPointSelect={handleTimelinePointSelect}
-                  />
-                </div>
+          <div className="kpi-modern animate-fadeInUp stagger-2" style={{ opacity: 0 }}>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">Suspicious</span>
+              <div className="p-2 rounded-lg text-pink-400 bg-opacity-10">
+                <AlertTriangle className="h-4 w-4 text-pink-400" />
               </div>
             </div>
+            <div className="text-xl font-bold text-pink-400 mb-1">
+              {loading ? <div className="skeleton h-6 w-16"></div> : new Intl.NumberFormat("en-US").format(Number(stats.suspiciousCount || 0))}
+            </div>
+            <div className="text-[9px] text-[var(--soc-text-muted)]">Suspicious detected</div>
+          </div>
+          <div className="kpi-modern animate-fadeInUp stagger-3" style={{ opacity: 0 }}>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">Sessions</span>
+              <div className="p-2 rounded-lg text-cyan-400 bg-opacity-10">
+                <Users className="h-4 w-4 text-cyan-400" />
+              </div>
+            </div>
+            <div className="text-xl font-bold text-cyan-400 mb-1">
+              {loading ? <div className="skeleton h-6 w-16"></div> : new Intl.NumberFormat("en-US").format(Number(stats.uniqueSessions || 0))}
+            </div>
+            <div className="text-[9px] text-[var(--soc-text-muted)]">Unique sessions</div>
+          </div>
+          <div className="kpi-modern animate-fadeInUp stagger-4" style={{ opacity: 0 }}>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">Users</span>
+              <div className="p-2 rounded-lg text-emerald-400 bg-opacity-10">
+                <Activity className="h-4 w-4 text-emerald-400" />
+              </div>
+            </div>
+            <div className="text-xl font-bold text-emerald-400 mb-1">
+              {loading ? <div className="skeleton h-6 w-16"></div> : new Intl.NumberFormat("en-US").format(Number(stats.uniqueUsers || 0))}
+            </div>
+            <div className="text-[9px] text-[var(--soc-text-muted)]">Unique users</div>
+          </div>
+        </div>
 
-            <div ref={topAgentsPanelRef} className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-4 md:p-5 flex flex-col h-full min-w-0 attack-card">
-              <div className="mb-0 flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                    <Users className="h-3 md:h-4 w-3 md:w-4 text-orange-400 shrink-0" />
-                    Top 5 Agents
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            {/* Command Timeline — disamakan dengan Risk Distribution (Dashboard) */}
+            <div className="xl:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col" style={{ opacity: 0 }}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-orange-500/10">
+                    <Activity className="h-3.5 w-3.5 text-orange-400" />
                   </div>
-                  <div className="mt-1 text-[11px] text-slate-500">Most active agents from host monitoring events</div>
+                  <div>
+                    <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Command Timeline</h3>
+                    <p className="text-[9px] text-[var(--soc-text-muted)]">Commands executed by agents. Click a point to filter logs.</p>
+                  </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs text-slate-500">Unique agents</div>
-                  <div className="text-xs font-black text-emerald-300">{analytics.uniqueAgents}</div>
+                  <div className="text-[9px] text-[var(--soc-text-muted)]">Last {rangeKey}</div>
+                  <div className="text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatLiveTimestamp(lastUpdated)}</div>
                 </div>
+              </div>
+              <div className="h-[220px]">
+                <WaveChart
+                  data={timelineData}
+                  rangeKey={rangeKey}
+                  height={220}
+                  compact={isMobile}
+                  activePointKey={selectedTimelinePoint?.key ?? null}
+                  onPointSelect={handleTimelinePointSelect}
+                />
+              </div>
+            </div>
+
+            {/* Top 5 Agents — disamakan dengan Top Active Users (Dashboard) */}
+            <div ref={topAgentsPanelRef} className="chart-card animate-fadeInUp stagger-2 flex flex-col" style={{ opacity: 0 }}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-purple-500/10">
+                    <Users className="h-3.5 w-3.5 text-purple-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Top 5 Agents</h3>
+                    <p className="text-[9px] text-[var(--soc-text-muted)]">Most active agents from host monitoring events</p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-between mb-2 px-1">
+                <span className="text-[9px] text-[var(--soc-text-muted)]">Unique agents</span>
+                <span className="text-[11px] font-bold text-[var(--soc-text-primary)]">{analytics.uniqueAgents}</span>
               </div>
               <TopAgentsCard agents={analytics.topAgents} />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 items-stretch attack-split-grid">
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col h-full min-w-0">
-              <div className="mb-0 w-full">
-                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                  <MonitorPlay className="h-3.5 w-3.5 text-orange-400 shrink-0" />
-                  Top Sessions
+          {/* Top Sessions + Top 5 Dangerous — disamakan dengan Command Timeline + Top 5 Agents (Dashboard: Risk + Top Users) */}
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 min-w-0 max-w-full">
+            <div className="xl:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col min-w-0 max-w-full overflow-hidden" style={{ opacity: 0 }}>
+              <div className="flex items-center justify-between mb-3 min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="p-1.5 rounded-lg bg-orange-500/10 shrink-0">
+                    <MonitorPlay className="h-3.5 w-3.5 text-orange-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)] truncate">Top Sessions</h3>
+                    <p className="text-[9px] text-[var(--soc-text-muted)] truncate">Most active sessions by command activity</p>
+                  </div>
                 </div>
-                <div className="mt-1 text-[11px] text-slate-500">Most active sessions by command activity</div>
               </div>
-              <div className="flex-1 min-h-0 w-full soc-chart soc-chart--category overflow-visible flex flex-col">
+              <div className="w-full min-w-0 max-w-full min-h-0 overflow-hidden" style={{ height: 220 }}>
                 <CategoryLineChart items={analytics.topSessions} color="#f97316" totalLabel="sessions" />
               </div>
             </div>
 
-            <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 flex flex-col h-full min-w-0">
-              <div className="mb-0 w-full">
-                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                  <ShieldAlert className="h-3.5 w-3.5 text-orange-400 shrink-0" />
-                  Risk Indicators
-                </div>
-                <div className="mt-1 text-[11px] text-slate-500">High-risk signals flagged in host monitoring</div>
-              </div>
-              <div className="flex-1 min-h-0 w-full soc-chart soc-chart--category overflow-visible flex flex-col">
-                <CategoryLineChart items={analytics.riskIndicators} color="#ef4444" totalLabel="risks" />
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 items-stretch attack-split-grid">
-            <div
-              className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 min-w-0 flex flex-col h-auto soc-fluid-card"
-            >
-              <div className="mb-0 flex-shrink-0">
-                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                  <AlertTriangle className="h-4 w-4 text-orange-400 shrink-0" />
-                  Top 5 Dangerous Commands Executed
-                </div>
-                <div className="mt-1 text-[11px] text-slate-500">Most frequently executed dangerous commands</div>
-              </div>
-              <div className="w-full flex-1 min-h-0">
-                <CompactBarChart
-                  items={analytics.topSuspicious}
-                  emptyLabel="No suspicious command data found"
-                />
-              </div>
-            </div>
-
-            <div className="soc-payload-distribution-card bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-3 md:p-4 shadow-lg min-w-0 flex flex-col h-full">
-              <div className="mb-0 flex-shrink-0">
-                <div className="text-[11px] md:text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                  <Terminal className="h-4 w-4 text-orange-400 shrink-0" />
-                  Command Keywords Distribution
-                </div>
-                <div className="mt-1 text-[11px] text-slate-500">Command payload keywords ranked by frequency</div>
-              </div>
-              <div className={`command-keywords-distribution-box w-full h-0 flex-1 min-h-0 rounded-xl overflow-hidden ${(commandPayloadWords?.length ?? 0) > 0 ? "" : "is-empty"}`}>
-                <PayloadWordCloud words={commandPayloadWords} activeWord={selectedKeyword} onWordClick={handleSelectKeyword} />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl shadow-lg overflow-hidden">
-          <div ref={logsTableRef} className="p-3 md:p-4 border-b border-[var(--soc-border)] bg-[var(--soc-card)]">
-            <div className="mb-4">
-              {selectedTimelinePoint && (
-                <div className="flex items-start justify-between gap-3">
-                  <div className="text-xs text-orange-300">
-                    Timeline filter: {formatTimelineBucketLabel(selectedTimelinePoint)}
+            <div className="chart-card animate-fadeInUp stagger-2 flex flex-col" style={{ opacity: 0 }}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-purple-500/10">
+                    <Users className="h-3.5 w-3.5 text-purple-400" />
                   </div>
-                  <button
-                    onClick={() => {
-                      setPage(1);
-                      setSelectedTimelinePoint(null);
-                    }}
-                    className="shrink-0 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs font-medium text-orange-200 transition-colors hover:bg-orange-500/20"
-                  >
-                    Reset Time Filter
-                  </button>
+                  <div>
+                    <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Top 5 Active Users</h3>
+                    <p className="text-[9px] text-[var(--soc-text-muted)]">Most active users by command execution</p>
+                  </div>
                 </div>
-              )}
+                <div className="text-right">
+                  <span className="text-[9px] text-[var(--soc-text-muted)]">Unique</span>
+                  <span className="ml-1 text-[11px] font-bold text-purple-400">{new Set((analyticsLogs.length ? analyticsLogs : logs).map(l=>l.user).filter(u=>u && u!=="-")).size}</span>
+                </div>
+              </div>
+              {(() => {
+                const items = analytics.topUsers || [];
+                if (!items.length) return (
+                  <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
+                    <p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">No active user data</p>
+                    <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">No user activity for the selected time range.</p>
+                  </div>
+                );
+                const maxValue = Math.max(...items.map(d=>d.value), 1);
+                const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
+                return (
+                  <div className="w-full min-w-0 max-w-full space-y-1.5">
+                    {items.slice(0,5).map((item, i) => {
+                      const color = item.color || CHART_COLORS[i % CHART_COLORS.length];
+                      const label = item.label;
+                      const value = item.value;
+                      return (
+                        <div key={label} className="w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>{i + 1}</span>
+                              <span className="min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)]" title={label}>{label}</span>
+                            </div>
+                            <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(value)}</span>
+                          </div>
+                          <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
+                            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(value / maxValue) * 100}%`, backgroundColor: color }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            <div className="xl:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col overflow-hidden" style={{ opacity: 0 }}>
+              <div className="flex items-center justify-between mb-3 shrink-0">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-cyan-500/10">
+                    <Terminal className="h-3.5 w-3.5 text-cyan-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Command Keywords Distribution</h3>
+                    <p className="text-[9px] text-[var(--soc-text-muted)]">Command payload keywords ranked by frequency</p>
+                  </div>
+                </div>
+              </div>
+              <div className="h-[220px] min-h-0 w-full overflow-hidden rounded-xl">
+                <div className="w-full h-full min-h-0 rounded-xl overflow-hidden" style={{ background: "transparent" }}>
+                  <PayloadWordCloud words={commandPayloadWords} activeWord={selectedKeyword} onWordClick={handleSelectKeyword} />
+                </div>
+              </div>
             </div>
 
-            <div className="flex gap-2 flex-wrap attack-logs-search soc-filter-row">
+            <div className="chart-card animate-fadeInUp stagger-2 flex flex-col" style={{ opacity: 0 }}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-purple-500/10">
+                    <AlertTriangle className="h-3.5 w-3.5 text-purple-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Top 5 Dangerous Commands Executed</h3>
+                    <p className="text-[9px] text-[var(--soc-text-muted)]">Most frequently executed dangerous commands</p>
+                  </div>
+                </div>
+              </div>
+              <CompactBarChart
+                items={analytics.topSuspicious}
+                emptyLabel="No suspicious command data found"
+              />
+            </div>
+          </div>
+
+        <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl shadow-lg h-auto">
+          <div ref={logsTableRef} className="px-3 py-2.5 md:px-4 md:py-3 border-b border-[var(--soc-border)] bg-[var(--soc-card)]">
+            {selectedTimelinePoint && (
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="text-xs text-orange-300">
+                  Timeline filter: {formatTimelineBucketLabel(selectedTimelinePoint)}
+                </div>
+                <button
+                  onClick={() => {
+                    setPage(1);
+                    setSelectedTimelinePoint(null);
+                  }}
+                  className="shrink-0 rounded-lg border border-orange-500/30 bg-orange-500/10 px-2.5 py-1.5 text-xs font-medium text-orange-200 transition-colors hover:bg-orange-500/20"
+                >
+                  Reset Time Filter
+                </button>
+              </div>
+            )}
+
+            <div className="flex gap-2 flex-wrap attack-logs-search soc-filter-row items-center">
               <div className="flex-1 min-w-0 basis-full sm:basis-0 relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-500" />
                 <input
@@ -1948,48 +2003,23 @@ const HostMonitoring = () => {
                     setPage(1);
                     setSearchQuery(e.target.value);
                   }}
-                  className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500"
+                  className="w-full pl-10 pr-4 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500"
                 />
               </div>
-              <FilterSelect
-                value={statusFilter}
-                allLabel="All statuses"
-                options={[
-                  { value: "suspicious", label: "Suspicious" },
-                  { value: "normal", label: "Normal" },
-                ]}
-                onChange={(nextValue) => {
-                  setPage(1);
-                  setStatusFilter(nextValue);
-                }}
+              <CombinedFilter
+                statusFilter={statusFilter}
+                onStatusChange={(v) => { setPage(1); setStatusFilter(v); }}
+                userFilter={userFilter}
+                onUserChange={(v) => { setPage(1); setUserFilter(v); }}
+                userOptions={filterOptions.users}
+                agentFilter={agentFilter}
+                onAgentChange={(v) => { setPage(1); setAgentFilter(v); }}
+                agentOptions={filterOptions.agents}
+                sessionFilter={sessionFilter}
+                onSessionChange={(v) => { setPage(1); setSessionFilter(v); }}
+                sessionOptions={filterOptions.sessions}
               />
-              <FilterSelect
-                value={userFilter}
-                allLabel="All users"
-                options={filterOptions.users}
-                onChange={(nextValue) => {
-                  setPage(1);
-                  setUserFilter(nextValue);
-                }}
-              />
-              <FilterSelect
-                value={agentFilter}
-                allLabel="All agents"
-                options={filterOptions.agents}
-                onChange={(nextValue) => {
-                  setPage(1);
-                  setAgentFilter(nextValue);
-                }}
-              />
-              <FilterSelect
-                value={sessionFilter}
-                allLabel="All sessions"
-                options={filterOptions.sessions}
-                onChange={(nextValue) => {
-                  setPage(1);
-                  setSessionFilter(nextValue);
-                }}
-              />
+              <ExportCsvButton accent="orange" onClick={handleExportCsv} />
             </div>
           </div>
 
@@ -2069,8 +2099,8 @@ const HostMonitoring = () => {
                           {log.sessionId}
                         </button>
                       </td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-3 align-top">
-                        <div className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
+                      <td className="px-2 md:px-4 py-1.5 md:py-3 align-top max-w-[200px] sm:max-w-[260px] md:max-w-[360px] lg:max-w-[420px]">
+                        <div className="truncate max-w-[200px] sm:max-w-[260px] md:max-w-[360px] lg:max-w-[420px] overflow-hidden text-ellipsis whitespace-nowrap" title={log.command.cmd}>
                           <CommandHighlighter command={log.command.cmd} />
                         </div>
                       </td>

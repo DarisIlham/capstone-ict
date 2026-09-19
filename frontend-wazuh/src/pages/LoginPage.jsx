@@ -13,7 +13,8 @@ import ReCAPTCHA from "react-google-recaptcha";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../hooks/useTheme";
 import ThemeToggle from "../components/ThemeToggle";
-import logo from "../assets/UndipCyber.png";
+import logoDark from "../assets/soc_undip_dark_theme.png";
+import logoLight from "../assets/soc_undip_light_theme.png";
 import { API_BASE_URL } from "../config/Api";
 
 const LoginPage = () => {
@@ -181,16 +182,8 @@ const LoginPage = () => {
 
       <div className="w-full max-w-[400px] relative z-10">
         {/* Header */}
-        <div className="text-center mb-4 md:mb-5">
-          <div className="inline-flex items-center justify-center mb-3 md:mb-3.5">
-            <img src={logo} alt="Logo" className="w-[clamp(42px,11vw,60px)] h-auto object-contain" />
-          </div>
-          <h1 className="text-[clamp(18px,5.5vw,24px)] font-bold text-[var(--soc-text-primary)] mb-1 leading-tight">
-            SOC UNDIP
-          </h1>
-          <p className="text-[var(--soc-text-secondary)] text-[clamp(11px,3.4vw,14px)] leading-snug">
-            Security Operations Center UNDIP
-          </p>
+        <div className="flex justify-center mb-4 md:mb-5">
+          <img src={theme === "light" ? logoLight : logoDark} alt="SOC UNDIP" className="w-[clamp(160px,45vw,240px)] h-auto object-contain" />
         </div>
 
         {/* Notification */}

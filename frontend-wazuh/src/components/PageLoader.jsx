@@ -1,38 +1,29 @@
 export default function PageLoader({
   message = "Loading...",
-  size = "md",
   className = "",
   fullScreen = false,
 }) {
-  const spinnerSize =
-    size === "sm"
-      ? "h-8 w-8 border-2"
-      : size === "lg"
-        ? "h-12 w-12 border-b-2"
-        : "h-10 w-10 border-b-2";
-
-  const sizeClass =
-    size === "sm"
-      ? "soc-page-loader--sm"
-      : size === "lg"
-        ? "soc-page-loader--lg"
-        : "soc-page-loader--md";
-
   return (
     <div
       role="status"
       aria-live="polite"
       aria-label={message}
-      className={`soc-page-loader ${sizeClass} ${fullScreen ? "soc-page-loader--fullscreen" : ""} ${className}`}
+      className={`flex flex-col items-center justify-center gap-4 ${fullScreen ? "absolute inset-0 z-40" : "min-h-[60vh]"} ${className}`}
+      style={{ backgroundColor: fullScreen ? "#0a0f2a" : "transparent" }}
     >
-      <div className="soc-page-loader-inner">
-        <div
-          className={`animate-spin rounded-full border-sky-400 ${spinnerSize}`}
-        />
-        {message && (
-          <div className="soc-page-loader-text">{message}</div>
-        )}
+      {/* Animated rings */}
+      <div className="relative w-16 h-16">
+        <div className="absolute inset-0 rounded-full border-2 border-purple-500/20 animate-ping" />
+        <div className="absolute inset-0 rounded-full border-2 border-purple-500/30 animate-spin" style={{ animationDuration: "1.5s" }} />
+        <div className="absolute inset-2 rounded-full border-2 border-pink-500/30 animate-spin" style={{ animationDuration: "2s", animationDirection: "reverse" }} />
+        <div className="absolute inset-4 rounded-full border-2 border-purple-400/40 animate-spin" style={{ animationDuration: "1s" }} />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-3 h-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 animate-pulse" />
+        </div>
       </div>
+
+      {/* Loading text */}
+      <span className="text-sm font-medium text-slate-300">{message}</span>
     </div>
   );
 }

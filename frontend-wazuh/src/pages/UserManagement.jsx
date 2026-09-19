@@ -18,6 +18,23 @@ import {
 } from "../services/userApi";
 import PageLoader from "../components/PageLoader";
 
+// ── KPI Card: konsep desain ML (kpi-modern + stagger + fadeInUp) ───────────
+// (hanya wrapper visual — nilai & label tetap milik User Management)
+const KPICard = ({ label, value, icon: Icon, color, desc, loading, index = 0 }) => (
+  <div className={`kpi-modern animate-fadeInUp stagger-${index + 1}`} style={{ opacity: 0 }}>
+    <div className="flex items-center justify-between mb-3">
+      <span className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">{label}</span>
+      <div className={`p-2 rounded-lg ${color} bg-opacity-10`}>
+        <Icon className={`h-4 w-4 ${color}`} />
+      </div>
+    </div>
+    <div className={`text-xl font-bold ${color} mb-1`}>
+      {loading ? <div className="skeleton h-6 w-16"></div> : value}
+    </div>
+    <div className="text-[9px] text-[var(--soc-text-muted)]">{desc}</div>
+  </div>
+);
+
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -183,63 +200,52 @@ const UserManagement = () => {
   }, [error]);
 
   return (
-    <>
-    <div className="soc-page-shell flex flex-col gap-3 sm:gap-4 w-full min-w-0">
-          <div className="soc-page-heading bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl p-3 md:p-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div>
-                <h1 className="soc-page-title flex items-center gap-2">
-                  <Users className="h-4 w-4 sm:h-5 sm:w-5 text-sky-400" />
-                  User Management
-                </h1>
-                <p className="soc-page-subtitle">
-                  Manage user accounts and monitor admin login activity
-                </p>
-              </div>
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors w-full sm:w-fit"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add User
-              </button>
-            </div>
+    <div className="flex flex-col gap-4 w-full min-w-0">
+      <div className="flex flex-col min-[700px]:flex-row min-[700px]:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-lg min-[600px]:text-xl font-bold text-[var(--soc-text-primary)]">
+            User Management
+          </h1>
+          <p className="text-[11px] text-[var(--soc-text-muted)] mt-0.5">
+            Manage user accounts and monitor admin login activity
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors w-full sm:w-fit"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add User
+          </button>
+        </div>
+      </div>
+
+      {successMessage && (
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-[11px] text-emerald-300">
+          <p className="text-[11px] font-medium">Success: {successMessage}</p>
+        </div>
+      )}
+
+      {error && (
+        <div className="rounded-lg border border-red-700/50 bg-red-900/20 px-4 py-2 text-[11px] text-red-300">
+          <p className="text-[11px] font-medium">Error: {error}</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 min-[700px]:grid-cols-3 gap-3">
+        <KPICard label="Total Accounts" value={new Intl.NumberFormat("en-US").format(userStats.total)} icon={Users} color="text-sky-400" desc="all registered users" loading={loading} index={0} />
+        <KPICard label="Active Accounts" value={new Intl.NumberFormat("en-US").format(userStats.active)} icon={CheckCircle} color="text-emerald-400" desc="users with normal access" loading={loading} index={1} />
+        <KPICard label="Pending Accounts" value={new Intl.NumberFormat("en-US").format(userStats.pending)} icon={Clock} color="text-amber-400" desc="users temporarily restricted" loading={loading} index={2} />
+      </div>
+
+      <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl shadow-lg h-auto overflow-hidden animate-fadeInUp stagger-4" style={{ opacity: 0 }}>
+        <div className="px-3 py-2.5 md:px-4 md:py-3 border-b border-[var(--soc-border)] bg-[var(--soc-card)]">
+          <div className="text-[11px] md:text-xs font-semibold text-slate-300">
+            Account Overview
           </div>
-
-          {successMessage && (
-            <div className="px-3 py-2 bg-green-500/15 border border-green-500/30 rounded-lg text-green-300">
-              <p className="text-[11px] font-medium">Success: {successMessage}</p>
-            </div>
-          )}
-
-          {error && (
-            <div className="px-3 py-2 bg-red-500/15 border border-red-500/30 rounded-lg text-red-300">
-              <p className="text-[11px] font-medium">Error: {error}</p>
-            </div>
-          )}
-
-          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg overflow-hidden shadow-lg">
-              <div className="text-[11px] md:text-xs font-semibold text-slate-300 p-3 md:p-4 border-b border-[var(--soc-border)]">
-                Account Overview
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-3 p-3 md:p-4 border-b border-[var(--soc-border)]">
-                <div className="bg-sky-500/10 border border-sky-500/30 rounded p-2 md:p-3">
-                  <div className="text-[8px] md:text-[10px] text-sky-400 uppercase font-semibold">Total Accounts</div>
-                  <div className="text-sm md:text-lg font-black text-sky-300 mt-0.5 md:mt-1">{userStats.total}</div>
-                  <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">all registered users</div>
-                </div>
-                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded p-2 md:p-3">
-                  <div className="text-[8px] md:text-[10px] text-emerald-400 uppercase font-semibold">Active Accounts</div>
-                  <div className="text-sm md:text-lg font-black text-emerald-300 mt-0.5 md:mt-1">{userStats.active}</div>
-                  <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">users with normal access</div>
-                </div>
-                <div className="bg-amber-500/10 border border-amber-500/30 rounded p-2 md:p-3">
-                  <div className="text-[8px] md:text-[10px] text-amber-400 uppercase font-semibold">Pending Accounts</div>
-                  <div className="text-sm md:text-lg font-black text-amber-300 mt-0.5 md:mt-1">{userStats.pending}</div>
-                  <div className="text-[8px] md:text-[9px] text-slate-500 mt-0.5">users temporarily restricted</div>
-                </div>
-              </div>
-              <div className="overflow-x-auto">
+        </div>
+        <div className="overflow-x-auto">
               {loading ? (
                 <PageLoader message="Loading users..." size="sm" />
               ) : users.length === 0 ? (
@@ -247,7 +253,7 @@ const UserManagement = () => {
                   <p className="text-sm text-slate-400 font-medium">No users found</p>
                 </div>
               ) : (
-                <table className="w-full text-[10px] md:text-[11px]">
+                <table className="w-full min-w-[720px] text-[10px] md:text-[11px] text-left">
                   <thead>
                     <tr className="border-b border-slate-800 bg-slate-800/70">
                       <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Name</th>
@@ -344,46 +350,47 @@ const UserManagement = () => {
               </div>
 
               {totalPages > 1 && (
-                <div className="border-t border-slate-800 bg-slate-900/50 px-4 py-3 flex flex-col md:flex-row items-start md:items-center justify-between gap-2">
-                  <div className="text-[10px] md:text-[11px] font-mono text-slate-500">
-                    <span className="font-bold text-sky-400">PAGE </span>
-                    <span className="font-bold text-white">{currentPage}</span> / {totalPages}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                      disabled={currentPage === 1}
-                      className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
-                    >
-                      PREV
-                    </button>
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <div className="border-t border-slate-800 bg-slate-900/50 px-2 md:px-4 py-3">
+                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2 md:gap-0">
+                    <div className="text-[10px] md:text-[11px] font-mono text-slate-500">
+                      <span className="font-bold text-sky-400">PAGE </span>
+                      <span className="font-bold text-white">{currentPage}</span> / {totalPages}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
-                        key={page}
-                        onClick={() => setCurrentPage(page)}
-                        className={`min-w-[28px] rounded border px-2 py-1.5 text-[10px] md:text-[11px] font-bold transition-all ${
-                          currentPage === page
-                            ? "border-sky-600/50 bg-sky-600/20 text-sky-400"
-                            : "border-slate-700 bg-slate-800 text-slate-300 hover:border-sky-500/50 hover:bg-sky-900/20"
-                        }`}
+                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                        disabled={currentPage === 1}
+                        className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
                       >
-                        {page}
+                        PREV
                       </button>
-                    ))}
-                    <button
-                      onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                      disabled={currentPage === totalPages}
-                      className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
-                    >
-                      NEXT
-                    </button>
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page)}
+                          className={`min-w-[28px] rounded border px-2 py-1.5 text-[10px] md:text-[11px] font-bold transition-all ${
+                            currentPage === page
+                              ? "border-sky-600/50 bg-sky-600/20 text-sky-400"
+                              : "border-slate-700 bg-slate-800 text-slate-300 hover:border-sky-500/50 hover:bg-sky-900/20"
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                        disabled={currentPage === totalPages}
+                        className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
+                      >
+                        NEXT
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
             </div>
-        </div>
 
-        {showAddModal && (
+      {showAddModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg p-5 max-w-md w-full">
             <h2 className="text-base md:text-lg font-bold text-white mb-4">Add New User</h2>
@@ -519,7 +526,7 @@ const UserManagement = () => {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 };
 

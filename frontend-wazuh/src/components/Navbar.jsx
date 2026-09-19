@@ -14,7 +14,7 @@ import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import ThemeToggle from "./ThemeToggle";
-import logo from "../assets/UndipCyber.png";
+import logo from "../assets/logo_soc_undip.png";
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -37,7 +37,7 @@ const Navbar = () => {
     { label: "Main Dashboard", href: "/", icon: LayoutDashboard },
     { label: "Machine Learning", href: "/ml-dashboard", icon: BrainCircuit },
     { label: "File Integrity Monitoring", href: "/fim-events", icon: ShieldAlert },
-    { label: "Host Monitoring", href: "/attack-dashboard", icon: Activity },
+    { label: "Host Monitoring", href: "/host-monitoring", icon: Activity },
     { label: "File Security Scanner", href: "/file-security", icon: FileSearch },
   ];
 

@@ -11,6 +11,7 @@ import AttackDashboard from "./pages/AttackDashboard.jsx";
 import FileSecurityScanner from "./pages/FileSecurityScanner.jsx";
 import UserManagement from "./pages/UserManagement.jsx";
 import Alert from "./pages/Alert.jsx";
+import HostMonitoring from "./pages/HostMonitoring.jsx";
 
 function App() {
   const routerBasename =
@@ -52,6 +53,16 @@ function App() {
                 <PrivateRoute>
                   <AppLayout>
                     <AttackDashboard />
+                  </AppLayout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/host-monitoring"
+              element={
+                <PrivateRoute>
+                  <AppLayout>
+                    <HostMonitoring />
                   </AppLayout>
                 </PrivateRoute>
               }

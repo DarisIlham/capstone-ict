@@ -30,6 +30,7 @@ export default function FilterSelect({
   options = [],
   allLabel,
   accent = "orange",
+  borderless = false,
 }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
@@ -82,7 +83,7 @@ export default function FilterSelect({
         onClick={() => setOpen((current) => !current)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className={`flex items-center gap-2 appearance-none rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-3 pr-2 text-[11px] text-slate-100 focus:outline-none focus:ring-1 ${accentStyle.focusRing}`}
+        className={`flex items-center gap-2 appearance-none ${borderless ? "rounded-none" : "rounded-lg border border-[var(--soc-border)]"} bg-[var(--soc-card)] py-2 pl-3 pr-2 text-[11px] text-slate-100 focus:outline-none focus:ring-1 ${accentStyle.focusRing}`}
       >
         <span className="max-w-[140px] truncate">{selectedLabel}</span>
         <ChevronDown className="pointer-events-none h-3.5 w-3.5 shrink-0 text-slate-400" />
