@@ -16,6 +16,8 @@ import {
   getHistogramInterval
 } from "../utils/esHelpers.js";
 
+// ============ DUMMY DATA REMOVED ============
+
 // Fungsi internal (tidak perlu dieksport jika hanya dipakai di dalam file ini)
 function buildMlMustClauses() {
   return [exactMatchClause("log_type", "webids_prediction")];
@@ -71,6 +73,7 @@ function formatPrediction(hit) {
 export async function listPredictions(query) {
   // Use maxLimit: 0 to indicate "no cap" so callers can request larger result windows.
   const { page, limit, from } = normalizePagination(query, { maxLimit: 0 });
+
   const { label, sourceIp, destinationIp, service, start, end } = query;
 
   const must = buildMlMustClauses();
