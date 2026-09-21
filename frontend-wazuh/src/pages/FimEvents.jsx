@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Activity, CalendarRange, ChevronDown, FileText, Search, X, Users, PieChart, Cloud, AlertTriangle, ShieldAlert, SlidersHorizontal } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { Activity, CalendarRange, ChevronDown, Clock, FileText, Search, X, Users, PieChart, Cloud, AlertTriangle, ShieldAlert, SlidersHorizontal } from "lucide-react";
 import DateRangeFilter from "../components/DateRangeFilter";
 import RangeFilter from "../components/RangeFilter";
 import FilterSelect from "../components/FilterSelect";
 import ExportCsvButton from "../components/ExportCsvButton";
 import PageLoader from "../components/PageLoader";
+import { useTheme } from "../hooks/useTheme";
+import { fetchAllEvents } from "../utils/fetchAllEvents";
 import { exportCsv } from "../utils/exportCsv";
 import {
   createDefaultDateRange,
@@ -12,6 +15,7 @@ import {
   getIsoDateRange,
   toDateTimeLocalValue,
 } from "../utils/dateRange";
+import { adaptiveLeftGutter } from "../utils/chartAxis";
 
 const API_BASE = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
 
@@ -55,9 +59,7 @@ const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey, compact = f
 
   const width = size.width;
   height = size.height;
-  const padding = { l: 28, r: 10, t: 8, b: 24 };
-  const innerW = width - padding.l - padding.r;
-  const innerH = height - padding.t - padding.b;
+  const baseP = { l: 28, r: 10, t: 8, b: 24 };
 
   if (!data || data.length === 0) {
     return (
@@ -68,6 +70,9 @@ const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey, compact = f
   }
 
   const maxV = Math.max(1, ...data.map((d) => d.v));
+  const padding = { ...baseP, l: adaptiveLeftGutter([Math.round(maxV)], baseP.l) };
+  const innerW = width - padding.l - padding.r;
+  const innerH = height - padding.t - padding.b;
   const pointSpacing = data.length ? innerW / (data.length - 1) : innerW;
   const defaultBucketMs = rangeKey === "1h" ? 300000 : rangeKey === "24h" ? 3600000 : rangeKey === "7d" ? 21600000 : 86400000;
   const isDense = data.length > 30;
@@ -254,7 +259,7 @@ const Legend = ({ items, activeLabel = null, onSelect = null, compact = false })
   );
 };
 
-const TopAgentsCard = ({ agents }) => {
+const TopAgentsCard = ({ agents, onItemClick = null, activeName = null }) => {
   if (!agents || agents.length === 0) {
     return (
       <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
@@ -269,8 +274,9 @@ const TopAgentsCard = ({ agents }) => {
     <div className="w-full min-w-0 max-w-full space-y-1.5">
       {agents.map((item, i) => {
         const color = CHART_COLORS[i % CHART_COLORS.length];
+        const isActive = activeName != null && String(item.name) === String(activeName);
         return (
-          <div key={item.name} className="w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">
+          <div key={item.name} onClick={() => onItemClick?.(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg ${onItemClick ? "cursor-pointer" : ""} ${isActive ? "bg-emerald-500/10 ring-1 ring-emerald-500/30" : ""}`} title={onItemClick ? `Filter events for ${item.name}` : undefined}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>
@@ -301,7 +307,7 @@ const TopAgentsCard = ({ agents }) => {
 };
 
 // ── FIM Combined Filter (seperti Host Monitoring CombinedFilter, accent emerald) ──
-const FimCombinedFilter = ({ agentFilter, onAgentChange, agentOptions = [], userFilter, onUserChange, userOptions = [], eventFilter, onEventChange, eventOptions = [], severityFilter, onSeverityChange, severityOptions = [] }) => {
+const FimCombinedFilter = ({ agentFilter, onAgentChange, agentOptions = [], userFilter, onUserChange, userOptions = [], eventFilter, onEventChange, eventOptions = [], severityFilter, onSeverityChange, severityOptions = [], dateFilterLabel = "", onResetDateFilter, pathFilter = "", onClearPathFilter, matchingEventsCount = 0, timelineFilterLabel = "", onClearTimelineFilter }) => {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   const containerRef = useRef(null);
@@ -341,7 +347,7 @@ const FimCombinedFilter = ({ agentFilter, onAgentChange, agentOptions = [], user
     const isObject = opt && typeof opt === "object";
     return { value: isObject ? opt.value : opt, label: isObject ? opt.label : opt };
   };
-  const activeCount = [agentFilter !== "all", userFilter !== "all", eventFilter !== "all", severityFilter !== "all"].filter(Boolean).length;
+  const activeCount = [agentFilter !== "all", userFilter !== "all", eventFilter !== "all", severityFilter !== "all", Boolean(dateFilterLabel), Boolean(pathFilter), Boolean(timelineFilterLabel)].filter(Boolean).length;
   const Section = ({ label, value, allLabel, options, onChange }) => (
     <div className="px-3 py-2">
       <div className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">{label}</div>
@@ -366,8 +372,30 @@ const FimCombinedFilter = ({ agentFilter, onAgentChange, agentOptions = [], user
         <div className="fixed z-[9999] w-[280px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] shadow-2xl" style={{ top: coords.top, left: coords.left }}>
           <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--soc-border)]">
             <span className="text-[10px] font-semibold text-[var(--soc-text-primary)]">Filter Options</span>
-            {activeCount > 0 && <button onClick={() => { onAgentChange("all"); onUserChange("all"); onEventChange("all"); onSeverityChange("all"); }} className="text-[9px] font-semibold text-emerald-400 hover:text-emerald-300 transition-colors">Clear all</button>}
+            {activeCount > 0 && <button onClick={() => { onAgentChange("all"); onUserChange("all"); onEventChange("all"); onSeverityChange("all"); if (dateFilterLabel && onResetDateFilter) onResetDateFilter(); if (onClearPathFilter) onClearPathFilter(); if (onClearTimelineFilter) onClearTimelineFilter(); }} className="text-[9px] font-semibold text-emerald-400 hover:text-emerald-300 transition-colors">Clear all</button>}
           </div>
+          {pathFilter && (
+            <div className="border-b border-[var(--soc-border)] px-3 py-2">
+              <div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--soc-text-muted)]">Path filter</div>
+              <div className="mt-1.5 flex items-center gap-1.5 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-300">
+                <FileText className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                <span className="min-w-0 flex-1 truncate" title={pathFilter}>{pathFilter}</span>
+                {matchingEventsCount > 0 && <span className="shrink-0 font-mono text-emerald-300/70">{matchingEventsCount.toLocaleString()} matching</span>}
+                <button onClick={onClearPathFilter} className="shrink-0 hover:text-white" aria-label="Clear path filter"><X className="h-3 w-3" /></button>
+              </div>
+            </div>
+          )}
+          {timelineFilterLabel && (
+            <div className="border-b border-[var(--soc-border)] px-3 py-2">
+              <div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--soc-text-muted)]">Timeline filter</div>
+              <div className="mt-1.5 flex items-center gap-1.5 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-300">
+                <Clock className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                <span className="min-w-0 flex-1 truncate" title={timelineFilterLabel}>{timelineFilterLabel}</span>
+                <button onClick={onClearTimelineFilter} className="shrink-0 hover:text-white" aria-label="Clear timeline filter"><X className="h-3 w-3" /></button>
+              </div>
+            </div>
+          )}
+          {dateFilterLabel && <div className="border-b border-[var(--soc-border)] px-3 py-2"><div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--soc-text-muted)]">Timeline date filter</div><div className="mt-1"><span className="block min-w-0 truncate rounded border border-emerald-500/30 bg-emerald-500/20 px-2 py-1 text-[10px] font-medium text-emerald-300" title={dateFilterLabel}>{dateFilterLabel}</span></div></div>}
           <div className="divide-y divide-[var(--soc-border)] max-h-[360px] overflow-y-auto">
             <Section label="Agent" value={agentFilter} allLabel="All agents" options={agentOptions} onChange={onAgentChange} />
             <Section label="User" value={userFilter} allLabel="All users" options={userOptions} onChange={onUserChange} />
@@ -381,9 +409,13 @@ const FimCombinedFilter = ({ agentFilter, onAgentChange, agentOptions = [], user
 };
 
 // ── Payload Word Cloud ──────────────────────────────────────────────────────
-const WORD_COLORS = ["#f472b6", "#38bdf8", "#4ade80", "#a78bfa", "#fb923c", "#34d399", "#f87171", "#facc15", "#60a5fa", "#e879f9"];
+// Palet terang (tema terang) vs palet cerah (tema gelap) agar keyword tetap terbaca
+const WORD_COLORS_LIGHT = ["#be123c", "#0369a1", "#047857", "#6d28d9", "#b45309", "#0f766e", "#b91c1c", "#1d4ed8", "#7c3aed", "#a16207"];
+const WORD_COLORS_DARK = ["#fb7185", "#38bdf8", "#34d399", "#a78bfa", "#fbbf24", "#2dd4bf", "#f87171", "#60a5fa", "#c084fc", "#facc15"];
 
 const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
+  const { theme } = useTheme();
+  const palette = theme === "light" ? WORD_COLORS_LIGHT : WORD_COLORS_DARK;
   const wrapRef = useRef(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
 
@@ -444,7 +476,7 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
     }
     if (found) {
       rects.push({ x: px, y: py, w: tw, h: th });
-      placed.push({ text, fs, weight, color: WORD_COLORS[i % WORD_COLORS.length], opacity: 0.65 + ((count - minCount) / range) * 0.35, x: px, y: py, count });
+      placed.push({ text, fs, weight, color: palette[i % palette.length], opacity: 0.65 + ((count - minCount) / range) * 0.35, x: px, y: py, count });
     }
   }
 
@@ -453,11 +485,11 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
       <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="block w-full h-full">
         <defs>
           <radialGradient id="wcGlow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#0f172a" stopOpacity="0" />
-            <stop offset="100%" stopColor="#020617" stopOpacity="0.6" />
+            <stop offset="0%" stopColor="var(--soc-wc-center, #0f172a)" stopOpacity="var(--soc-wc-edge-opacity, 0)" />
+            <stop offset="100%" stopColor="var(--soc-wc-edge, #020617)" stopOpacity="var(--soc-wc-edge-opacity, 0.6)" />
           </radialGradient>
         </defs>
-        <rect width={W} height={H} fill="url(#wcGlow)" rx={12} />
+        <rect className="command-word-cloud-bg" width={W} height={H} fill="url(#wcGlow)" rx={12} />
         {placed.map((w) => (
           <text key={w.text} x={w.x} y={w.y} textAnchor="middle" dominantBaseline="middle" fontSize={w.fs}
             fontWeight={activeWord === w.text ? "600" : w.weight} fill={w.color}
@@ -535,30 +567,104 @@ const matchesGridFilters = (event, agentFilter, userFilter, eventFilter, severit
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════════
 const FimEvents = ({ agentId = "all" }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlStart = searchParams.get("start");
+  const urlEnd = searchParams.get("end");
+  const urlRange = searchParams.get("rangeKey");
+  const urlPath = searchParams.get("path");
+  const urlAgent = searchParams.get("agent");
+  const urlFocus = searchParams.get("focus");
   const [events, setEvents] = useState([]);
+  const [totalEventHits, setTotalEventHits] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [fetchError, setFetchError] = useState("");
   const [distData, setDistData] = useState(null);
   const [agentsStats, setAgentsStats] = useState(null);
-  const [rangeKey, setRangeKey] = useState("24h");
-  const [filterMode, setFilterMode] = useState("range");
-  const [customDateRange, setCustomDateRange] = useState(() => createDefaultDateRange(1));
+  const [usersStats, setUsersStats] = useState(null);
+  const [rangeKey, setRangeKey] = useState(() => (urlRange && ["1h", "24h", "7d", "30d"].includes(urlRange) ? urlRange : "24h"));
+  const [filterMode, setFilterMode] = useState(() => (urlStart && urlEnd ? "custom" : "range"));
+  const [customDateRange, setCustomDateRange] = useState(() => {
+    const base = createDefaultDateRange(1);
+    if (urlStart && urlEnd) return { start: toDateTimeLocalValue(new Date(urlStart)), end: toDateTimeLocalValue(new Date(urlEnd)) };
+    return base;
+  });
+  const [pathFilter, setPathFilter] = useState(urlPath || null);
   const [lastUpdated, setLastUpdated] = useState(new Date().toISOString());
   const [viewportWidth, setViewportWidth] = useState(() => typeof window !== "undefined" ? window.innerWidth : 1280);
   const [timelineChartHeight, setTimelineChartHeight] = useState(250);
   const [selectedTimelinePoint, setSelectedTimelinePoint] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [eventFilter, setEventFilter] = useState("all");
-  const [agentFilter, setAgentFilter] = useState("all");
+  const [agentFilter, setAgentFilter] = useState(urlAgent || "all");
   const [userFilter, setUserFilter] = useState("all");
   const [severityFilter, setSeverityFilter] = useState("all");
-  const [selectedEventType, setSelectedEventType] = useState(null);
-  const [selectedSeverity, setSelectedSeverity] = useState(null);
   const [selectedPayloadPattern, setSelectedPayloadPattern] = useState(null);
   const [clientPage, setClientPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const topAgentsPanelRef = useRef(null);
   const logsTableRef = useRef(null);
+
+  const focusLogs = useCallback(() => {
+    setClientPage(1);
+    setTimeout(() => {
+      if (logsTableRef.current?.scrollIntoView) {
+        try { logsTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); } catch {}
+      }
+    }, 100);
+  }, []);
+
+  const handleAgentSummaryClick = useCallback((item) => {
+    const value = String(item?.name || "all");
+    const next = agentFilter === value ? "all" : value;
+    setAgentFilter(next);
+    if (next !== "all") focusLogs();
+  }, [agentFilter, focusLogs]);
+
+  const handleEventSummaryClick = useCallback((item) => {
+    const value = String(item?.label || "all").toLowerCase();
+    const next = eventFilter === value ? "all" : value;
+    setEventFilter(next);
+    if (next !== "all") focusLogs();
+  }, [eventFilter, focusLogs]);
+
+  const handleSeveritySummaryClick = useCallback((item) => {
+    const value = String(item?.label || "all");
+    const next = severityFilter === value ? "all" : value;
+    setSeverityFilter(next);
+    if (next !== "all") focusLogs();
+  }, [severityFilter, focusLogs]);
+
+  const handleUserSummaryClick = useCallback((item) => {
+    const value = String(item?.label || "all");
+    const next = userFilter === value ? "all" : value;
+    setUserFilter(next);
+    if (next !== "all") focusLogs();
+  }, [userFilter, focusLogs]);
+
+  const handleFileSummaryClick = useCallback((item) => {
+    const value = String(item?.label || "");
+    const next = pathFilter === value ? null : value;
+    setPathFilter(next);
+    if (next) focusLogs();
+  }, [pathFilter, focusLogs]);
+
+  const handleTimelinePointSelect = useCallback((point) => {
+    setClientPage(1);
+    const isCancel = selectedTimelinePoint?.key === point.key;
+    setSelectedTimelinePoint((current) =>
+      current?.key === point.key
+        ? null
+        : {
+          key: point.key,
+          time: point.time,
+          start: point.start || point.time,
+          end: point.end || point.time,
+          bucketMs: point.bucketMs,
+        }
+    );
+    if (!isCancel) focusLogs();
+  }, [selectedTimelinePoint, focusLogs]);
 
   const isMobile = viewportWidth < 768;
   const usesCompactDonuts = viewportWidth < 1280;
@@ -583,6 +689,16 @@ const FimEvents = ({ agentId = "all" }) => {
 
   React.useEffect(() => { setClientPage(1); }, [searchQuery, eventFilter, agentFilter, userFilter, severityFilter]);
 
+  React.useEffect(() => {
+    if (!pathFilter && !urlAgent && urlFocus !== "logs") return;
+    const id = setTimeout(() => {
+      if (logsTableRef.current && typeof logsTableRef.current.scrollIntoView === "function") {
+        try { logsTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); } catch {}
+      }
+    }, 300);
+    return () => clearTimeout(id);
+  }, [pathFilter, urlAgent, urlFocus, loading]);
+
   const getEffectiveRange = useCallback(() => {
     if (filterMode === "custom") return getIsoDateRange(normalizeDateRange(customDateRange));
     const end = new Date();
@@ -600,27 +716,57 @@ const FimEvents = ({ agentId = "all" }) => {
   const fetchRealData = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadingMore(false);
       setFetchError("");
       const isCustom = filterMode === "custom";
       const baseEvents = agentId && agentId !== "all" ? `${API_BASE}/events/${encodeURIComponent(agentId)}` : `${API_BASE}/events`;
       const baseDist = agentId && agentId !== "all" ? `${API_BASE}/events/${encodeURIComponent(agentId)}/distribution/stats` : `${API_BASE}/events/distribution/stats`;
       const baseAgents = agentId && agentId !== "all" ? `${API_BASE}/events/${encodeURIComponent(agentId)}/agents/stats` : `${API_BASE}/events/agents/stats`;
-      let eventsUrl, distUrl, agentsUrl;
+      let distUrl, agentsUrl, usersUrl;
       if (isCustom) {
         const { start, end } = getIsoDateRange(normalizeDateRange(customDateRange));
-        const qs = `start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
-        eventsUrl = `${baseEvents}?${qs}&page=1&size=1000`;
+        const qs = `start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}${severityFilter !== "all" ? `&severity=${encodeURIComponent(severityFilter.toLowerCase())}` : ""}`;
         distUrl = `${baseDist}?${qs}`;
         agentsUrl = `${baseAgents}?${qs}`;
+        usersUrl = `${baseEvents.replace(/\/events(?:\/[^/]+)?$/, "/events/users/stats")}?${qs}`;
       } else {
-        eventsUrl = `${baseEvents}?range=${encodeURIComponent(rangeKey)}&page=1&size=1000`;
         distUrl = `${baseDist}?range=${encodeURIComponent(rangeKey)}`;
         agentsUrl = `${baseAgents}?range=${encodeURIComponent(rangeKey)}`;
+        usersUrl = `${baseEvents.replace(/\/events(?:\/[^/]+)?$/, "/events/users/stats")}?range=${encodeURIComponent(rangeKey)}`;
       }
-      const [eventsRes, distRes, agentsRes] = await Promise.all([
-        fetch(eventsUrl).then(async (r) => {
-          if (!r.ok) throw new Error(`events ${r.status}`);
-          return r.json();
+      // Ambil SEMUA events via search_after paralel per slice waktu (tanpa batas)
+      const fetchJson = (url) => fetch(url).then(async (r) => {
+        if (!r.ok) throw new Error(`events ${r.status}`);
+        return r.json();
+      });
+      const effRange = getEffectiveRange();
+      let firstSliceShown = false;
+      const [eventsRes, distRes, agentsRes, usersRes] = await Promise.all([
+        fetchAllEvents(fetchJson, {
+          baseUrl: baseEvents,
+          start: effRange.start,
+          end: effRange.end,
+          severity: severityFilter,
+          slices: 2,
+          pageSize: 500,
+          onProgress: (partialRows) => {
+            // Tampilkan data sebagian secepatnya; gabung + dedup + urut
+            setEvents((prev) => {
+              const seen = new Map(prev.map((e) => [e?.id ?? `${e?.timestamp}-${e?.agentName}-${e?.syscheckPath}`, e]));
+              for (const e of partialRows) {
+                const key = e?.id ?? `${e?.timestamp}-${e?.agentName}-${e?.syscheckPath}`;
+                if (!seen.has(key)) seen.set(key, e);
+              }
+              return Array.from(seen.values()).sort(
+                (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+              );
+            });
+            if (!firstSliceShown) {
+              firstSliceShown = true;
+              setLoading(false);
+              setLoadingMore(true);
+            }
+          },
         }),
         fetch(distUrl).then(async (r) => {
           if (!r.ok) throw new Error(`distribution ${r.status}`);
@@ -630,18 +776,25 @@ const FimEvents = ({ agentId = "all" }) => {
           if (!r.ok) throw new Error(`agents ${r.status}`);
           return r.json();
         }).catch(() => null),
+        fetch(usersUrl).then(async (r) => {
+          if (!r.ok) throw new Error(`users ${r.status}`);
+          return r.json();
+        }).catch(() => null),
       ]);
-      const eventsData = Array.isArray(eventsRes?.data) ? eventsRes.data : [];
+      const eventsData = Array.isArray(eventsRes?.rows) ? eventsRes.rows : [];
       setEvents(eventsData);
+      setTotalEventHits(Number(eventsRes?.totalHits ?? eventsData.length));
       setDistData(distRes || null);
       setAgentsStats(agentsRes || null);
+      setUsersStats(usersRes || null);
       setLastUpdated(new Date().toISOString());
     } catch (e) {
       setFetchError(e?.message || "Failed to load FIM events");
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
-  }, [rangeKey, filterMode, customDateRange, agentId]);
+  }, [rangeKey, filterMode, customDateRange, agentId, severityFilter, getEffectiveRange]);
 
   useEffect(() => {
     fetchRealData();
@@ -772,8 +925,12 @@ const FimEvents = ({ agentId = "all" }) => {
     }
     const payloadWords = Array.from(byPayload.entries()).map(([text, count]) => ({ text, count })).sort((a, b) => b.count - a.count).slice(0, 40);
 
-    // KPIs — total prefer distData.total (full-range), critical from filtered or dist severity
-    const totalForUI = distData?.total != null ? Number(distData.total) : filtered.length;
+    // Keep the headline total aligned with the dashboard's /events total_hits.
+    // Distribution is enrichment and may be unavailable while event pagination
+    // is still usable.
+    const totalForUI = totalEventHits > 0
+      ? totalEventHits
+      : (distData?.total != null ? Number(distData.total) : filtered.length);
     const criticalFromDist = distData?.severity?.find((s) => s.label === "Critical")?.value;
     const criticalCount = criticalFromDist != null ? Number(criticalFromDist) : filtered.filter((e) => (e.ruleLevel || 0) >= 12).length;
     const byFile = new Map();
@@ -805,16 +962,9 @@ const FimEvents = ({ agentId = "all" }) => {
       })
       .sort((a, b) => b.value - a.value)
       .slice(0, 5);
-    const byUser = new Map();
-    for (const e of filtered) {
-      const u = String(e.username || "").trim();
-      if (!u || u === "-") continue;
-      byUser.set(u, (byUser.get(u) || 0) + 1);
-    }
-    const topUsers = Array.from(byUser.entries())
-      .map(([label, value], i) => ({ label, value, color: ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6"][i % 5] }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 5);
+    const topUsers = Array.isArray(usersStats?.data)
+      ? usersStats.data.slice(0, 5).map((item, i) => ({ label: item.user || item.label, value: Number(item.count ?? item.value ?? 0), color: ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6"][i % 5] }))
+      : [];
     const mostSevere = filtered.reduce((acc, e) => {
       const level = e.ruleLevel || 0;
       if (!acc || level > (acc.ruleLevel || 0)) return { ruleLevel: level, description: e.ruleDescription || "-" };
@@ -828,7 +978,7 @@ const FimEvents = ({ agentId = "all" }) => {
       total: totalForUI, startMs, endMs, uniqueAgents: uniqueAgentsCount,
       criticalCount, uniqueFiles: byFile.size, mostSevereEvent: mostSevere,
     };
-  }, [events, distData, agentsStats, rangeKey, filterMode, customDateRange]);
+  }, [events, totalEventHits, distData, agentsStats, usersStats, rangeKey, filterMode, customDateRange]);
 
   const filterOptions = useMemo(() => {
     const agentSet = new Set();
@@ -841,18 +991,26 @@ const FimEvents = ({ agentId = "all" }) => {
     return { agents: Array.from(agentSet).sort(), users: Array.from(userSet).sort() };
   }, [events]);
 
-  const vizFiltersActive = Boolean(selectedEventType || selectedSeverity || selectedPayloadPattern);
-
   const tableEvents = useMemo(() => {
     return events
       .filter((e) => {
+        if (selectedTimelinePoint?.start && selectedTimelinePoint?.end) {
+          const ms = new Date(e.timestamp).getTime();
+          const s = new Date(selectedTimelinePoint.start).getTime();
+          const en = new Date(selectedTimelinePoint.end).getTime();
+          if (!(Number.isFinite(ms) && ms >= s && ms <= en)) return false;
+        }
+        return true;
+      })
+      .filter((e) => {
+        if (pathFilter && String(e.syscheckPath || "").toLowerCase() !== String(pathFilter).toLowerCase()) return false;
         const q = searchQuery.trim().toLowerCase();
         if (!q) return true;
         return [e.agentName, e.username, e.syscheckPath, e.syscheckEvent, e.ruleDescription].filter(Boolean).some((f) => String(f).toLowerCase().includes(q));
       })
       .filter((e) => matchesGridFilters(e, agentFilter, userFilter, eventFilter, severityFilter))
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  }, [events, searchQuery, agentFilter, userFilter, eventFilter, severityFilter]);
+  }, [events, searchQuery, agentFilter, userFilter, eventFilter, severityFilter, pathFilter, selectedTimelinePoint]);
 
   const visibleEvents = useMemo(() => {
     return tableEvents.slice((clientPage - 1) * pageSize, clientPage * pageSize);
@@ -1016,11 +1174,11 @@ const FimEvents = ({ agentId = "all" }) => {
             </div>
             <div className="text-right min-w-0">
               <div className="text-[9px] text-[var(--soc-text-muted)]">Last {rangeKey}</div>
-              <div className="text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatTime(lastUpdated)}</div>
+              <div className="text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatTime(lastUpdated)}{loadingMore ? " · Syncing…" : ""}</div>
             </div>
           </div>
           <div className="h-[220px]" style={{ background: "transparent" }}>
-            <WaveChart data={derived.series} color="#10b981" height={220} rangeKey={rangeKey} compact={isMobile} />
+            <WaveChart data={derived.series} color="#10b981" height={220} rangeKey={rangeKey} compact={isMobile} activePointKey={selectedTimelinePoint?.key ?? null} onPointSelect={handleTimelinePointSelect} />
           </div>
         </div>
         <div ref={topAgentsPanelRef} className="chart-card animate-fadeInUp stagger-2 flex flex-col" style={{ opacity: 0 }}>
@@ -1039,7 +1197,7 @@ const FimEvents = ({ agentId = "all" }) => {
             <span className="text-[9px] text-[var(--soc-text-muted)]">Unique agents</span>
             <span className="text-[11px] font-bold text-[var(--soc-text-primary)]">{derived.uniqueAgents}</span>
           </div>
-          <TopAgentsCard agents={derived.topAgents} />
+          <TopAgentsCard agents={derived.topAgents} onItemClick={handleAgentSummaryClick} activeName={agentFilter !== "all" ? agentFilter : null} />
         </div>
       </div>
 
@@ -1065,9 +1223,9 @@ const FimEvents = ({ agentId = "all" }) => {
             return (
               <div className="w-full min-w-0 max-w-full space-y-1.5">
                 {items.map((item, i) => {
-                  const isActive = selectedEventType === item.label;
+                  const isActive = eventFilter !== "all" && String(eventFilter).toLowerCase() === String(item.label).toLowerCase();
                   return (
-                    <div key={item.label} onClick={() => setSelectedEventType((p) => (p === item.label ? null : item.label))} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg cursor-pointer ${isActive ? "bg-[var(--soc-elevated)] border border-sky-500/20" : ""}`}>
+                    <div key={item.label} onClick={() => handleEventSummaryClick(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg cursor-pointer ${isActive ? "bg-emerald-500/10 ring-1 ring-emerald-500/30" : ""}`}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color: item.color }}>{i + 1}</span>
@@ -1106,9 +1264,9 @@ const FimEvents = ({ agentId = "all" }) => {
             return (
               <div className="w-full min-w-0 max-w-full space-y-1.5">
                 {items.map((item, i) => {
-                  const isActive = selectedSeverity === item.label;
+                  const isActive = severityFilter !== "all" && String(severityFilter) === String(item.label);
                   return (
-                    <div key={item.label} onClick={() => setSelectedSeverity((p) => (p === item.label ? null : item.label))} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg cursor-pointer ${isActive ? "bg-[var(--soc-elevated)] border border-orange-500/20" : ""}`}>
+                    <div key={item.label} onClick={() => handleSeveritySummaryClick(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg cursor-pointer ${isActive ? "bg-emerald-500/10 ring-1 ring-emerald-500/30" : ""}`}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color: item.color }}>{i + 1}</span>
@@ -1146,9 +1304,9 @@ const FimEvents = ({ agentId = "all" }) => {
             return (
               <div className="w-full min-w-0 max-w-full space-y-1.5">
                 {items.map((item, i) => {
-                  const isActive = false;
+                  const isActive = userFilter !== "all" && String(userFilter) === String(item.label);
                   return (
-                    <div key={item.label} className="w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">
+                    <div key={item.label} onClick={() => handleUserSummaryClick(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg cursor-pointer ${isActive ? "bg-emerald-500/10 ring-1 ring-emerald-500/30" : ""}`} title={`Filter events for ${item.label}`}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color: item.color }}>{i + 1}</span>
@@ -1182,8 +1340,11 @@ const FimEvents = ({ agentId = "all" }) => {
               </div>
             </div>
           </div>
-          <div className="flex-1 min-h-0 w-full overflow-hidden rounded-xl" style={{ background: "transparent" }}>
-            <div className="w-full h-full min-h-0 rounded-xl overflow-hidden" style={{ background: "transparent" }}>
+          {/* Fixed height (not flex-1): word cloud has no intrinsic height, so a
+              flex/percentage chain makes the row height unstable/circular.
+              280px matches the natural height of the Top 5 Changed Files card. */}
+          <div className="w-full h-[280px] shrink-0 overflow-hidden rounded-xl" style={{ background: "transparent" }}>
+            <div className="w-full h-full rounded-xl overflow-hidden" style={{ background: "transparent" }}>
               <PayloadWordCloud words={derived.payloadWords} activeWord={selectedPayloadPattern} onWordClick={(w) => setSelectedPayloadPattern((p) => p === w ? null : w)} />
             </div>
           </div>
@@ -1209,7 +1370,7 @@ const FimEvents = ({ agentId = "all" }) => {
             return (
               <div className="w-full min-w-0 max-w-full space-y-1.5 flex-1 overflow-y-auto">
                 {items.map((item, i) => (
-                  <div key={item.label} className="w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">
+                  <div key={item.label} onClick={() => handleFileSummaryClick(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg cursor-pointer ${pathFilter && String(pathFilter) === String(item.label) ? "bg-emerald-500/10 ring-1 ring-emerald-500/30" : ""}`} title={`Filter events for ${item.label}`}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color: item.color }}>{i + 1}</span>
@@ -1246,43 +1407,28 @@ const FimEvents = ({ agentId = "all" }) => {
               userFilter={userFilter} onUserChange={(v) => { setClientPage(1); setUserFilter(v); }} userOptions={filterOptions.users}
               eventFilter={eventFilter} onEventChange={(v) => { setClientPage(1); setEventFilter(v); }} eventOptions={EVENT_TYPE_OPTIONS}
               severityFilter={severityFilter} onSeverityChange={(v) => { setClientPage(1); setSeverityFilter(v); }} severityOptions={SEVERITY_LABELS}
+              dateFilterLabel={urlStart && urlEnd ? `${formatDetailedTimestamp(urlStart)} - ${formatDetailedTimestamp(urlEnd)}` : ""}
+              onResetDateFilter={() => {
+                const nextParams = new URLSearchParams(searchParams);
+                nextParams.delete("start");
+                nextParams.delete("end");
+                setSearchParams(nextParams);
+                setSelectedTimelinePoint(null);
+                setFilterMode("range");
+                setRangeKey("24h");
+                setCustomDateRange(createDefaultDateRange(1));
+              }}
+              pathFilter={pathFilter}
+              matchingEventsCount={tableEvents.length}
+              onClearPathFilter={() => { setPathFilter(null); setClientPage(1); }}
+              timelineFilterLabel={selectedTimelinePoint
+                ? `${formatDetailedTimestamp(selectedTimelinePoint.start)}${selectedTimelinePoint.end ? ` - ${formatDetailedTimestamp(selectedTimelinePoint.end)}` : ""}`
+                : ""}
+              onClearTimelineFilter={() => { setSelectedTimelinePoint(null); setClientPage(1); }}
             />
             <ExportCsvButton accent="emerald" onClick={handleExportCsv} />
           </div>
         </div>
-
-        {/* Active Filters Bar */}
-        {vizFiltersActive && (
-          <div className="px-2 md:px-3 py-2 border-b border-[var(--soc-border)] bg-slate-900/40 flex flex-wrap items-center gap-1.5 md:gap-2">
-            <span className="text-[10px] md:text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Active Filters:</span>
-            {selectedEventType && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 text-[10px] md:text-[11px] text-sky-300">
-                Event: {String(selectedEventType).charAt(0).toUpperCase() + String(selectedEventType).slice(1)}
-                <button onClick={() => setSelectedEventType(null)} className="hover:text-white"><X className="h-3 w-3" /></button>
-              </span>
-            )}
-            {selectedSeverity && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-orange-500/40 bg-orange-500/10 px-2 py-0.5 text-[10px] md:text-[11px] text-orange-300">
-                Severity: {selectedSeverity}
-                <button onClick={() => setSelectedSeverity(null)} className="hover:text-white"><X className="h-3 w-3" /></button>
-              </span>
-            )}
-            {selectedPayloadPattern && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] md:text-[11px] text-emerald-300">
-                Payload: {selectedPayloadPattern}
-                <button onClick={() => setSelectedPayloadPattern(null)} className="hover:text-white"><X className="h-3 w-3" /></button>
-              </span>
-            )}
-            <span className="text-[10px] md:text-[11px] font-mono text-slate-400">
-              <span className="font-bold text-sky-300">{tableEvents.length.toLocaleString()}</span>
-              <span className="hidden sm:inline"> matching events</span>
-            </span>
-            <button onClick={() => { setSelectedEventType(null); setSelectedSeverity(null); setSelectedPayloadPattern(null); setClientPage(1); }}
-              className="ml-auto text-[10px] md:text-[11px] font-semibold text-slate-300 hover:text-sky-300 border border-slate-700 rounded-full px-2 py-0.5 hover:border-sky-500/50 transition-colors">
-              Clear all
-            </button>
-          </div>
-        )}
 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-[10px] md:text-[11px] text-left">
@@ -1313,8 +1459,8 @@ const FimEvents = ({ agentId = "all" }) => {
                       {evt.syscheckEvent}
                     </span>
                   </td>
-                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 max-w-[240px] sm:max-w-[300px] md:max-w-[360px] lg:max-w-[400px] align-top">
-                    <div className="flex flex-col gap-1 max-w-[240px] sm:max-w-[300px] md:max-w-[360px] lg:max-w-[400px]">
+                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 max-w-[320px] sm:max-w-[400px] md:max-w-[480px] lg:max-w-[580px] xl:max-w-[680px] align-top">
+                    <div className="flex flex-col gap-1 max-w-[320px] sm:max-w-[400px] md:max-w-[480px] lg:max-w-[580px] xl:max-w-[680px]">
                       <div className="rounded-md border bg-[var(--soc-payload-bg)] px-2.5 py-2" style={{ borderColor: "var(--soc-payload-border)" }}>
                         <div className="text-[9px] font-bold tracking-wider text-cyan-400 uppercase mb-1">CHANGES:</div>
                         <pre className="whitespace-pre-wrap break-words font-mono text-[10px] leading-[1.4] text-[var(--soc-payload-text)] max-h-[120px] overflow-y-auto scrollbar-thin">
@@ -1345,7 +1491,7 @@ ${evt.syscheckEvent}${evt.fileDiff ? `\n${String(evt.fileDiff).replace(/\\n/g, "
               <span className="font-bold text-sky-400">{Math.min(clientPage * pageSize, tableEvents.length)}</span>
               <span className="hidden md:inline"> OF </span>
               <span className="md:hidden"> / </span>
-              <span className="font-bold text-sky-400">{tableEvents.length}</span>
+              <span className="font-bold text-sky-400">{totalEventHits.toLocaleString()}</span>
               <span className="hidden md:inline"> EVENTS</span>
             </div>
             <div className="flex flex-wrap items-center gap-2">

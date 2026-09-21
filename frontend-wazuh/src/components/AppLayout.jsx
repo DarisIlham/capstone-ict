@@ -104,7 +104,7 @@ export default function AppLayout({ children }) {
           <img
             src={logoCollapsed}
             alt="SOC UNDIP"
-            className="w-10 h-10 object-contain"
+            className="w-7 h-7 object-contain"
           />
         ) : (
           <img
@@ -233,10 +233,10 @@ export default function AppLayout({ children }) {
       {mobileOpen && (
         <>
           <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[65] lg:hidden"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="soc-mobile-drawer fixed left-0 top-0 bottom-0 w-56 max-w-[85vw] max-h-[100dvh] bg-[var(--soc-sidebar-bg)] z-50 lg:hidden animate-slide-in-left flex flex-col min-h-0 min-w-0 shadow-[4px_0_24px_rgba(0,0,0,0.4)]">
+          <aside className="soc-mobile-drawer fixed left-0 top-0 bottom-0 w-56 max-w-[85vw] max-h-[100dvh] bg-[var(--soc-sidebar-bg)] z-[70] lg:hidden animate-slide-in-left flex flex-col min-h-0 min-w-0 shadow-[4px_0_24px_rgba(0,0,0,0.4)]">
             <div className="flex items-center justify-end p-2 shrink-0">
               <button
                 onClick={() => setMobileOpen(false)}
@@ -277,7 +277,13 @@ export default function AppLayout({ children }) {
 
           <div className="flex items-center gap-2">
             <ThemeToggle compact />
-            <button className="p-1.5 rounded-lg text-[var(--soc-text-muted)] hover:text-[var(--soc-text-primary)] hover:bg-[var(--soc-elevated)] transition-colors relative">
+            <button
+              type="button"
+              aria-label="Open alerts"
+              title="Open alerts"
+              onClick={() => navigate("/alerts")}
+              className="p-1.5 rounded-lg text-[var(--soc-text-muted)] hover:text-[var(--soc-text-primary)] hover:bg-[var(--soc-elevated)] transition-colors relative"
+            >
               <Bell className="h-4 w-4" />
               <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-pink-500 rounded-full"></span>
             </button>
@@ -292,22 +298,35 @@ export default function AppLayout({ children }) {
         </main>
       </div>
 
-      {/* Logout Confirmation */}
+      {/* Logout Confirmation — same design concept as the Add User popup */}
       {showLogoutConfirm && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-xl p-4 max-w-xs w-full shadow-2xl">
-            <h2 className="text-sm font-bold text-[var(--soc-text-primary)] mb-1">Confirm Logout</h2>
-            <p className="text-[11px] text-[var(--soc-text-secondary)] mb-4">Are you sure you want to log out?</p>
-            <div className="flex justify-end gap-2">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4">
+          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-3xl p-6 md:p-7 max-w-md w-full min-h-[340px] flex flex-col overflow-hidden">
+            <div className="h-1 -mx-6 md:-mx-7 -mt-6 md:-mt-7 mb-6 bg-gradient-to-r from-red-500 to-pink-500" />
+            <div className="relative flex flex-1 flex-col items-center justify-center text-center pt-2 mb-6">
               <button
                 onClick={() => setShowLogoutConfirm(false)}
-                className="px-3 py-1.5 text-[11px] font-medium rounded-lg text-[var(--soc-text-secondary)] border border-[var(--soc-border)] hover:bg-[var(--soc-elevated)] transition-colors"
+                className="absolute right-0 top-0 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[var(--soc-elevated)] transition-colors"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              <div className="p-6 rounded-3xl bg-gradient-to-br from-red-500 to-pink-500 mx-auto">
+                <LogOut className="h-12 w-12 text-white" />
+              </div>
+              <h2 className="text-xl font-bold text-[var(--soc-text-primary)] leading-tight mt-4">Confirm Logout</h2>
+              <p className="text-sm text-[var(--soc-text-muted)] mt-1.5">Are you sure you want to log out?</p>
+            </div>
+            <div className="flex gap-3 pt-2 mt-auto">
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                className="flex-1 px-4 py-2.5 bg-[var(--soc-elevated)] hover:brightness-125 border border-[var(--soc-border)] text-slate-200 rounded-2xl text-xs font-medium transition-all"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmLogout}
-                className="px-3 py-1.5 text-[11px] font-medium rounded-lg bg-gradient-to-r from-red-500 to-pink-500 text-white hover:from-red-600 hover:to-pink-600 transition-all shadow-lg shadow-red-500/25"
+                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-red-500 to-pink-500 hover:brightness-110 text-white rounded-2xl text-xs font-semibold transition-all"
               >
                 Yes, Log Out
               </button>

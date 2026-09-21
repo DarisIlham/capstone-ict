@@ -11,10 +11,12 @@ import PageLoader from "../components/PageLoader";
 import {
   createDefaultDateRange,
   formatDateRangeLabel,
+  getIsoDateRange,
   getRangeKeyForDateRange,
   normalizeDateRange,
   toDateTimeLocalValue,
 } from "../utils/dateRange";
+import { adaptiveLeftGutter } from "../utils/chartAxis";
 import {
   Activity,
   AlertTriangle,
@@ -159,9 +161,7 @@ const WaveChart = ({ data, color = "#A855F7", height: _height = 140, rangeKey = 
 
   const width = size.width;
   const height = size.height;
-  const padding = width < 420 ? { l: 28, r: 8, t: 6, b: 20 } : { l: 40, r: 8, t: 6, b: 20 };
-  const innerW = width - padding.l - padding.r;
-  const innerH = height - padding.t - padding.b;
+  const baseP = width < 420 ? { l: 28, r: 8, t: 6, b: 20 } : { l: 40, r: 8, t: 6, b: 20 };
 
   if (!data || data.length === 0) {
     return (
@@ -186,6 +186,11 @@ const WaveChart = ({ data, color = "#A855F7", height: _height = 140, rangeKey = 
   }
 
   const maxV = Math.max(1, ...data.map((d) => d.v));
+  const yAxisFontSize = 11;
+  const xAxisFontSize = 10;
+  const padding = { ...baseP, l: adaptiveLeftGutter([Math.round(maxV)], baseP.l, 12, `500 ${yAxisFontSize}px sans-serif`) };
+  const innerW = width - padding.l - padding.r;
+  const innerH = height - padding.t - padding.b;
   const pointSpacing = data.length ? innerW / (data.length - 1) : innerW;
 
   const gridSteps = 5;
@@ -222,7 +227,7 @@ const WaveChart = ({ data, color = "#A855F7", height: _height = 140, rangeKey = 
         {gridLines.map((grid, idx) => (
           <g key={`grid-${idx}`}>
             <line x1={padding.l} y1={grid.y} x2={padding.l + innerW} y2={grid.y} stroke="var(--soc-border)" strokeWidth="1" opacity={grid.ratio === 0 || grid.ratio === 1 ? "1" : "0.3"} />
-            <text x={padding.l - 5} y={grid.y + 3} textAnchor="end" fontSize="8" fill="var(--soc-text-muted)" fontWeight="500">
+            <text x={padding.l - 5} y={grid.y + 3} textAnchor="end" fontSize={yAxisFontSize} fill="var(--soc-text-muted)" fontWeight="500">
               {grid.value}
             </text>
           </g>
@@ -288,9 +293,9 @@ const WaveChart = ({ data, color = "#A855F7", height: _height = 140, rangeKey = 
             <g key={`tick-${d.t}`}>
               <text
                 x={x}
-                y={padding.t + innerH + 12}
+                y={padding.t + innerH + 14}
                 textAnchor={i === 0 ? "start" : i >= data.length - tickEvery ? "end" : "middle"}
-                fontSize="7"
+                fontSize={xAxisFontSize}
                 fill="var(--soc-text-muted)"
               >
                 {tickLabel}
@@ -300,60 +305,88 @@ const WaveChart = ({ data, color = "#A855F7", height: _height = 140, rangeKey = 
         })}
       </svg>
 
-      {selectedPoint && (
-        <div
-          className="pointer-events-none absolute z-10 min-w-[100px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-elevated)] px-2 py-1.5 text-[10px] shadow-xl"
-          style={{
-            left: `${Math.min(Math.max((selectedPoint.x / width) * 100, 10), 82)}%`,
-            top: `${Math.max(((selectedPoint.y - 36) / height) * 100, 4)}%`,
-            transform: "translate(-50%, -100%)",
-          }}
-        >
-          <div className="font-semibold text-[var(--soc-text-primary)]">{selectedPoint.value} events</div>
-          <div className="mt-0.5 text-[var(--soc-text-muted)]">{formatPointTimestamp(selectedPoint.time, rangeKey)}</div>
-        </div>
-      )}
+      {selectedPoint && (() => {
+          const tooltipH = 46;
+          const anchor = 36;
+          const gap = 12;
+          const fitsAbove = selectedPoint.y - anchor - tooltipH >= 0;
+          const fitsBelow = selectedPoint.y + gap + tooltipH <= height;
+          const showBelow = !fitsAbove && fitsBelow;
+          return (
+            <div
+              className="pointer-events-none absolute z-10 min-w-[100px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-elevated)] px-2 py-1.5 text-[10px] shadow-xl"
+              style={{
+                left: `${Math.min(Math.max((selectedPoint.x / width) * 100, 10), 82)}%`,
+                top: showBelow
+                  ? `${Math.min(((selectedPoint.y + gap) / height) * 100, 90)}%`
+                  : `${Math.max(((selectedPoint.y - anchor - tooltipH) / height) * 100, 4)}%`,
+                transform: showBelow ? "translate(-50%, 0)" : "translate(-50%, -100%)",
+              }}
+            >
+              <div className="font-semibold text-[var(--soc-text-primary)]">{selectedPoint.value} events</div>
+              <div className="mt-0.5 text-[var(--soc-text-muted)]">{formatPointTimestamp(selectedPoint.time, rangeKey)}</div>
+            </div>
+          );
+        })()
+      }
     </div>
   );
 };
 
-const CompactBarChart = ({ items }) => {
+const CompactBarChart = ({ items, collapsedCount = 5, onItemClick = null }) => {
+  const [showAll, setShowAll] = useState(false);
   if (!items || items.length === 0) {
     return (
       <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
-        <p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">No active user data</p>
-        <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">No user activity for the selected time range.</p>
+        <p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">No active agent data</p>
+        <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">No agent activity for the selected time range.</p>
       </div>
     );
   }
 
+  const visibleItems = showAll ? items : items.slice(0, collapsedCount);
   const maxValue = Math.max(...items.map((d) => d.value), 1);
 
   return (
-    <div className="space-y-1.5">
-      {items.map((item, i) => (
-        <div key={item.label} className="list-item-interactive px-2 py-1 rounded-lg">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold text-purple-400">
-                {i + 1}
-              </span>
-              <span className="text-[10px] font-medium text-[var(--soc-text-secondary)] truncate" title={item.label}>
-                {item.label}
+    <div>
+      <div className={`space-y-1.5 ${showAll ? "max-h-64 overflow-y-auto pr-1" : ""}`}>
+        {visibleItems.map((item, i) => (
+          <div
+            key={item.label}
+            onClick={() => onItemClick?.(item)}
+            className={`list-item-interactive px-2 py-1 rounded-lg ${onItemClick ? "cursor-pointer" : ""}`}
+            title={onItemClick ? `View activity for ${item.label}` : item.label}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold text-purple-400 shrink-0">
+                  {i + 1}
+                </span>
+                <span className="text-[10px] font-medium text-[var(--soc-text-secondary)] truncate" title={item.label}>
+                  {item.label}
+                </span>
+              </div>
+              <span className="text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-2 shrink-0">
+                {new Intl.NumberFormat("en-US").format(item.value)}
               </span>
             </div>
-            <span className="text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-2">
-              {new Intl.NumberFormat("en-US").format(item.value)}
-            </span>
+            <div className="mt-0.5 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
+              <div
+                className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-purple-500 to-pink-500"
+                style={{ width: `${(item.value / maxValue) * 100}%` }}
+              />
+            </div>
           </div>
-          <div className="mt-0.5 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
-            <div
-              className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-purple-500 to-pink-500"
-              style={{ width: `${(item.value / maxValue) * 100}%` }}
-            />
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
+      {items.length > collapsedCount && (
+        <button
+          onClick={() => setShowAll((v) => !v)}
+          className="mt-1.5 w-full text-center text-[10px] font-medium text-purple-400 hover:text-purple-300 transition-colors"
+        >
+          {showAll ? "Show less" : `Show all ${items.length} agents`}
+        </button>
+      )}
     </div>
   );
 };
@@ -361,7 +394,7 @@ const CompactBarChart = ({ items }) => {
 // ========================================
 // Category Line Chart (distribution)
 // ========================================
-const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items" }) => {
+const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items", onPointClick = null }) => {
   const [selected, setSelected] = useState(null);
   const rootRef = useRef(null);
   const [size, setSize] = useState({ width: 1000, height: 180 });
@@ -384,7 +417,7 @@ const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items" }) =
 
   const width = size.width;
   const height = size.height;
-  const padding = width < 500
+  const basePadding = width < 500
     ? { l: 16, r: 12, t: 6, b: 22 }
     : width < 768
       ? { l: 24, r: 18, t: 8, b: 26 }
@@ -406,6 +439,8 @@ const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items" }) =
   const sorted = [...items].sort((a, b) => b.value - a.value);
   const total = sorted.reduce((s, it) => s + it.value, 0) || 1;
   const maxV = Math.max(1, ...sorted.map((d) => d.value));
+  const gridVals = [0, 1, 2, 3].map((i) => Math.round(((i / 3) * maxV * 10)) / 10);
+  const padding = { ...basePadding, l: adaptiveLeftGutter(gridVals, basePadding.l, 12, `500 ${axisFontSize}px sans-serif`) };
   const innerW = width - padding.l - padding.r;
   const innerH = height - padding.t - padding.b;
   const step = sorted.length > 1 ? innerW / (sorted.length - 1) : innerW;
@@ -474,6 +509,13 @@ const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items" }) =
             const isFirst = p.index === 0;
             const isLast = p.index === points.length - 1;
             const showXLabel = xLabelEvery === 1 || p.index % xLabelEvery === 0 || isLast;
+            const handlePointClick = () => (onPointClick ? onPointClick(p) : setSelected(isSel ? null : p));
+            const handlePointKeyDown = (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                handlePointClick();
+              }
+            };
             if (!showXLabel) {
               return (
                 <g key={`${p.label}-${p.index}`}>
@@ -482,7 +524,11 @@ const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items" }) =
                     onMouseLeave={() => setSelected(null)}
                     onFocus={() => setSelected(p)}
                     onBlur={() => setSelected(null)}
-                    onClick={() => setSelected(isSel ? null : p)}
+                    onClick={handlePointClick}
+                    onKeyDown={handlePointKeyDown}
+                    role={onPointClick ? "button" : undefined}
+                    tabIndex={onPointClick ? 0 : undefined}
+                    aria-label={onPointClick ? `View ${p.label}` : undefined}
                   />
                 <circle cx={p.x} cy={p.y} r={isSel ? "3" : "3.5"} fill={p.color} stroke="var(--soc-bg)" strokeWidth="1.5" opacity="0.95" className="pointer-events-none" />
                 </g>
@@ -495,7 +541,11 @@ const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items" }) =
                   onMouseLeave={() => setSelected(null)}
                   onFocus={() => setSelected(p)}
                   onBlur={() => setSelected(null)}
-                  onClick={() => setSelected(isSel ? null : p)}
+                  onClick={handlePointClick}
+                  onKeyDown={handlePointKeyDown}
+                  role={onPointClick ? "button" : undefined}
+                  tabIndex={onPointClick ? 0 : undefined}
+                  aria-label={onPointClick ? `View ${p.label}` : undefined}
                 />
                   <circle cx={p.x} cy={p.y} r={isSel ? "3" : "3.5"} fill={p.color} stroke="var(--soc-bg)" strokeWidth="1.5" opacity="0.95" className="pointer-events-none" />
                 <text
@@ -512,7 +562,12 @@ const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items" }) =
       </div>
       <div className="chart-legend flex flex-wrap items-center gap-x-1.5 gap-y-0.5 justify-center px-1 mt-1">
         {points.map((p) => (
-          <div key={`${p.label}-${p.index}`} className="flex items-center gap-1 text-[7px] min-[600px]:text-[8px] min-[900px]:text-[9px] text-[var(--soc-text-secondary)]">
+          <div
+            key={`${p.label}-${p.index}`}
+            onClick={() => onPointClick?.(p)}
+            className={`flex items-center gap-1 px-1 rounded text-[7px] min-[600px]:text-[8px] min-[900px]:text-[9px] text-[var(--soc-text-secondary)] ${onPointClick ? "cursor-pointer hover:text-[var(--soc-text-primary)] transition-colors" : ""}`}
+            title={onPointClick ? `View ${p.label}` : p.label}
+          >
             <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: p.color }} />
             <span className="whitespace-nowrap">{p.label}</span>
             <span className="text-[var(--soc-text-muted)] font-mono">{p.value}</span>
@@ -539,7 +594,7 @@ const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items" }) =
 // ========================================
 // Horizontal Domain Bar Chart
 // ========================================
-const DomainBarChart = ({ items, emptyLabel = "No affected hosts detected", emptySub = "No host activity is available for the selected time range." }) => {
+const DomainBarChart = ({ items, emptyLabel = "No affected hosts detected", emptySub = "No host activity is available for the selected time range.", onItemClick = null }) => {
   if (!items || items.length === 0)
     return (
       <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
@@ -552,13 +607,18 @@ const DomainBarChart = ({ items, emptyLabel = "No affected hosts detected", empt
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
 
   return (
-    <div className="dash-most-changed-list w-full min-w-0 max-w-full overflow-hidden space-y-1.5 box-border">
+    <div className="dash-most-changed-list w-full min-w-0 max-w-full overflow-x-hidden overflow-y-visible space-y-1.5 box-border">
       {items.map((item, i) => {
         const color = CHART_COLORS[i % CHART_COLORS.length];
         const label = item.label || item.name;
         const value = item.value ?? item.count;
         return (
-          <div key={label} className="dash-most-changed-item w-full min-w-0 max-w-full overflow-hidden box-border list-item-interactive px-2 py-1 rounded-lg">
+          <div
+            key={label}
+            onClick={() => onItemClick?.(item)}
+            className={`dash-most-changed-item w-full min-w-0 max-w-full overflow-x-hidden overflow-y-visible box-border list-item-interactive px-2 py-1 rounded-lg ${onItemClick ? "cursor-pointer" : ""}`}
+            title={onItemClick ? `View FIM events for ${label}` : label}
+          >
             <div className="flex items-center justify-between gap-2 min-w-0 max-w-full overflow-hidden">
               <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
                 <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold shrink-0" style={{ color }}>
@@ -667,17 +727,17 @@ export default function MainDashboard() {
           ];
         }
 
-        // Add dummy data for Top Rankings if empty
+        // Add dummy data for Top Agent Rankings if empty
         if (!nextData.topRankings) {
           nextData.topRankings = {};
         }
         if (!nextData.topRankings.host || nextData.topRankings.host.length === 0) {
           nextData.topRankings.host = [
-            { label: "admin@server-01", value: 156 },
-            { label: "root@web-server", value: 128 },
-            { label: "deploy@prod-02", value: 95 },
-            { label: "user@dev-workstation", value: 72 },
-            { label: "backup@storage-01", value: 54 },
+            { label: "agent-server-01", value: 156 },
+            { label: "agent-web-server", value: 128 },
+            { label: "agent-prod-02", value: 95 },
+            { label: "agent-dev-workstation", value: 72 },
+            { label: "agent-storage-01", value: 54 },
           ];
         }
         if (!nextData.topRankings.fimAgents || nextData.topRankings.fimAgents.length === 0) {
@@ -691,20 +751,20 @@ export default function MainDashboard() {
         }
         if (!nextData.topRankings.file || nextData.topRankings.file.length === 0) {
           nextData.topRankings.file = [
-            { label: "malware_sample.exe", value: 42 },
-            { label: "suspicious_doc.pdf", value: 35 },
-            { label: "trojan_update.bat", value: 28 },
-            { label: "phishing_link.html", value: 21 },
-            { label: "keylogger.dll", value: 15 },
+            { label: "agent-prod-01", value: 42 },
+            { label: "agent-web-02", value: 35 },
+            { label: "agent-db-01", value: 28 },
+            { label: "agent-dev-01", value: 21 },
+            { label: "agent-storage-01", value: 15 },
           ];
         }
         if (!nextData.topRankings.ml || nextData.topRankings.ml.length === 0) {
           nextData.topRankings.ml = [
-            { label: "anomaly-pattern-01", value: 67 },
-            { label: "intrusion-detect", value: 54 },
-            { label: "brute-force-attack", value: 43 },
-            { label: "data-exfiltration", value: 31 },
-            { label: "lateral-movement", value: 24 },
+            { label: "agent-prod-01", value: 67 },
+            { label: "agent-web-02", value: 54 },
+            { label: "agent-db-01", value: 43 },
+            { label: "agent-dev-01", value: 31 },
+            { label: "agent-staging-01", value: 24 },
           ];
         }
 
@@ -771,10 +831,10 @@ export default function MainDashboard() {
   }
 
   return (
-    <div className="flex flex-col w-full min-w-0 gap-4">
+    <div className="dashboard-main flex flex-col w-full min-w-0 gap-4">
       {/* Welcome Header */}
-      <div className="flex flex-col min-[700px]:flex-row min-[700px]:items-center justify-between gap-3">
-        <div>
+      <div className="dashboard-header flex flex-col min-[700px]:flex-row min-[700px]:items-center justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-lg min-[600px]:text-xl font-bold text-[var(--soc-text-primary)]">
             Welcome back, {user?.name || "User"}
           </h1>
@@ -782,7 +842,7 @@ export default function MainDashboard() {
             Monitor threats, commands, and file integrity in real-time
           </p>
         </div>
-        <div className="flex items-center gap-2 relative z-50">
+        <div className="dashboard-filters flex items-center gap-2 relative z-50 min-w-0">
           <RangeFilter
             rangeKey={rangeKey}
             onRangeChange={handleRangeChange}
@@ -810,7 +870,7 @@ export default function MainDashboard() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 min-[700px]:grid-cols-4 gap-3">
+      <div className="dashboard-kpi-grid grid grid-cols-2 min-[700px]:grid-cols-4 gap-3">
         <KPICard
           label="Commands"
           value={formatInteger(dashboardData.stats.totalAttacks)}
@@ -849,12 +909,11 @@ export default function MainDashboard() {
         />
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 min-w-0 max-w-full overflow-hidden box-border" style={{ maxWidth: "100%" }}>
-        {/* Main Chart Area */}
-        <div className="xl:col-span-2 flex flex-col gap-4 min-w-0 max-w-full overflow-hidden box-border" style={{ maxWidth: "100%" }}>
+      {/* Main Content Grid: baris 1 = Threat Classification + Most Changed Files
+          (sama tinggi), baris 2 = Risk Distribution + Top Active Agents. */}
+      <div className="dashboard-content-grid grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch min-w-0 max-w-full overflow-x-hidden box-border" style={{ maxWidth: "100%" }}>
           {/* Threat Classification */}
-          <div className="chart-card animate-fadeInUp stagger-1 flex-1" style={{ opacity: 0 }}>
+          <div className="chart-card animate-fadeInUp stagger-1 xl:col-span-2 xl:row-start-1 xl:col-start-1 flex flex-col w-full min-w-0" style={{ opacity: 0 }}>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 rounded-lg bg-red-500/10">
@@ -866,13 +925,29 @@ export default function MainDashboard() {
                 </div>
               </div>
             </div>
-            <div className="h-[220px]">
-              <CategoryLineChart items={dashboardData.threatTypes} color="#EF4444" totalLabel="threats" />
+            <div className="min-h-[260px] flex-1">
+              <CategoryLineChart
+                items={dashboardData.threatTypes}
+                color="#EF4444"
+                totalLabel="threats"
+                onPointClick={(p) => {
+                  const { start, end } = getIsoDateRange(effectiveDateRange);
+                  const target = {
+                    "Suspicious Commands": "/attack-dashboard",
+                    "Malicious Files": "/file-security",
+                    "FIM Changes": "/fim-events",
+                    "ML Threats": "/ml-dashboard",
+                  }[p.label] ?? "/attack-dashboard";
+                  const categoryParams = new URLSearchParams({ start, end });
+                  if (p.label === "Suspicious Commands") categoryParams.set("status", "suspicious");
+                  navigate(`${target}?${categoryParams.toString()}`);
+                }}
+              />
             </div>
           </div>
 
           {/* Risk Distribution */}
-          <div className="chart-card animate-fadeInUp stagger-2 flex-1" style={{ opacity: 0 }}>
+          <div className="chart-card animate-fadeInUp stagger-2 xl:col-span-2 xl:row-start-2 xl:col-start-1 flex flex-col w-full min-w-0" style={{ opacity: 0 }}>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 rounded-lg bg-orange-500/10">
@@ -884,17 +959,14 @@ export default function MainDashboard() {
                 </div>
               </div>
             </div>
-            <div className="h-[220px]">
+            <div className="min-h-[260px] flex-1">
               <CategoryLineChart items={dashboardData.riskDistribution} color="#F97316" totalLabel="incidents" />
             </div>
           </div>
-        </div>
 
-        {/* Right Sidebar */}
-        <div className="flex flex-col gap-4 min-w-0 max-w-full overflow-hidden box-border" style={{ maxWidth: "100%" }}>
           {/* Most Changed Files */}
-          <div className="dash-most-changed chart-card animate-fadeInUp stagger-3 flex-1 w-full min-w-0 max-w-full overflow-hidden box-border" style={{ opacity: 0, maxWidth: "100%" }}>
-            <div className="flex items-center justify-between gap-2 mb-3 min-w-0 max-w-full overflow-hidden">
+          <div className="dash-most-changed chart-card animate-fadeInUp stagger-3 xl:row-start-1 xl:col-start-3 w-full min-w-0 max-w-full overflow-x-hidden overflow-y-visible box-border" style={{ opacity: 0, maxWidth: "100%" }}>
+            <div className="flex items-center justify-between gap-2 mb-3 min-w-0 max-w-full overflow-x-hidden">
               <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
                 <div className="p-1.5 rounded-lg bg-blue-500/10 shrink-0">
                   <FileBarChart className="h-3.5 w-3.5 text-blue-400" />
@@ -911,25 +983,29 @@ export default function MainDashboard() {
                 View all <ArrowRight className="h-2.5 w-2.5" />
               </button>
             </div>
-            <div className="w-full min-w-0 max-w-full overflow-hidden box-border" style={{ maxWidth: "100%" }}>
+            <div className="w-full min-w-0 max-w-full overflow-x-hidden overflow-y-visible box-border" style={{ maxWidth: "100%" }}>
               <DomainBarChart
                 items={dashboardData.mostChangedFiles}
                 emptyLabel="No changed files detected"
                 emptySub="No FIM changes are available for the selected time range."
+                onItemClick={(item) => {
+                  const { start, end } = getIsoDateRange(effectiveDateRange);
+                  navigate(`/fim-events?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&path=${encodeURIComponent(item.label || item.name || "")}`);
+                }}
               />
             </div>
           </div>
 
-          {/* Top Users Card */}
-          <div className="chart-card animate-fadeInUp stagger-4 flex-1" style={{ opacity: 0 }}>
+          {/* Top Agents Card */}
+          <div className="chart-card animate-fadeInUp stagger-4 xl:row-start-2 xl:col-start-3 w-full min-w-0" style={{ opacity: 0 }}>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 rounded-lg bg-purple-500/10">
                   <Activity className="h-3.5 w-3.5 text-purple-400" />
                 </div>
                 <div>
-                  <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Top Active Users</h3>
-                  <p className="text-[9px] text-[var(--soc-text-muted)]">Most active users in the selected source</p>
+                  <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Top Active Agents</h3>
+                  <p className="text-[9px] text-[var(--soc-text-muted)]">Most active agents in the selected source</p>
                 </div>
               </div>
               <button
@@ -948,7 +1024,7 @@ export default function MainDashboard() {
               {[
                 { key: "host", label: "Host" },
                 { key: "fimAgents", label: "FIM" },
-                { key: "file", label: "File" },
+                { key: "file", label: "File Security" },
                 { key: "ml", label: "ML" },
               ].map((option) => (
                 <button
@@ -965,10 +1041,20 @@ export default function MainDashboard() {
               ))}
             </div>
             <CompactBarChart
+              key={topUsersSource}
               items={dashboardData.topRankings?.[topUsersSource] ?? dashboardData.userRanking}
+              onItemClick={(item) => {
+                const { start, end } = getIsoDateRange(effectiveDateRange);
+                const target = {
+                  host: "/attack-dashboard",
+                  fimAgents: "/fim-events",
+                  file: "/file-security",
+                  ml: "/ml-dashboard",
+                }[topUsersSource] ?? "/attack-dashboard";
+                navigate(`${target}?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&agent=${encodeURIComponent(item.label)}`);
+              }}
             />
           </div>
-        </div>
       </div>
 
       {/* Timeline Sections */}
@@ -1063,7 +1149,7 @@ export default function MainDashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 items-start">
             <div className="lg:col-span-2 rounded-lg p-3 flex flex-col" style={{ background: "transparent" }}>
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[9px] text-[var(--soc-text-muted)]">{section.title} Timeline ({selectedRangeLabel})</span>
+                <span className="text-[11px] text-[var(--soc-text-muted)]">{section.title} Timeline ({selectedRangeLabel})</span>
               </div>
               <div className="w-full h-[160px] rounded-lg overflow-hidden" style={{ background: "transparent" }}>
                 <WaveChart
@@ -1075,7 +1161,7 @@ export default function MainDashboard() {
                     const start = point?.t;
                     const end = start != null && point?.bucketMs ? start + point.bucketMs - 1 : undefined;
                     const query = start != null
-                      ? `?start=${encodeURIComponent(new Date(start).toISOString())}&end=${encodeURIComponent(new Date(end).toISOString())}`
+                      ? `?start=${encodeURIComponent(new Date(start).toISOString())}&end=${encodeURIComponent(new Date(end).toISOString())}${["/fim-events", "/ml-dashboard", "/file-security"].includes(section.nav) ? "&focus=logs" : ""}`
                       : "";
                     navigate(`${section.nav}${query}`);
                   }}

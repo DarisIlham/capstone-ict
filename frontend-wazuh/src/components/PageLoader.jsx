@@ -9,7 +9,7 @@ export default function PageLoader({
       aria-live="polite"
       aria-label={message}
       className={`flex flex-col items-center justify-center gap-4 ${fullScreen ? "absolute inset-0 z-40" : "min-h-[60vh]"} ${className}`}
-      style={{ backgroundColor: fullScreen ? "#0a0f2a" : "transparent" }}
+      style={{ backgroundColor: fullScreen ? "var(--soc-bg)" : "transparent" }}
     >
       {/* Animated rings */}
       <div className="relative w-16 h-16">
@@ -23,7 +23,7 @@ export default function PageLoader({
       </div>
 
       {/* Loading text */}
-      <span className="text-sm font-medium text-slate-300">{message}</span>
+      <span className="text-sm font-medium text-[var(--soc-text-muted)]">{message}</span>
     </div>
   );
 }

@@ -32,7 +32,7 @@ function buildSuspiciousCommandShouldClauses() {
     exactMatchClause("linux.command_name", "socat"),
     {
       wildcard: {
-        "linux.command.keyword": {
+        "linux.command": {
           value: "*bash -c*",
           case_insensitive: true
         }
@@ -40,7 +40,7 @@ function buildSuspiciousCommandShouldClauses() {
     },
     {
       wildcard: {
-        "linux.command.keyword": {
+        "linux.command": {
           value: "*sh -c*",
           case_insensitive: true
         }
@@ -48,7 +48,7 @@ function buildSuspiciousCommandShouldClauses() {
     },
     {
       wildcard: {
-        "linux.command.keyword": {
+        "linux.command": {
           value: "*zsh -c*",
           case_insensitive: true
         }
@@ -56,7 +56,7 @@ function buildSuspiciousCommandShouldClauses() {
     },
     {
       wildcard: {
-        "linux.command.keyword": {
+        "linux.command": {
           value: "*python -c*",
           case_insensitive: true
         }
@@ -64,7 +64,7 @@ function buildSuspiciousCommandShouldClauses() {
     },
     {
       wildcard: {
-        "linux.command.keyword": {
+        "linux.command": {
           value: "*python3 -c*",
           case_insensitive: true
         }
@@ -72,7 +72,7 @@ function buildSuspiciousCommandShouldClauses() {
     },
     {
       wildcard: {
-        "linux.command.keyword": {
+        "linux.command": {
           value: "*perl -e*",
           case_insensitive: true
         }
@@ -80,7 +80,7 @@ function buildSuspiciousCommandShouldClauses() {
     },
     {
       wildcard: {
-        "linux.command.keyword": {
+        "linux.command": {
           value: "*php -r*",
           case_insensitive: true
         }
@@ -88,7 +88,7 @@ function buildSuspiciousCommandShouldClauses() {
     },
     {
       wildcard: {
-        "linux.command.keyword": {
+        "linux.command": {
           value: "*base64 -d*",
           case_insensitive: true
         }
@@ -96,7 +96,7 @@ function buildSuspiciousCommandShouldClauses() {
     },
     {
       wildcard: {
-        "linux.command.keyword": {
+        "linux.command": {
           value: "*chmod 777*",
           case_insensitive: true
         }
@@ -104,7 +104,7 @@ function buildSuspiciousCommandShouldClauses() {
     },
     {
       wildcard: {
-        "linux.command.keyword": {
+        "linux.command": {
           value: "*rm -rf*",
           case_insensitive: true
         }
@@ -112,7 +112,7 @@ function buildSuspiciousCommandShouldClauses() {
     },
     {
       wildcard: {
-        "linux.command.keyword": {
+        "linux.command": {
           value: "*history -c*",
           case_insensitive: true
         }
@@ -120,7 +120,7 @@ function buildSuspiciousCommandShouldClauses() {
     },
     {
       wildcard: {
-        "linux.command.keyword": {
+        "linux.command": {
           value: "*unset HISTFILE*",
           case_insensitive: true
         }
@@ -209,7 +209,7 @@ function formatLinuxCommand(hit) {
 
 // 2. Tambahkan kata kunci 'export' di setiap fungsi utama
 export async function listLinuxCommands(query) {
-  const { page, limit, from } = normalizePagination(query);
+  const { page, limit, from } = normalizePagination(query, { maxLimit: 1000 });
   const {
     user,
     agentName,
@@ -230,7 +230,16 @@ export async function listLinuxCommands(query) {
   const commandNameFilter = buildOptionalExactFilter("linux.command_name", commandName);
   const sessionFilter = buildOptionalExactFilter("linux.session", session);
   const hostNameFilter = buildOptionalExactFilter("host.name", hostName);
-  const containsFilter = buildContainsClause("linux.command", contains);
+  const commandContainsFilter = buildContainsClause("linux.command", contains);
+  const commandNameContainsFilter = buildContainsClause("linux.command_name", contains);
+  const containsFilter = commandContainsFilter || commandNameContainsFilter
+    ? {
+      bool: {
+        should: [commandContainsFilter, commandNameContainsFilter].filter(Boolean),
+        minimum_should_match: 1,
+      },
+    }
+    : null;
 
   if (userFilter) must.push(userFilter);
   if (agentNameFilter) {
@@ -341,7 +350,7 @@ export async function getLatestLinuxCommand(query) {
 }
 
 export async function listSuspiciousLinuxCommands(query) {
-  const { page, limit, from } = normalizePagination(query);
+  const { page, limit, from } = normalizePagination(query, { maxLimit: 1000 });
   const { user, commandName, start, end } = query;
 
   const must = buildLinuxCommandMustClauses();
@@ -408,12 +417,12 @@ export async function getLinuxCommandStats(query) {
         },
         total_users: {
           cardinality: {
-            field: "linux.user.keyword"
+            field: "linux.user"
           }
         },
         by_user: {
           terms: {
-            field: "linux.user.keyword",
+            field: "linux.user",
             size: 20
           }
         },
@@ -423,15 +432,23 @@ export async function getLinuxCommandStats(query) {
             size: 20
           }
         },
+        by_session: {
+          // NOTE: linux.session is mapped as `keyword` directly (no
+          // `.keyword` subfield), so aggregate on the field itself.
+          terms: {
+            field: "linux.session",
+            size: 20
+          }
+        },
         by_command_name: {
           terms: {
-            field: "linux.command_name.keyword",
+            field: "linux.command_name",
             size: 20
           }
         },
         top_commands: {
           terms: {
-            field: "linux.command.keyword",
+            field: "linux.command",
             size: 10
           }
         },
@@ -458,6 +475,10 @@ export async function getLinuxCommandStats(query) {
     })),
     agents: (response.aggregations?.by_agent?.buckets || []).map((bucket) => ({
       agent: bucket.key,
+      count: bucket.doc_count
+    })),
+    sessions: (response.aggregations?.by_session?.buckets || []).map((bucket) => ({
+      session: bucket.key,
       count: bucket.doc_count
     })),
     commandNames: (response.aggregations?.by_command_name?.buckets || []).map((bucket) => ({
@@ -525,7 +546,7 @@ export async function getLinuxCommandTimeline(query) {
             },
             by_command_name: {
               terms: {
-                field: "linux.command_name.keyword",
+                field: "linux.command_name",
                 size: 10
               }
             }

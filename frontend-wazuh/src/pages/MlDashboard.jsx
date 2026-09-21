@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Activity, AlertTriangle, BarChart3, BrainCircuit, ChevronDown, Globe, LineChart, Search, ShieldAlert, SlidersHorizontal, Users } from "lucide-react";
+import { Activity, BarChart3, BrainCircuit, ChevronDown, Clock, Globe, LineChart, Search, ShieldAlert, SlidersHorizontal, Users, X } from "lucide-react";
 import mlApi from '../services/mlApi';
 import DateRangeFilter from "../components/DateRangeFilter";
 import RangeFilter from "../components/RangeFilter";
@@ -14,6 +14,7 @@ import {
   getDateRangeMinutes,
   toDateTimeLocalValue,
 } from "../utils/dateRange";
+import { adaptiveLeftGutter } from "../utils/chartAxis";
 
 const clamp = (n, a, b) => Math.min(Math.max(n, a), b);
 
@@ -148,7 +149,7 @@ const KPICard = ({ label, value, icon: Icon, color, desc, loading, index = 0 }) 
 );
 
 // ── BarList (seperti FileSecurityScanner) ────────────────────────────────────
-const BarList = ({ items, emptyLabel = "No data" }) => {
+const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue = null }) => {
   if (!items || items.length === 0) {
     return (
       <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
@@ -165,8 +166,9 @@ const BarList = ({ items, emptyLabel = "No data" }) => {
         const color = item.color || CHART_COLORS[i % CHART_COLORS.length];
         const label = item.label;
         const value = item.value;
-        return (
-          <div key={label} className="w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">
+        const isActive = activeValue != null && String(label) === String(activeValue);
+        const inner = (
+          <>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>{i + 1}</span>
@@ -177,14 +179,22 @@ const BarList = ({ items, emptyLabel = "No data" }) => {
             <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
               <div className="h-full rounded-full transition-all duration-500" title={`${label}: ${value}`} style={{ width: `${(value / maxValue) * 100}%`, backgroundColor: color }} />
             </div>
-          </div>
+          </>
+        );
+        if (!onSelect) {
+          return <div key={label} className="w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">{inner}</div>;
+        }
+        return (
+          <button key={label} type="button" onClick={() => onSelect(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg text-left ${isActive ? "bg-violet-500/10 ring-1 ring-violet-500/30" : ""}`}>
+            {inner}
+          </button>
         );
       })}
     </div>
   );
 };
 
-const TopAgentsCard = ({ agents }) => {
+const TopAgentsCard = ({ agents, onItemClick = null, activeName = null }) => {
   if (!agents || agents.length === 0) {
     return (
       <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
@@ -201,8 +211,9 @@ const TopAgentsCard = ({ agents }) => {
         const color = CHART_COLORS[i % CHART_COLORS.length];
         const label = item.name || "Unknown agent";
         const value = Number(item.count) || 0;
-        return (
-          <div key={label} className="w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">
+        const isActive = activeName != null && String(label) === String(activeName);
+        const inner = (
+          <>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>{i + 1}</span>
@@ -213,7 +224,15 @@ const TopAgentsCard = ({ agents }) => {
             <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
               <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(value / maxCount) * 100}%`, backgroundColor: color }} />
             </div>
-          </div>
+          </>
+        );
+        if (!onItemClick) {
+          return <div key={label} className="w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">{inner}</div>;
+        }
+        return (
+          <button key={label} type="button" onClick={() => onItemClick(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg text-left ${isActive ? "bg-violet-500/10 ring-1 ring-violet-500/30" : ""}`}>
+            {inner}
+          </button>
         );
       })}
     </div>
@@ -221,7 +240,7 @@ const TopAgentsCard = ({ agents }) => {
 };
 
 // ── ML Combined Filter (mirror FimCombinedFilter, accent violet) ─────────────
-const MlCombinedFilter = ({ labelFilter, onLabelChange, labelOptions = [], agentFilter, onAgentChange, agentOptions = [], sourceIpFilter, onSourceIpChange, sourceIpOptions = [], destIpFilter, onDestIpChange, destIpOptions = [], serviceFilter, onServiceChange, serviceOptions = [] }) => {
+const MlCombinedFilter = ({ labelFilter, onLabelChange, labelOptions = [], agentFilter, onAgentChange, agentOptions = [], sourceIpFilter, onSourceIpChange, sourceIpOptions = [], destIpFilter, onDestIpChange, destIpOptions = [], serviceFilter, onServiceChange, serviceOptions = [], dateFilterLabel = "", onResetDateFilter, timelineFilterLabel = "", onClearTimelineFilter }) => {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   const containerRef = useRef(null);
@@ -261,7 +280,7 @@ const MlCombinedFilter = ({ labelFilter, onLabelChange, labelOptions = [], agent
     const isObject = opt && typeof opt === "object";
     return { value: isObject ? opt.value : opt, label: isObject ? opt.label : opt };
   };
-  const activeCount = [labelFilter !== "all", agentFilter !== "all", sourceIpFilter !== "all", destIpFilter !== "all", serviceFilter !== "all"].filter(Boolean).length;
+  const activeCount = [labelFilter !== "all", agentFilter !== "all", sourceIpFilter !== "all", destIpFilter !== "all", serviceFilter !== "all", Boolean(dateFilterLabel), Boolean(timelineFilterLabel)].filter(Boolean).length;
   const Section = ({ label, value, allLabel, options, onChange }) => (
     <div className="px-3 py-2">
       <div className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">{label}</div>
@@ -286,8 +305,19 @@ const MlCombinedFilter = ({ labelFilter, onLabelChange, labelOptions = [], agent
         <div className="fixed z-[9999] w-[280px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] shadow-2xl" style={{ top: coords.top, left: coords.left }}>
           <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--soc-border)]">
             <span className="text-[10px] font-semibold text-[var(--soc-text-primary)]">Filter Options</span>
-            {activeCount > 0 && <button onClick={() => { onLabelChange("all"); onAgentChange("all"); onSourceIpChange("all"); onDestIpChange("all"); onServiceChange("all"); }} className="text-[9px] font-semibold text-violet-400 hover:text-violet-300 transition-colors">Clear all</button>}
+            {activeCount > 0 && <button onClick={() => { onLabelChange("all"); onAgentChange("all"); onSourceIpChange("all"); onDestIpChange("all"); onServiceChange("all"); if (dateFilterLabel && onResetDateFilter) onResetDateFilter(); if (onClearTimelineFilter) onClearTimelineFilter(); }} className="text-[9px] font-semibold text-violet-400 hover:text-violet-300 transition-colors">Clear all</button>}
           </div>
+          {timelineFilterLabel && (
+            <div className="border-b border-[var(--soc-border)] px-3 py-2">
+              <div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--soc-text-muted)]">Timeline filter</div>
+              <div className="mt-1.5 flex items-center gap-1.5 rounded border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-[10px] font-medium text-violet-300">
+                <Clock className="h-3.5 w-3.5 shrink-0 text-violet-400" />
+                <span className="min-w-0 flex-1 truncate" title={timelineFilterLabel}>{timelineFilterLabel}</span>
+                <button onClick={onClearTimelineFilter} className="shrink-0 hover:text-white" aria-label="Clear timeline filter"><X className="h-3 w-3" /></button>
+              </div>
+            </div>
+          )}
+          {dateFilterLabel && <div className="border-b border-[var(--soc-border)] px-3 py-2"><div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--soc-text-muted)]">Timeline date filter</div><div className="mt-1"><span className="block min-w-0 truncate rounded border border-violet-500/30 bg-violet-500/20 px-2 py-1 text-[10px] font-medium text-violet-300" title={dateFilterLabel}>{dateFilterLabel}</span></div></div>}
           <div className="divide-y divide-[var(--soc-border)] max-h-[360px] overflow-y-auto">
             <Section label="Label" value={labelFilter} allLabel="All labels" options={labelOptions} onChange={onLabelChange} />
             <Section label="Agent" value={agentFilter} allLabel="All agents" options={agentOptions} onChange={onAgentChange} />
@@ -301,11 +331,11 @@ const MlCombinedFilter = ({ labelFilter, onLabelChange, labelOptions = [], agent
   );
 };
 
-const CategoryLineChart = ({ items, color = "#a78bfa", totalLabel = "items" }) => {
+const CategoryLineChart = ({ items, color = "#a78bfa", totalLabel = "items", onPointClick = null, activeLabel = null }) => {
   const [selected, setSelected] = useState(null);
   const rootRef = useRef(null);
   const [size, setSize] = useState({ width: 1000, height: 210 });
-  const padding = { l: 56, r: 56, t: 12, b: 42 };
+  const basePadding = { l: 56, r: 56, t: 12, b: 42 };
   useEffect(() => {
     const node = rootRef.current;
     if (!node) return undefined;
@@ -331,6 +361,8 @@ const CategoryLineChart = ({ items, color = "#a78bfa", totalLabel = "items" }) =
   const sorted = [...items].sort((a, b) => b.value - a.value);
   const total = sorted.reduce((s, it) => s + it.value, 0) || 1;
   const maxV = Math.max(1, ...sorted.map((d) => d.value));
+  const gridVals = [0, 1, 2, 3].map((i) => Math.round(((i / 3) * maxV * 10)) / 10);
+  const padding = { ...basePadding, l: adaptiveLeftGutter(gridVals, basePadding.l, 12, "600 10px sans-serif") };
   const innerW = width - padding.l - padding.r;
   const innerH = height - padding.t - padding.b;
   const step = sorted.length > 1 ? innerW / (sorted.length - 1) : innerW;
@@ -370,22 +402,23 @@ const CategoryLineChart = ({ items, color = "#a78bfa", totalLabel = "items" }) =
           {segments.map((seg) => (<path key={seg.key} d={seg.d} stroke={seg.color} strokeWidth="2.5" fill="none" opacity="0.85" />))}
           {points.map((p) => {
             const isSel = selected?.index === p.index;
+            const isActive = activeLabel != null && String(p.label) === String(activeLabel);
             return (
               <g key={`${p.label}-${p.index}`}>
-                <circle cx={p.x} cy={p.y} r={isSel ? "6" : "9"} fill="transparent" className="cursor-pointer" onMouseEnter={() => setSelected(p)} onMouseLeave={() => setSelected(null)} onFocus={() => setSelected(p)} onBlur={() => setSelected(null)} onClick={() => setSelected(isSel ? null : p)} />
-                <circle cx={p.x} cy={p.y} r={isSel ? "5" : "3.5"} fill={p.color} stroke="var(--soc-bg)" strokeWidth="1.5" opacity="0.95" className="pointer-events-none" />
-                <text x={p.x} y={padding.t + innerH + 18} textAnchor="middle" fontSize="9" fill="var(--soc-text-muted)">{p.label}</text>
+                <circle cx={p.x} cy={p.y} r={isSel ? "6" : "9"} fill="transparent" className="cursor-pointer" onMouseEnter={() => setSelected(p)} onMouseLeave={() => setSelected(null)} onFocus={() => setSelected(p)} onBlur={() => setSelected(null)} onClick={() => { setSelected(p); if (onPointClick) onPointClick(p); }} />
+                <circle cx={p.x} cy={p.y} r={isSel || isActive ? "5" : "3.5"} fill={p.color} stroke={isActive ? "#0f172a" : "var(--soc-bg)"} strokeWidth={isActive ? "2" : "1.5"} opacity="0.95" className="pointer-events-none" />
+                <text x={p.x} y={padding.t + innerH + 18} textAnchor="middle" fontSize="9" fill={isActive ? "var(--soc-text-primary)" : "var(--soc-text-muted)"} fontWeight={isActive ? "700" : "400"}>{p.label}</text>
               </g>
             );
           })}
         </svg>
       </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 justify-center px-1 mt-1">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 justify-center px-1 mt-1">
         {points.map((p) => (
-          <div key={`${p.label}-${p.index}`} className="flex items-center gap-1.5 text-[13px] text-slate-400">
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color }} />
-            <span className="whitespace-nowrap">{p.label}</span>
-            <span className="text-slate-500 font-mono">{p.value}</span>
+          <div key={`${p.label}-${p.index}`} className="flex items-center gap-1 text-[10px] text-slate-400">
+            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: p.color }} />
+            <span className="whitespace-nowrap" title={p.label}>{p.label}</span>
+            <span className="text-slate-500 font-mono text-[10px]">{p.value}</span>
           </div>
         ))}
       </div>
@@ -417,9 +450,6 @@ const WaveChart = ({ data, color = "#a78bfa", rangeKey = "24h", height = 220, co
   }, []);
   const width = size.width;
   height = size.height;
-  const padding = { l: 28, r: 10, t: 8, b: 24 };
-  const innerW = width - padding.l - padding.r;
-  const innerH = height - padding.t - padding.b;
   if (!width || !height) return <div ref={rootRef} className="relative h-full w-full" />;
   if (!data || data.length === 0) {
     return (
@@ -431,14 +461,31 @@ const WaveChart = ({ data, color = "#a78bfa", rangeKey = "24h", height = 220, co
     );
   }
   const maxV = Math.max(1, ...data.map((d) => d.v));
+  // Left gutter adapts to the measured width of the y-axis labels
+  // (same 10px/500-weight font as rendered), so any digit count fits.
+  const gridSteps = 5;
+  const gridVals = [];
+  for (let i = 0; i < gridSteps; i += 1) gridVals.push(Math.round((i / (gridSteps - 1)) * maxV));
+  const measureLabelWidth = (() => {
+    const canvas = typeof document !== "undefined" ? document.createElement("canvas") : null;
+    const ctx = canvas ? canvas.getContext("2d") : null;
+    return (text) => {
+      if (!ctx) return String(text).length * 6;
+      ctx.font = "500 10px sans-serif";
+      return Math.ceil(ctx.measureText(String(text)).width);
+    };
+  })();
+  const maxLabelW = Math.max(...gridVals.map(measureLabelWidth), 0);
+  const padding = { l: Math.max(28, maxLabelW + 12), r: 10, t: 8, b: 24 };
+  const innerW = width - padding.l - padding.r;
+  const innerH = height - padding.t - padding.b;
   const pointSpacing = data.length > 1 ? innerW / (data.length - 1) : innerW;
   const defaultBucketMs = getTimelineBucketMs(RANGE_TO_MINUTES[rangeKey] || RANGE_TO_MINUTES[DEFAULT_TIME_RANGE]);
   const isDense = data.length > 30;
   const denseVisualR = isDense ? 2.6 : 3.5;
   const denseHitR = isDense ? 5 : 10;
-  const gridSteps = 5;
   const gridLines = [];
-  for (let i = 0; i < gridSteps; i += 1) gridLines.push({ value: Math.round((i / (gridSteps - 1)) * maxV), y: padding.t + innerH - (i / (gridSteps - 1)) * innerH, ratio: i / (gridSteps - 1) });
+  for (let i = 0; i < gridSteps; i += 1) gridLines.push({ value: gridVals[i], y: padding.t + innerH - (i / (gridSteps - 1)) * innerH, ratio: i / (gridSteps - 1) });
   let pathD = "";
   for (let i = 0; i < data.length; i += 1) {
     const x = padding.l + i * pointSpacing;
@@ -533,17 +580,19 @@ const PredictionBadge = ({ label }) => {
 };
 
 export default function MlDashboard() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const urlStart = searchParams.get("start");
   const urlEnd = searchParams.get("end");
   const urlRange = searchParams.get("rangeKey");
+  const urlAgent = searchParams.get("agent");
+  const urlFocus = searchParams.get("focus");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dataNotice, setDataNotice] = useState('');
   const [predictions, setPredictions] = useState([]);
   const [timeline, setTimeline] = useState([]);
   const [totalPredictionsCount, setTotalPredictionsCount] = useState(0);
-  const [filters, setFilters] = useState({ label: 'all', agent: 'all', sourceIp: 'all', destinationIp: 'all', service: 'all', confidenceRange: 'all' });
+  const [filters, setFilters] = useState({ label: 'all', agent: urlAgent || 'all', sourceIp: 'all', destinationIp: 'all', service: 'all', confidenceRange: 'all' });
   const [searchQuery, setSearchQuery] = useState("");
   const [timeRange, setTimeRange] = useState(() => urlRange && ["1h", "24h", "7d", "30d"].includes(urlRange) ? urlRange : DEFAULT_TIME_RANGE);
   const [filterMode, setFilterMode] = useState(() => (urlStart && urlEnd ? "custom" : "range"));
@@ -555,7 +604,8 @@ export default function MlDashboard() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [lastUpdated, setLastUpdated] = useState(null);
-  const [selectedTimelinePoint, setSelectedTimelinePoint] = useState(() => urlStart && urlEnd ? { key: "custom", start: urlStart, end: urlEnd, time: new Date(urlStart).getTime() } : null);
+  const [selectedTimelinePoint, setSelectedTimelinePoint] = useState(null);
+  const [ipTab, setIpTab] = useState("source");
   const [viewportWidth, setViewportWidth] = useState(() => typeof window !== "undefined" ? window.innerWidth : 1280);
   const predictionsTableRef = useRef(null);
   const topAgentsPanelRef = useRef(null);
@@ -566,6 +616,12 @@ export default function MlDashboard() {
       try { predictionsTableRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch {}
     }
   }, []);
+
+  useEffect(() => {
+    if (!urlAgent && urlFocus !== "logs") return undefined;
+    const id = setTimeout(scrollPredictionsTableIntoView, 300);
+    return () => clearTimeout(id);
+  }, [urlAgent, urlFocus, loading, scrollPredictionsTableIntoView]);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -711,9 +767,9 @@ export default function MlDashboard() {
 
   const distribution = useMemo(() => {
     const map = new Map();
-    for (const p of filtered) { const key = p.predictedLabel || 'unknown'; map.set(key, (map.get(key) || 0) + 1); }
+    for (const p of predictions) { const key = p.predictedLabel || 'unknown'; map.set(key, (map.get(key) || 0) + 1); }
     return Array.from(map.entries()).map(([name, value]) => ({ name, label: name, value })).sort((a, b) => b.value - a.value).map((entry, i) => ({ ...entry, color: LABEL_RANK_COLORS[i % LABEL_RANK_COLORS.length] }));
-  }, [filtered]);
+  }, [predictions]);
 
   const avgConfidence = useMemo(() => {
     let total = 0; let count = 0;
@@ -746,12 +802,6 @@ export default function MlDashboard() {
   }, [predictions]);
 
   const uniqueAgents = useMemo(() => { const set = new Set(); for (const p of predictions) set.add(String(p.agent || 'unknown')); return set.size; }, [predictions]);
-
-  const anomalyCount = useMemo(() => {
-    let count = 0;
-    for (const p of filtered) { const lbl = String(p.predictedLabel || '').toLowerCase(); if (!lbl.includes('benign') && !lbl.includes('normal') && lbl !== 'unknown') count += 1; else if (lbl === 'unknown') count += 1; }
-    return count;
-  }, [filtered]);
 
   const waveData = useMemo(() => {
     const minutes = filterMode === "custom" ? getDateRangeMinutes(getIsoDateRange(normalizeDateRange(customDateRange))) : (RANGE_TO_MINUTES[timeRange] || RANGE_TO_MINUTES[DEFAULT_TIME_RANGE]);
@@ -794,9 +844,37 @@ export default function MlDashboard() {
     const endIso = pointData.end || new Date(Number(pointData.t) + bucketMs - 1).toISOString();
     setPage(1);
     if (selectedTimelinePoint?.key === pointKey) setSelectedTimelinePoint(null);
-    else setSelectedTimelinePoint({ key: pointKey, start: startIso, end: endIso, bucketMs, time: pointData.t, t: pointData.t });
-    scrollPredictionsTableIntoView();
+    else {
+      setSelectedTimelinePoint({ key: pointKey, start: startIso, end: endIso, bucketMs, time: pointData.t, t: pointData.t });
+      scrollPredictionsTableIntoView();
+    }
   }, [timeRange, selectedTimelinePoint, scrollPredictionsTableIntoView]);
+
+  const handleLabelSummaryClick = useCallback((item) => {
+    const value = String(item?.label || "all");
+    const next = filters.label === value ? "all" : value;
+    setFilters((s) => ({ ...s, label: next }));
+    setPage(1);
+    if (next !== "all") scrollPredictionsTableIntoView();
+  }, [filters.label, scrollPredictionsTableIntoView]);
+
+  const handleMLAgentSummaryClick = useCallback((item) => {
+    const value = String(item?.name || "all");
+    const next = filters.agent === value ? "all" : value;
+    setFilters((s) => ({ ...s, agent: next }));
+    setPage(1);
+    if (next !== "all") scrollPredictionsTableIntoView();
+  }, [filters.agent, scrollPredictionsTableIntoView]);
+
+  const handleIPSummaryClick = useCallback((item) => {
+    const value = String(item?.label || "all");
+    const isSource = ipTab === "source";
+    const current = isSource ? filters.sourceIp : filters.destinationIp;
+    const next = current === value ? "all" : value;
+    setFilters((s) => (isSource ? { ...s, sourceIp: next } : { ...s, destinationIp: next }));
+    setPage(1);
+    if (next !== "all") scrollPredictionsTableIntoView();
+  }, [ipTab, filters.sourceIp, filters.destinationIp, scrollPredictionsTableIntoView]);
 
   const handleRangeChange = (nextRange) => { setPage(1); setSelectedTimelinePoint(null); setFilterMode("range"); setTimeRange(nextRange); };
 
@@ -849,7 +927,6 @@ export default function MlDashboard() {
             </select>
             <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 text-[var(--soc-text-muted)]" />
           </div>
-          <ExportCsvButton accent="violet" onClick={handleExportCsv} />
         </div>
       </div>
 
@@ -863,7 +940,7 @@ export default function MlDashboard() {
       {/* KPI Cards — kpi-modern 4 kolom */}
       <div className="grid grid-cols-2 min-[700px]:grid-cols-4 gap-3">
         <KPICard label="Total Predictions" value={new Intl.NumberFormat("en-US").format(totalPredictionsCount || predictions.length)} icon={BrainCircuit} color="text-purple-400" desc="predictions in range" loading={loading} index={0} />
-        <KPICard label="Anomalies" value={new Intl.NumberFormat("en-US").format(anomalyCount)} icon={AlertTriangle} color="text-pink-400" desc="non-benign predictions" loading={loading} index={1} />
+        <KPICard label="Unique Source IPs" value={new Intl.NumberFormat("en-US").format(uniqueSourceIpCount)} icon={Globe} color="text-pink-400" desc="source IPs in range" loading={loading} index={1} />
         <KPICard label="Avg Confidence" value={`${avgConfidence.toFixed(0)}%`} icon={Activity} color="text-cyan-400" desc="overall model confidence" loading={loading} index={2} />
         <KPICard label="Unique Agents" value={new Intl.NumberFormat("en-US").format(uniqueAgents)} icon={Users} color="text-emerald-400" desc="agents in range" loading={loading} index={3} />
       </div>
@@ -902,13 +979,13 @@ export default function MlDashboard() {
             <span className="text-[9px] text-[var(--soc-text-muted)]">Unique agents</span>
             <span className="text-[11px] font-bold text-[var(--soc-text-primary)]">{uniqueAgents}</span>
           </div>
-          <TopAgentsCard agents={topAgents} />
+          <TopAgentsCard agents={topAgents} onItemClick={handleMLAgentSummaryClick} activeName={filters.agent !== "all" ? filters.agent : null} />
         </div>
       </div>
 
-      {/* Label Distribution + Top Source IPs + Top Dest IPs — xl:grid-cols-3 */}
+      {/* Label Distribution + Top IPs (Source/Destination tabs) */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div className="chart-card animate-fadeInUp stagger-1 flex flex-col" style={{ opacity: 0 }}>
+        <div className="chart-card animate-fadeInUp stagger-1 flex flex-col xl:col-span-2" style={{ opacity: 0 }}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-violet-500/10"><LineChart className="h-3.5 w-3.5 text-violet-400" /></div>
@@ -920,34 +997,44 @@ export default function MlDashboard() {
             <span className="text-[10px] font-bold text-[var(--soc-text-primary)]">{filtered.length} predictions</span>
           </div>
           <div className="flex-1 min-h-[160px] flex flex-col">
-            <CategoryLineChart items={distribution} totalLabel="predictions" />
+            <CategoryLineChart items={distribution} totalLabel="predictions" onPointClick={handleLabelSummaryClick} activeLabel={filters.label && filters.label !== "all" ? filters.label : null} />
           </div>
         </div>
         <div className="chart-card animate-fadeInUp stagger-2 flex flex-col" style={{ opacity: 0 }}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-emerald-500/10"><Globe className="h-3.5 w-3.5 text-emerald-400" /></div>
+              <div className="p-1.5 rounded-lg bg-emerald-500/10"><Globe className={`h-3.5 w-3.5 ${ipTab === "source" ? "text-emerald-400" : "text-sky-400"}`} /></div>
               <div>
-                <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Top 5 Source IPs</h3>
-                <p className="text-[9px] text-[var(--soc-text-muted)]">Most frequent source IPs</p>
+                <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Top 5 IPs</h3>
+                <p className="text-[9px] text-[var(--soc-text-muted)]">Most frequent source / destination IPs</p>
               </div>
             </div>
-            <span className="text-[10px] font-bold text-emerald-400">{topSourceBarItems.length} IPs</span>
+            <span className={`text-[10px] font-bold ${ipTab === "source" ? "text-emerald-400" : "text-sky-400"}`}>{(ipTab === "source" ? topSourceBarItems : topDestBarItems).length} IPs</span>
           </div>
-          <BarList items={topSourceBarItems} emptyLabel="No source IP data" />
-        </div>
-        <div className="chart-card animate-fadeInUp stagger-3 flex flex-col" style={{ opacity: 0 }}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-sky-500/10"><Globe className="h-3.5 w-3.5 text-sky-400" /></div>
-              <div>
-                <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Top 5 Destination IPs</h3>
-                <p className="text-[9px] text-[var(--soc-text-muted)]">Most frequent destination IPs</p>
-              </div>
-            </div>
-            <span className="text-[10px] font-bold text-sky-400">{topDestBarItems.length} IPs</span>
+          <div className="flex flex-wrap items-center gap-1.5 mb-3">
+            {[
+              { key: "source", label: "Source" },
+              { key: "dest", label: "Destination" },
+            ].map((option) => (
+              <button
+                key={option.key}
+                onClick={() => setIpTab(option.key)}
+                className={`px-2 py-1 text-[9px] rounded-md font-medium transition-all ${
+                  ipTab === option.key
+                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                    : "text-[var(--soc-text-muted)] hover:text-[var(--soc-text-secondary)] border border-transparent hover:bg-[var(--soc-elevated)]"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
-          <BarList items={topDestBarItems} emptyLabel="No destination IP data" />
+          <BarList
+            items={ipTab === "source" ? topSourceBarItems : topDestBarItems}
+            emptyLabel={ipTab === "source" ? "No source IP data" : "No destination IP data"}
+            onSelect={handleIPSummaryClick}
+            activeValue={(ipTab === "source" ? filters.sourceIp : filters.destinationIp) !== "all" ? (ipTab === "source" ? filters.sourceIp : filters.destinationIp) : null}
+          />
         </div>
       </div>
 
@@ -965,15 +1052,22 @@ export default function MlDashboard() {
               sourceIpFilter={filters.sourceIp} onSourceIpChange={(v) => { setPage(1); setFilters((s) => ({ ...s, sourceIp: v })); }} sourceIpOptions={uniqueOptions.srcs}
               destIpFilter={filters.destinationIp} onDestIpChange={(v) => { setPage(1); setFilters((s) => ({ ...s, destinationIp: v })); }} destIpOptions={uniqueOptions.dests}
               serviceFilter={filters.service} onServiceChange={(v) => { setPage(1); setFilters((s) => ({ ...s, service: v })); }} serviceOptions={uniqueOptions.services}
+              dateFilterLabel={urlStart && urlEnd ? `${formatDetailedTimestamp(urlStart)} - ${formatDetailedTimestamp(urlEnd)}` : ""}
+              onResetDateFilter={() => {
+                const nextParams = new URLSearchParams(searchParams);
+                nextParams.delete("start");
+                nextParams.delete("end");
+                setSearchParams(nextParams);
+                setSelectedTimelinePoint(null);
+                setFilterMode("range");
+                setTimeRange(DEFAULT_TIME_RANGE);
+                setCustomDateRange(createDefaultDateRange(1));
+              }}
+              timelineFilterLabel={selectedTimelinePoint ? formatTimelineBucketLabel(selectedTimelinePoint, timeRange) : ""}
+              onClearTimelineFilter={() => { setSelectedTimelinePoint(null); setPage(1); }}
             />
             <ExportCsvButton accent="violet" onClick={handleExportCsv} />
           </div>
-          {selectedTimelinePoint && (
-            <div className="mt-3 flex items-start justify-between gap-3">
-              <div className="text-xs text-violet-300">Timeline filter: {formatTimelineBucketLabel(selectedTimelinePoint, timeRange)}</div>
-              <button onClick={() => { setSelectedTimelinePoint(null); setPage(1); }} className="shrink-0 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-200 transition-colors hover:bg-violet-500/20">Reset Time Filter</button>
-            </div>
-          )}
         </div>
 
         <div className="overflow-x-auto">

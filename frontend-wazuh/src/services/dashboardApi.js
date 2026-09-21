@@ -169,7 +169,7 @@ function buildTopUsersFromLogs(items) {
     }));
 }
 
-function buildTopRanking(items, getKey, slice = 5) {
+function buildTopRanking(items, getKey, slice = 20) {
   const counts = new Map();
 
   safeArray(items).forEach((item) => {
@@ -186,6 +186,23 @@ function buildTopRanking(items, getKey, slice = 5) {
     }))
     .sort((a, b) => b.value - a.value)
     .slice(0, slice);
+}
+
+function buildAgentRankingFromAgg(buckets, pickLabel) {
+  // Memetakan hasil agregasi full-range backend (sudah mengikuti filter
+  // tanggal start/end) menjadi [{ label, value }], tanpa batas 5.
+  return safeArray(buckets)
+    .map((bucket, index) => {
+      const label = String(pickLabel(bucket) || "").trim();
+      if (!label || label === "-") return null;
+      return {
+        label,
+        value: toCount(bucket?.count ?? bucket?.doc_count),
+        color: BAR_COLORS[index % BAR_COLORS.length],
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.value - a.value);
 }
 
 function buildFimAgentRanking(events) {
@@ -501,6 +518,7 @@ function buildWarningMessage(key, error) {
     fileTimeline: "file scan timeline",
     fileSuspicious: "suspicious file list",
     fimEvents: "FIM events",
+    fimAgentStats: "FIM agent stats",
     fimDistribution: "FIM severity distribution",
     mlStats: "ML stats",
     mlTimeline: "ML timeline",
@@ -525,6 +543,7 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
     start,
     end,
   });
+  const fimTimelineParams = new URLSearchParams({ start, end });
   const fileSuspiciousParams = new URLSearchParams({
     page: "1",
     limit: "500",
@@ -561,6 +580,8 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
       fetchJson(`${API_ROOT}/file-scans/suspicious?${fileSuspiciousParams.toString()}`),
     ],
     ["fimEvents", fetchJson(`${API_ROOT}/events?${fimParams.toString()}`)],
+    ["fimTimeline", fetchJson(`${API_ROOT}/events/timeline?${fimTimelineParams.toString()}`)],
+    ["fimAgentStats", fetchJson(`${API_ROOT}/events/agents/stats?${rangeParams.toString()}`)],
     ["fimDistribution", fetchJson(`${API_ROOT}/events/distribution/stats?${rangeParams.toString()}`)],
     ["mlStats", fetchJson(`${API_ROOT}/ml/predictions/stats?${rangeParams.toString()}`)],
     ["mlTimeline", fetchMlTimeline(minutes, dateRange)],
@@ -598,6 +619,15 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
     if (mlPredWarningIndex >= 0) warnings.splice(mlPredWarningIndex, 1);
   }
 
+  // fimAgentStats hanya enrichment untuk ranking agent FIM; kalau daftar
+  // event FIM sudah OK, fallback hitung dari sampel tetap tersedia.
+  if (responses.fimEvents) {
+    const fimAgentWarningIndex = warnings.findIndex((message) =>
+      String(message).startsWith("FIM agent stats")
+    );
+    if (fimAgentWarningIndex >= 0) warnings.splice(fimAgentWarningIndex, 1);
+  }
+
   const attackStats = responses.attackStats?.data || {};
   const attackLogs = safeArray(responses.attackLogs?.data);
   const attackTimelineRaw = safeArray(responses.attackTimeline?.data);
@@ -605,6 +635,8 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
   const fileTimelineRaw = safeArray(responses.fileTimeline?.data);
   const suspiciousFiles = safeArray(responses.fileSuspicious?.data);
   const fimEventsRaw = safeArray(responses.fimEvents?.data);
+  const fimTimelineRaw = safeArray(responses.fimTimeline?.data);
+  const fimAgentBuckets = safeArray(responses.fimAgentStats?.data);
   const fimTotalHits = toCount(responses.fimEvents?.total_hits);
   const mlStats = responses.mlStats?.data || {};
   const mlTimelineRaw = safeArray(responses.mlTimeline?.data);
@@ -682,9 +714,9 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
     dateRange
   );
   const fimEvents = bucketSeries(
-    fimEventsRaw,
+    fimTimelineRaw.length ? fimTimelineRaw : fimEventsRaw,
     (item) => item?.timestamp,
-    () => 1,
+    (item) => item?.total ?? 1,
     dateRange
   );
   const mlEvents = bucketSeries(
@@ -749,10 +781,23 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
       ? buildTopUsers(attackStats.users)
       : buildTopUsersFromLogs(attackLogs);
 
+  // Ranking agent: utamakan agregasi full-range backend yang sudah mengikuti
+  // filter tanggal (start/end), bukan hitungan dari sampel hits yang terpotong
+  // limit (500/1000). Fallback ke sampel hanya bila endpoint agg gagal.
+  const hostAgentRanking = safeArray(attackStats.agents).length
+    ? buildAgentRankingFromAgg(attackStats.agents, (b) => b?.agent)
+    : buildHostAgentRanking(attackLogs);
+  const fimAgentRanking = fimAgentBuckets.length
+    ? buildAgentRankingFromAgg(fimAgentBuckets, (b) => b?.agent)
+    : buildFimAgentRanking(fimEventsRaw);
+  const fileAgentRanking = safeArray(fileStats.topAgents).length
+    ? buildAgentRankingFromAgg(fileStats.topAgents, (b) => b?.name)
+    : buildFileAgentRanking(suspiciousFiles);
+
   const topRankings = {
-    host: buildHostAgentRanking(attackLogs),
-    fimAgents: buildFimAgentRanking(fimEventsRaw),
-    file: buildFileAgentRanking(suspiciousFiles),
+    host: hostAgentRanking,
+    fimAgents: fimAgentRanking,
+    file: fileAgentRanking,
     ml: buildMlAgentRanking(mlPredictionsRaw),
   };
 

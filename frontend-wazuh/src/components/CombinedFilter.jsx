@@ -14,6 +14,8 @@ export default function CombinedFilter({
   userFilter, onUserChange, userOptions = [],
   agentFilter, onAgentChange, agentOptions = [],
   sessionFilter, onSessionChange, sessionOptions = [],
+  dateFilterLabel = "", onResetDateFilter,
+  commandFilterLabel = "", onResetCommandFilter,
   onClearAll,
 }) {
   const [open, setOpen] = useState(false);
@@ -66,6 +68,8 @@ export default function CombinedFilter({
     userFilter !== "all",
     agentFilter !== "all",
     sessionFilter !== "all",
+    Boolean(dateFilterLabel),
+    Boolean(commandFilterLabel),
   ].filter(Boolean).length;
 
   const Section = ({ label, value, allLabel, options, onChange }) => (
@@ -134,6 +138,8 @@ export default function CombinedFilter({
                   onUserChange("all");
                   onAgentChange("all");
                   onSessionChange("all");
+                  if (dateFilterLabel && onResetDateFilter) onResetDateFilter();
+                  if (commandFilterLabel && onResetCommandFilter) onResetCommandFilter();
                   if (onClearAll) onClearAll();
                 }}
                 className="text-[9px] font-semibold text-orange-400 hover:text-orange-300 transition-colors"
@@ -142,6 +148,22 @@ export default function CombinedFilter({
               </button>
             )}
           </div>
+          {dateFilterLabel && (
+            <div className="border-b border-[var(--soc-border)] px-3 py-2">
+              <div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--soc-text-muted)]">Timeline date filter</div>
+              <div className="mt-1">
+                <span className="block min-w-0 truncate rounded border border-orange-500/30 bg-orange-500/20 px-2 py-1 text-[10px] font-medium text-orange-300" title={dateFilterLabel}>{dateFilterLabel}</span>
+              </div>
+            </div>
+          )}
+          {commandFilterLabel && (
+            <div className="border-b border-[var(--soc-border)] px-3 py-2">
+              <div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--soc-text-muted)]">Command filter</div>
+              <div className="mt-1">
+                <span className="block min-w-0 truncate rounded border border-orange-500/30 bg-orange-500/20 px-2 py-1 text-[10px] font-medium text-orange-300" title={commandFilterLabel}>{commandFilterLabel}</span>
+              </div>
+            </div>
+          )}
 
           <div className="divide-y divide-[var(--soc-border)] max-h-[360px] overflow-y-auto">
             <Section

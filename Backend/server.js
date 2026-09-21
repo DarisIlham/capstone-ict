@@ -123,8 +123,29 @@ async function handleEventsRequest(req, res) {
         : String(agent_id_param).padStart(3, "0");
 
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const size = Math.max(1, parseInt(req.query.size, 10) || 100);
+    // Keep concurrent FIM slices small enough for the indexer heap.
+    const size = Math.min(500, Math.max(1, parseInt(req.query.size, 10) || 100));
     const from = (page - 1) * size;
+
+    // search_after: paginasi tanpa batas jendela 10000 (from+size) Elasticsearch.
+    // Frontend mengirim sort-values hit terakhir; backend melanjutkan tepat setelahnya.
+    let searchAfter = null;
+    if (typeof req.query.search_after === "string" && req.query.search_after) {
+      try {
+        const parsed = JSON.parse(req.query.search_after);
+        // The cursor must match the two sort fields below. Passing a partial
+        // or malformed cursor makes OpenSearch reject the whole request.
+        if (
+          Array.isArray(parsed) &&
+          parsed.length === 2 &&
+          parsed.every((value) => value !== null && value !== undefined)
+        ) {
+          searchAfter = parsed;
+        }
+      } catch {
+        // abaikan nilai rusak, fallback ke from/size biasa
+      }
+    }
 
     const rangeKey = String(
       req.query.range || "30d"
@@ -140,6 +161,7 @@ async function handleEventsRequest(req, res) {
     }
 
     const timeRange = buildTimeRange(start, end);
+    const severity = String(req.query.severity || "").trim().toLowerCase();
 
     // ==========================================
     // 4. Susun filter OpenSearch
@@ -188,6 +210,28 @@ async function handleEventsRequest(req, res) {
       queryFilters.push(timeRange);
     }
 
+    const severityRanges = {
+      critical: { gte: 12 },
+      high: { gte: 8, lt: 12 },
+      medium: { gte: 5, lt: 8 },
+      low: { lt: 5 },
+    };
+    if (severityRanges[severity]) {
+      if (severity === "low") {
+        queryFilters.push({
+          bool: {
+            should: [
+              { range: { "rule.level": severityRanges.low } },
+              { bool: { must_not: [{ exists: { field: "rule.level" } }] } },
+            ],
+            minimum_should_match: 1,
+          },
+        });
+      } else {
+        queryFilters.push({ range: { "rule.level": severityRanges[severity] } });
+      }
+    }
+
     console.log(
       `>>> FETCH: agent=${agent_id || "all"} ` +
       `page=${page} ` +
@@ -199,7 +243,23 @@ async function handleEventsRequest(req, res) {
 
 
     const requestBody = {
-      track_total_hits: true,
+      // The frontend only needs the total from the first page. Recomputing it
+      // for every search_after request is needlessly expensive.
+      track_total_hits: !searchAfter,
+
+      // Hanya ambil field yang dipakai mapWazuhHit agar payload per hit jauh lebih ramping
+      _source: [
+        "timestamp",
+        "@timestamp",
+        "agent.name",
+        "agent.id",
+        "syscheck",
+        "data.path",
+        "location",
+        "decoder.name",
+        "rule",
+        "full_log",
+      ],
 
       query: {
         bool: {
@@ -223,9 +283,11 @@ async function handleEventsRequest(req, res) {
             unmapped_type: "date",
           },
         },
+        // Tiebreaker unik agar search_after deterministik (wajib untuk paginasi tanpa batas).
+        { _id: { order: "desc" } },
       ],
 
-      from,
+      ...(searchAfter ? { search_after: searchAfter } : { from }),
       size,
     };
 
@@ -245,6 +307,8 @@ async function handleEventsRequest(req, res) {
         : Number(hitsObject.total || 0);
 
     const eventsData = (hitsObject.hits || []).map((hit) => mapWazuhHit(hit));
+    const lastHit = (hitsObject.hits || [])[(hitsObject.hits || []).length - 1];
+    const nextSearchAfter = lastHit && Array.isArray(lastHit.sort) ? lastHit.sort : null;
 
     return res.json({
       success: true,
@@ -253,13 +317,15 @@ async function handleEventsRequest(req, res) {
       current_page: page,
       total_pages: Math.ceil(totalHits / size) || 1,
       page_size: size,
+      next_search_after: nextSearchAfter,
       applied_range: { rangeKey, start, end },
     });
   } catch (error) {
-    console.error("❌ API ERROR:", error.message);
+    const indexerError = error.response?.data?.error;
+    console.error("❌ API ERROR:", error.message, indexerError || "");
     res.status(500).json({
       success: false,
-      message: error.message,
+      message: indexerError?.reason || error.message,
     });
   }
 }
@@ -377,6 +443,82 @@ function extractDomainsFromHit(hit) {
 }
 
 // Register two routes (one for all, one for specific agent) to avoid optional-param parsing issues
+async function handleEventsTimelineRequest(req, res) {
+  try {
+    const agentId = req.params.agent_id && req.params.agent_id !== "all"
+      ? String(req.params.agent_id).padStart(3, "0")
+      : undefined;
+    let { start, end } = req.query;
+    if (!start && !end) {
+      const preset = buildPresetRange(req.query.range || "30d");
+      start = preset.start;
+      end = preset.end;
+    }
+
+    const startMs = new Date(start).getTime();
+    const endMs = new Date(end).getTime();
+    const durationMs = Math.max(endMs - startMs, 1);
+    const interval = durationMs <= 60 * 60 * 1000
+      ? "5m"
+      : durationMs <= 24 * 60 * 60 * 1000
+        ? "1h"
+        : durationMs <= 7 * 24 * 60 * 60 * 1000
+          ? "6h"
+          : "1d";
+    const timeRange = buildTimeRange(start, end);
+    const filters = [
+      {
+        bool: {
+          should: [
+            { term: { "rule.groups": "syscheck" } },
+            { term: { location: "syscheck" } },
+            { exists: { field: "syscheck.path" } },
+          ],
+          minimum_should_match: 1,
+        },
+      },
+    ];
+    if (agentId) filters.push({ term: { "agent.id": agentId } });
+    if (timeRange) filters.push(timeRange);
+
+    const response = await axios.post(
+      `${INDEXER_URL}/wazuh-alerts-*/_search`,
+      {
+        size: 0,
+        query: {
+          bool: {
+            filter: filters,
+            must_not: [{ terms: { "agent.id": EXCLUDED_AGENT_IDS } }],
+          },
+        },
+        aggs: {
+          events_over_time: {
+            date_histogram: {
+              field: "@timestamp",
+              fixed_interval: interval,
+              min_doc_count: 0,
+              extended_bounds: { min: start, max: end },
+            },
+          },
+        },
+      },
+      { auth: { username: INDEXER_USER, password: INDEXER_PASS }, httpsAgent }
+    );
+
+    const buckets = response?.data?.aggregations?.events_over_time?.buckets || [];
+    return res.json({
+      success: true,
+      data: buckets.map((bucket) => ({ timestamp: bucket.key, total: bucket.doc_count })),
+      applied_range: { start, end, interval },
+    });
+  } catch (error) {
+    console.error("API ERROR (events timeline):", error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+}
+
+app.get("/api/events/timeline", handleEventsTimelineRequest);
+app.get("/api/events/:agent_id/timeline", handleEventsTimelineRequest);
 app.get("/api/events", handleEventsRequest);
 app.get("/api/events/:agent_id", handleEventsRequest);
 
@@ -453,6 +595,76 @@ async function handleEventsAgentsRequest(req, res) {
 
 app.get("/api/events/agents/stats", handleEventsAgentsRequest);
 app.get("/api/events/:agent_id/agents/stats", handleEventsAgentsRequest);
+
+async function handleEventsUsersRequest(req, res) {
+  try {
+    const agent_id_param = req.params.agent_id;
+    const agent_id = agent_id_param === "all" || !agent_id_param
+      ? undefined
+      : String(agent_id_param).padStart(3, "0");
+    const rangeKey = String(req.query.range || "30d").trim();
+    let { start, end } = req.query;
+    if (!start && !end) {
+      const preset = buildPresetRange(rangeKey);
+      start = preset.start;
+      end = preset.end;
+    }
+    const timeRange = buildTimeRange(start, end);
+    const queryFilters = [{
+      bool: {
+        should: [
+          { term: { "rule.groups": "syscheck" } },
+          { term: { location: "syscheck" } },
+          { exists: { field: "syscheck.path" } },
+        ],
+        minimum_should_match: 1,
+      },
+    }];
+    if (agent_id) queryFilters.push({ term: { "agent.id": agent_id } });
+    if (timeRange) queryFilters.push(timeRange);
+
+    const response = await axios.post(
+      `${INDEXER_URL}/wazuh-alerts-*/_search`,
+      {
+        size: 0,
+        query: {
+          bool: {
+            filter: queryFilters,
+            must_not: [{ terms: { "agent.id": EXCLUDED_AGENT_IDS } }],
+          },
+        },
+        aggs: {
+          by_user: {
+            terms: {
+              size: 100,
+              script: {
+                lang: "painless",
+                source:
+                  "def u = '';" +
+                  "try { if (doc.containsKey('syscheck.audit.login_user.name') && doc['syscheck.audit.login_user.name'].size() > 0) { u = doc['syscheck.audit.login_user.name'].value; } } catch (Exception e) {}" +
+                  "if (u == '') { try { if (doc.containsKey('syscheck.uname_after') && doc['syscheck.uname_after'].size() > 0) { u = doc['syscheck.uname_after'].value; } } catch (Exception e) {} }" +
+                  "return u == '' ? '-' : u;",
+              },
+            },
+          },
+        },
+      },
+      { auth: { username: INDEXER_USER, password: INDEXER_PASS }, httpsAgent }
+    );
+    const buckets = response?.data?.aggregations?.by_user?.buckets || [];
+    return res.json({
+      success: true,
+      data: buckets.filter((bucket) => bucket.key !== "-").map((bucket) => ({ user: bucket.key, count: bucket.doc_count })),
+      applied_range: { rangeKey, start, end },
+    });
+  } catch (error) {
+    console.error("API ERROR (users):", error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+}
+
+app.get("/api/events/users/stats", handleEventsUsersRequest);
+app.get("/api/events/:agent_id/users/stats", handleEventsUsersRequest);
 
 // Severity + event-type distribution aggregated across the FULL selected
 // range (range agg + scripted terms agg), so the Event & Severity legend
@@ -976,7 +1188,18 @@ app.use((err, req, res, next) => {
   res.status(err.statusCode || 500).json({ success: false, message: err.message || "Internal server error" });
 });
 
-app.listen(PORT, "0.0.0.0", () => {
+const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ Server berjalan di port: ${PORT}`);
   console.log(`📡 Frontend can access at http://localhost:${PORT}`);
+});
+
+// Pesan jelas bila port sudah dipakai backend lain (jangan jalankan 2x).
+server.on("error", (err) => {
+  if (err && err.code === "EADDRINUSE") {
+    console.error(
+      `❌ Port ${PORT} sudah dipakai proses backend lain. Hentikan dulu proses lama (Task Manager > node.exe) lalu jalankan ulang.`
+    );
+    process.exit(1);
+  }
+  throw err;
 });

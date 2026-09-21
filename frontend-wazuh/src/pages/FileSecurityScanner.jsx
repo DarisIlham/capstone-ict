@@ -13,9 +13,11 @@ import {
   getDateRangeMinutes,
   toDateTimeLocalValue,
 } from "../utils/dateRange";
+import { adaptiveLeftGutter } from "../utils/chartAxis";
 import {
   AlertTriangle,
   Copy,
+  Clock,
   ExternalLink,
   Search,
   FileText,
@@ -312,9 +314,7 @@ const WaveChart = ({ data, color = "#ef4444", rangeKey = "24h", height = 80, com
   }, []);
   const width = size.width;
   height = size.height;
-  const padding = { l: 28, r: 10, t: 8, b: 24 };
-  const innerW = width - padding.l - padding.r;
-  const innerH = height - padding.t - padding.b;
+  const baseP = { l: 28, r: 10, t: 8, b: 24 };
   if (!width || !height) return <div ref={rootRef} className="relative h-full w-full" />;
   if (!data || data.length === 0) {
     return (
@@ -326,6 +326,9 @@ const WaveChart = ({ data, color = "#ef4444", rangeKey = "24h", height = 80, com
     );
   }
   const maxV = Math.max(1, ...data.map((d) => d.v));
+  const padding = { ...baseP, l: adaptiveLeftGutter([Math.round(maxV)], baseP.l) };
+  const innerW = width - padding.l - padding.r;
+  const innerH = height - padding.t - padding.b;
   const pointSpacing = data.length > 1 ? innerW / (data.length - 1) : innerW;
   const defaultBucketMs = getBucketMsForRange(rangeKey);
   const isDense = data.length > 30;
@@ -413,7 +416,7 @@ const KPICard = ({ label, value, icon: Icon, color, desc, loading, index = 0 }) 
 );
 
 // ── File Security Combined Filter (mirror FimCombinedFilter) ───────────────
-const FileSecCombinedFilter = ({ agentFilter, onAgentChange, agentOptions = [], typeFilter, onTypeChange, typeOptions = [], severityFilter, onSeverityChange, severityOptions = [] }) => {
+const FileSecCombinedFilter = ({ agentFilter, onAgentChange, agentOptions = [], typeFilter, onTypeChange, typeOptions = [], severityFilter, onSeverityChange, severityOptions = [], dateFilterLabel = "", onResetDateFilter, timelineFilterLabel = "", onClearTimelineFilter, folderFilterLabel = "", onClearFolderFilter, fileFilterLabel = "", onClearFileFilter }) => {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   const containerRef = useRef(null);
@@ -453,7 +456,7 @@ const FileSecCombinedFilter = ({ agentFilter, onAgentChange, agentOptions = [], 
     const isObject = opt && typeof opt === "object";
     return { value: isObject ? opt.value : opt, label: isObject ? opt.label : opt };
   };
-  const activeCount = [agentFilter !== "all", typeFilter !== "all", severityFilter !== "all"].filter(Boolean).length;
+  const activeCount = [agentFilter !== "all", typeFilter !== "all", severityFilter !== "all", Boolean(dateFilterLabel), Boolean(timelineFilterLabel), Boolean(folderFilterLabel), Boolean(fileFilterLabel)].filter(Boolean).length;
   const Section = ({ label, value, allLabel, options, onChange }) => (
     <div className="px-3 py-2">
       <div className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">{label}</div>
@@ -478,8 +481,39 @@ const FileSecCombinedFilter = ({ agentFilter, onAgentChange, agentOptions = [], 
         <div className="fixed z-[9999] w-[280px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] shadow-2xl" style={{ top: coords.top, left: coords.left }}>
           <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--soc-border)]">
             <span className="text-[10px] font-semibold text-[var(--soc-text-primary)]">Filter Options</span>
-            {activeCount > 0 && <button onClick={() => { onAgentChange("all"); onTypeChange("all"); onSeverityChange("all"); }} className="text-[9px] font-semibold text-red-400 hover:text-red-300 transition-colors">Clear all</button>}
+            {activeCount > 0 && <button onClick={() => { onAgentChange("all"); onTypeChange("all"); onSeverityChange("all"); if (dateFilterLabel && onResetDateFilter) onResetDateFilter(); if (onClearTimelineFilter) onClearTimelineFilter(); if (onClearFolderFilter) onClearFolderFilter(); if (onClearFileFilter) onClearFileFilter(); }} className="text-[9px] font-semibold text-red-400 hover:text-red-300 transition-colors">Clear all</button>}
           </div>
+          {timelineFilterLabel && (
+            <div className="border-b border-[var(--soc-border)] px-3 py-2">
+              <div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--soc-text-muted)]">Timeline filter</div>
+              <div className="mt-1.5 flex items-center gap-1.5 rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-medium text-red-300">
+                <Clock className="h-3.5 w-3.5 shrink-0 text-red-400" />
+                <span className="min-w-0 flex-1 truncate" title={timelineFilterLabel}>{timelineFilterLabel}</span>
+                <button onClick={onClearTimelineFilter} className="shrink-0 hover:text-white" aria-label="Clear timeline filter"><X className="h-3 w-3" /></button>
+              </div>
+            </div>
+          )}
+          {folderFilterLabel && (
+            <div className="border-b border-[var(--soc-border)] px-3 py-2">
+              <div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--soc-text-muted)]">Folder filter</div>
+              <div className="mt-1.5 flex items-center gap-1.5 rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-medium text-red-300">
+                <FolderSearch className="h-3.5 w-3.5 shrink-0 text-red-400" />
+                <span className="min-w-0 flex-1 truncate" title={folderFilterLabel}>{folderFilterLabel}</span>
+                <button onClick={onClearFolderFilter} className="shrink-0 hover:text-white" aria-label="Clear folder filter"><X className="h-3 w-3" /></button>
+              </div>
+            </div>
+          )}
+          {fileFilterLabel && (
+            <div className="border-b border-[var(--soc-border)] px-3 py-2">
+              <div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--soc-text-muted)]">File filter</div>
+              <div className="mt-1.5 flex items-center gap-1.5 rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-medium text-red-300">
+                <FileText className="h-3.5 w-3.5 shrink-0 text-red-400" />
+                <span className="min-w-0 flex-1 truncate" title={fileFilterLabel}>{fileFilterLabel}</span>
+                <button onClick={onClearFileFilter} className="shrink-0 hover:text-white" aria-label="Clear file filter"><X className="h-3 w-3" /></button>
+              </div>
+            </div>
+          )}
+          {dateFilterLabel && <div className="border-b border-[var(--soc-border)] px-3 py-2"><div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--soc-text-muted)]">Timeline date filter</div><div className="mt-1"><span className="block min-w-0 truncate rounded border border-red-500/30 bg-red-500/20 px-2 py-1 text-[10px] font-medium text-red-300" title={dateFilterLabel}>{dateFilterLabel}</span></div></div>}
           <div className="divide-y divide-[var(--soc-border)] max-h-[360px] overflow-y-auto">
             <Section label="Agent" value={agentFilter} allLabel="All agents" options={agentOptions} onChange={onAgentChange} />
             <Section label="Type" value={typeFilter} allLabel="All types" options={typeOptions} onChange={onTypeChange} />
@@ -492,7 +526,7 @@ const FileSecCombinedFilter = ({ agentFilter, onAgentChange, agentOptions = [], 
 };
 
 // ── Bar list (severity / folders / etc) seperti FimEvents ──────────────────
-const BarList = ({ items, emptyLabel = "No data" }) => {
+const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue = null }) => {
   if (!items || items.length === 0) {
     return (
       <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
@@ -509,8 +543,9 @@ const BarList = ({ items, emptyLabel = "No data" }) => {
         const color = item.color || CHART_COLORS[i % CHART_COLORS.length];
         const label = item.label;
         const value = item.value;
-        return (
-          <div key={label} className="w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">
+        const isActive = activeValue != null && String(label) === String(activeValue);
+        const inner = (
+          <>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>{i + 1}</span>
@@ -521,14 +556,22 @@ const BarList = ({ items, emptyLabel = "No data" }) => {
             <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
               <div className="h-full rounded-full transition-all duration-500" title={`${label}: ${value}`} style={{ width: `${(value / maxValue) * 100}%`, backgroundColor: color }} />
             </div>
-          </div>
+          </>
+        );
+        if (!onSelect) {
+          return <div key={label} className="w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">{inner}</div>;
+        }
+        return (
+          <button key={label} type="button" onClick={() => onSelect(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg text-left ${isActive ? "bg-red-500/10 ring-1 ring-red-500/30" : ""}`}>
+            {inner}
+          </button>
         );
       })}
     </div>
   );
 };
 
-const TopAgentsCard = ({ agents }) => {
+const TopAgentsCard = ({ agents, onItemClick = null, activeName = null }) => {
   if (!agents || agents.length === 0) {
     return (
       <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
@@ -545,8 +588,9 @@ const TopAgentsCard = ({ agents }) => {
         const color = CHART_COLORS[i % CHART_COLORS.length];
         const label = item.name || "Unknown agent";
         const value = Number(item.count) || 0;
-        return (
-          <div key={label} className="w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">
+        const isActive = activeName != null && String(label) === String(activeName);
+        const inner = (
+          <>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>{i + 1}</span>
@@ -557,7 +601,15 @@ const TopAgentsCard = ({ agents }) => {
             <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
               <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(value / maxCount) * 100}%`, backgroundColor: color }} />
             </div>
-          </div>
+          </>
+        );
+        if (!onItemClick) {
+          return <div key={label} className="w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">{inner}</div>;
+        }
+        return (
+          <button key={label} type="button" onClick={() => onItemClick(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg text-left ${isActive ? "bg-red-500/10 ring-1 ring-red-500/30" : ""}`}>
+            {inner}
+          </button>
         );
       })}
     </div>
@@ -614,17 +666,21 @@ const EmptyState = ({ message }) => (
 );
 
 const FileSecurityScanner = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const urlStart = searchParams.get("start");
   const urlEnd = searchParams.get("end");
   const urlRange = searchParams.get("rangeKey");
+  const urlAgent = searchParams.get("agent");
+  const urlFocus = searchParams.get("focus");
   const [selectedFile, setSelectedFile] = useState(null);
   const [vtState, setVtState] = useState({ status: "idle", error: null, result: null, scanningHash: null });
   const [copiedText, setCopiedText] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterAgent, setFilterAgent] = useState("all");
+  const [filterAgent, setFilterAgent] = useState(urlAgent || "all");
   const [filterType, setFilterType] = useState("all");
   const [filterSeverity, setFilterSeverity] = useState("all");
+  const [folderFilter, setFolderFilter] = useState("all");
+  const [fileFilter, setFileFilter] = useState("all");
   const [rangeKey, setRangeKey] = useState(() => (urlRange && ["1h", "24h", "7d", "30d"].includes(urlRange) ? urlRange : "24h"));
   const [filterMode, setFilterMode] = useState(() => (urlStart && urlEnd ? "custom" : "range"));
   const [customDateRange, setCustomDateRange] = useState(() => {
@@ -643,9 +699,19 @@ const FileSecurityScanner = () => {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [viewportWidth, setViewportWidth] = useState(() => typeof window !== "undefined" ? window.innerWidth : 1280);
   const [timelineChartHeight, setTimelineChartHeight] = useState(250);
-  const [selectedTimelinePoint, setSelectedTimelinePoint] = useState(() => (urlStart && urlEnd ? { key: "custom", start: urlStart, end: urlEnd } : null));
+  const [selectedTimelinePoint, setSelectedTimelinePoint] = useState(null);
   const topAgentsPanelRef = useRef(null);
   const filesTableRef = useRef(null);
+
+  React.useEffect(() => {
+    if (!urlAgent && urlFocus !== "logs") return;
+    const id = setTimeout(() => {
+      if (filesTableRef.current && typeof filesTableRef.current.scrollIntoView === "function") {
+        try { filesTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); } catch {}
+      }
+    }, 300);
+    return () => clearTimeout(id);
+  }, [urlAgent, urlFocus, loading]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -757,8 +823,10 @@ const FileSecurityScanner = () => {
     if (filterAgent !== "all") result = result.filter((file) => String(file.agentName || "Unknown agent") === filterAgent);
     if (filterType !== "all") result = result.filter((file) => String(file.fileType || "unknown") === filterType);
     if (filterSeverity !== "all") result = result.filter((file) => file.findings.some((finding) => finding.severity === filterSeverity));
+    if (folderFilter !== "all") result = result.filter((file) => String(file.folder || "-") === folderFilter);
+    if (fileFilter !== "all") result = result.filter((file) => String(file.fileName || "") === fileFilter);
     return result;
-  }, [files, searchQuery, filterAgent, filterType, filterSeverity]);
+  }, [files, searchQuery, filterAgent, filterType, filterSeverity, folderFilter, fileFilter]);
 
   const analytics = useMemo(() => {
     const severityMap = new Map();
@@ -807,6 +875,34 @@ const FileSecurityScanner = () => {
   };
   const getVirusTotalLink = (sha256) => `https://www.virustotal.com/gui/file/${sha256}`;
   const handleRangeChange = (nextRange) => { setPage(1); setSelectedTimelinePoint(null); setFilterMode("range"); setRangeKey(nextRange); };
+  const focusFilesTable = useCallback(() => {
+    const el = filesTableRef.current;
+    if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+  const handleAgentSummaryClick = useCallback((item) => {
+    const value = String(item?.name || "all");
+    const next = filterAgent === value ? "all" : value;
+    setFilterAgent(next);
+    if (next !== "all") focusFilesTable();
+  }, [filterAgent, focusFilesTable]);
+  const handleSeveritySummaryClick = useCallback((item) => {
+    const value = String(item?.label || "all");
+    const next = filterSeverity === value ? "all" : value;
+    setFilterSeverity(next);
+    if (next !== "all") focusFilesTable();
+  }, [filterSeverity, focusFilesTable]);
+  const handleFolderSummaryClick = useCallback((item) => {
+    const value = String(item?.label || "all");
+    const next = folderFilter === value ? "all" : value;
+    setFolderFilter(next);
+    if (next !== "all") focusFilesTable();
+  }, [folderFilter, focusFilesTable]);
+  const handleFileSummaryClick = useCallback((item) => {
+    const value = String(item?.label || "");
+    const next = fileFilter === value ? "all" : value;
+    setFileFilter(next);
+    if (next !== "all") focusFilesTable();
+  }, [fileFilter, focusFilesTable]);
   const handleTimelinePointSelect = useCallback((point) => {
     if (!point) return;
     const pointKey = String(point.key ?? point.t ?? point.start ?? point);
@@ -815,8 +911,10 @@ const FileSecurityScanner = () => {
     const endIso = point.end || new Date(Number(point.t) + bucketMs - 1).toISOString();
     setPage(1);
     if (selectedTimelinePoint?.key === pointKey) setSelectedTimelinePoint(null);
-    else setSelectedTimelinePoint({ key: pointKey, start: startIso, end: endIso, bucketMs, time: point.t });
-    if (filesTableRef.current && typeof filesTableRef.current.scrollIntoView === "function") { try { filesTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); } catch {} }
+    else {
+      setSelectedTimelinePoint({ key: pointKey, start: startIso, end: endIso, bucketMs, time: point.t });
+      if (filesTableRef.current && typeof filesTableRef.current.scrollIntoView === "function") { try { filesTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); } catch {} }
+    }
   }, [rangeKey, selectedTimelinePoint]);
 
   if (loading && files.length === 0 && !loadError) {
@@ -924,7 +1022,7 @@ const FileSecurityScanner = () => {
             <span className="text-[9px] text-[var(--soc-text-muted)]">Unique agents</span>
             <span className="text-[11px] font-bold text-[var(--soc-text-primary)]">{analytics.uniqueAgents}</span>
           </div>
-          <TopAgentsCard agents={analytics.topAgents} />
+          <TopAgentsCard agents={analytics.topAgents} onItemClick={handleAgentSummaryClick} activeName={filterAgent !== "all" ? filterAgent : null} />
         </div>
       </div>
 
@@ -941,7 +1039,7 @@ const FileSecurityScanner = () => {
             </div>
             <span className="text-[10px] font-bold text-[var(--soc-text-primary)]">{files.length} files</span>
           </div>
-          <BarList items={analytics.severities} emptyLabel="No severity data" />
+          <BarList items={analytics.severities} emptyLabel="No severity data" onSelect={handleSeveritySummaryClick} activeValue={filterSeverity !== "all" ? filterSeverity : null} />
         </div>
         <div className="chart-card animate-fadeInUp stagger-2 flex flex-col" style={{ opacity: 0 }}>
           <div className="flex items-center justify-between mb-3">
@@ -954,7 +1052,7 @@ const FileSecurityScanner = () => {
             </div>
             <span className="text-[10px] font-bold text-violet-400">{analytics.topFolders?.length || 0} folders</span>
           </div>
-          <BarList items={analytics.topFolders} emptyLabel="No folder data" />
+          <BarList items={analytics.topFolders} emptyLabel="No folder data" onSelect={handleFolderSummaryClick} activeValue={folderFilter !== "all" ? folderFilter : null} />
         </div>
         <div className="chart-card animate-fadeInUp stagger-3 flex flex-col" style={{ opacity: 0 }}>
           <div className="flex items-center justify-between mb-3">
@@ -973,25 +1071,33 @@ const FileSecurityScanner = () => {
             const maxV = Math.max(...items.map((d) => d.value), 1);
             return (
               <div className="w-full min-w-0 max-w-full space-y-1.5">
-                {items.map((item, i) => (
-                  <div key={item.fullLabel || item.label} className="w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color: item.color }}>{i + 1}</span>
-                        <span className="min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)] font-mono" title={item.fullLabel || item.label}>{item.label}</span>
-                      </div>
-                      <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(item.value)}</span>
-                    </div>
-                    {item.sub && (
-                      <div className="-mt-0.5 ml-7 leading-none">
-                        <span className="text-[9px] text-[var(--soc-text-muted)]" title={`by ${item.sub}`}>by {item.sub}</span>
-                      </div>
-                    )}
-                    <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
-                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(item.value / maxV) * 100}%`, backgroundColor: item.color }} />
-                    </div>
-                  </div>
-                ))}
+                {items.map((item, i) => {
+                    const isActive = fileFilter !== "all" && String(item.label) === String(fileFilter);
+                    const inner = (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color: item.color }}>{i + 1}</span>
+                            <span className="min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)] font-mono" title={item.fullLabel || item.label}>{item.label}</span>
+                          </div>
+                          <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(item.value)}</span>
+                        </div>
+                        {item.sub && (
+                          <div className="-mt-0.5 ml-7 leading-none">
+                            <span className="text-[9px] text-[var(--soc-text-muted)]" title={`by ${item.sub}`}>by {item.sub}</span>
+                          </div>
+                        )}
+                        <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
+                          <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(item.value / maxV) * 100}%`, backgroundColor: item.color }} />
+                        </div>
+                      </>
+                    );
+                    return (
+                      <button key={item.fullLabel || item.label} type="button" onClick={() => handleFileSummaryClick(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg text-left ${isActive ? "bg-red-500/10 ring-1 ring-red-500/30" : ""}`}>
+                        {inner}
+                      </button>
+                    );
+                  })}
               </div>
             );
           })()}
@@ -1010,15 +1116,28 @@ const FileSecurityScanner = () => {
               agentFilter={filterAgent} onAgentChange={(v)=>{ setPage(1); setFilterAgent(v); }} agentOptions={filterOptions.agents}
               typeFilter={filterType} onTypeChange={(v)=>{ setPage(1); setFilterType(v); }} typeOptions={filterOptions.types}
               severityFilter={filterSeverity} onSeverityChange={(v)=>{ setPage(1); setFilterSeverity(v); }} severityOptions={["CRITICAL","HIGH","MEDIUM","LOW"]}
+              dateFilterLabel={urlStart && urlEnd ? `${formatDetailedTimestamp(urlStart)} - ${formatDetailedTimestamp(urlEnd)}` : ""}
+              onResetDateFilter={() => {
+                const nextParams = new URLSearchParams(searchParams);
+                nextParams.delete("start");
+                nextParams.delete("end");
+                setSearchParams(nextParams);
+                setSelectedTimelinePoint(null);
+                setFilterMode("range");
+                setRangeKey("24h");
+                setCustomDateRange(createDefaultDateRange(1));
+              }}
+              timelineFilterLabel={selectedTimelinePoint
+                ? `${formatDetailedTimestamp(selectedTimelinePoint.start)}${selectedTimelinePoint.end ? ` - ${formatDetailedTimestamp(selectedTimelinePoint.end)}` : ""}`
+                : ""}
+              onClearTimelineFilter={() => { setSelectedTimelinePoint(null); setPage(1); }}
+              folderFilterLabel={folderFilter !== "all" ? String(folderFilter) : ""}
+              onClearFolderFilter={() => setFolderFilter("all")}
+              fileFilterLabel={fileFilter !== "all" ? String(fileFilter) : ""}
+              onClearFileFilter={() => setFileFilter("all")}
             />
             <ExportCsvButton accent="red" onClick={handleExportCsv} />
           </div>
-          {selectedTimelinePoint && (
-            <div className="mt-3 flex items-start justify-between gap-3">
-              <div className="text-xs text-red-300">Timeline filter: {formatDetailedTimestamp(selectedTimelinePoint.start)}{selectedTimelinePoint.end ? ` - ${formatDetailedTimestamp(selectedTimelinePoint.end)}` : ""}</div>
-              <button onClick={()=>{ setSelectedTimelinePoint(null); setPage(1); }} className="shrink-0 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-200 transition-colors hover:bg-red-500/20">Reset Time Filter</button>
-            </div>
-          )}
         </div>
 
         <div className="overflow-x-auto">
@@ -1069,8 +1188,8 @@ const FileSecurityScanner = () => {
       </div>
 
       {selectedFile && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-lg max-w-3xl w-full max-h-[95vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-lg max-w-2xl w-full max-h-[85vh] overflow-y-auto">
             <div className="sticky top-0 bg-slate-800 border-b border-slate-700 px-4 py-3 flex justify-between items-center">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 bg-slate-700 rounded flex items-center justify-center text-xs font-bold text-slate-300">{String(selectedFile.fileType || "?").charAt(0).toUpperCase()}</div>
@@ -1078,7 +1197,7 @@ const FileSecurityScanner = () => {
               </div>
               <button onClick={()=>setSelectedFile(null)} className="text-slate-400 hover:text-slate-200 text-xl">✕</button>
             </div>
-            <div className="p-4 md:p-5 space-y-5">
+            <div className="p-3 md:p-4 space-y-4">
               <div>
                 <h3 className="text-xs md:text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2"><FileText className="h-3.5 w-3.5" /> File Metadata</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-700/30 rounded-lg p-3 border border-slate-700">

@@ -27,6 +27,7 @@ import {
   normalizeDateRange,
   toDateTimeLocalValue,
 } from "../utils/dateRange";
+import { adaptiveLeftGutter } from "../utils/chartAxis";
 import { API_BASE_URL } from "../config/Api";
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -86,9 +87,7 @@ const WaveChart = ({ data, color = "#3B82F6", height: _height = 140, rangeKey = 
 
   const width = size.width;
   const height = size.height;
-  const padding = width < 420 ? { l: 28, r: 8, t: 6, b: 20 } : { l: 40, r: 8, t: 6, b: 20 };
-  const innerW = width - padding.l - padding.r;
-  const innerH = height - padding.t - padding.b;
+  const baseP = width < 420 ? { l: 28, r: 8, t: 6, b: 20 } : { l: 40, r: 8, t: 6, b: 20 };
 
   if (!data || data.length === 0) {
     return (
@@ -99,6 +98,9 @@ const WaveChart = ({ data, color = "#3B82F6", height: _height = 140, rangeKey = 
   }
 
   const maxV = Math.max(1, ...data.map((d) => d.v));
+  const padding = { ...baseP, l: adaptiveLeftGutter([Math.round(maxV)], baseP.l) };
+  const innerW = width - padding.l - padding.r;
+  const innerH = height - padding.t - padding.b;
   const pointSpacing = data.length ? innerW / (data.length - 1) : innerW;
   const gridSteps = 5;
   const gridLines = [];

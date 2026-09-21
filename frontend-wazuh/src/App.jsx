@@ -4,6 +4,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import PrivateRoute from "./components/PrivateRoute";
 import AppLayout from "./components/AppLayout";
 import LoginPage from "./pages/LoginPage.jsx";
+import ResetPasswordPage from "./pages/ResetPasswordPage.jsx";
 import MainDashboard from "./pages/MainDashboard.jsx";
 import MlDashboard from "./pages/MlDashboard.jsx";
 import FimEvents from "./pages/FimEvents.jsx";
@@ -25,6 +26,7 @@ function App() {
         <Router basename={routerBasename}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
 
             {/* Protected Routes with Layout */}
             <Route

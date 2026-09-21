@@ -9,36 +9,75 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Load auth state dari localStorage saat mount
+  // Load auth state saat mount (localStorage = remember me, sessionStorage = sesi saja)
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    const userData = localStorage.getItem("user");
+    const storages = [localStorage, sessionStorage];
+    let restored = false;
 
-    if (token && userData) {
+    for (const storage of storages) {
       try {
-        setIsAuthenticated(true);
-        setUser(JSON.parse(userData));
+        const token = storage.getItem("token");
+        const userData = storage.getItem("user");
+        if (token && userData) {
+          setIsAuthenticated(true);
+          setUser(JSON.parse(userData));
+          restored = true;
+          break;
+        }
       } catch (error) {
         console.error("Error parsing user data:", error);
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        setIsAuthenticated(false);
-        setUser(null);
+        try {
+          storage.removeItem("token");
+          storage.removeItem("user");
+        } catch {
+          // abaikan
+        }
       }
+    }
+
+    if (!restored) {
+      setIsAuthenticated(false);
+      setUser(null);
     }
     setLoading(false);
   }, []);
 
-  const login = (token, userData) => {
-    localStorage.setItem("token", token);
-    localStorage.setItem("user", JSON.stringify(userData));
+  // remember = true → localStorage (tetap login), false → sessionStorage (hilang saat tab ditutup)
+  const login = (token, userData, remember = true) => {
+    const primary = remember ? localStorage : sessionStorage;
+    const secondary = remember ? sessionStorage : localStorage;
+    try {
+      secondary.removeItem("token");
+      secondary.removeItem("user");
+    } catch {
+      // abaikan
+    }
+    try {
+      primary.setItem("token", token);
+      primary.setItem("user", JSON.stringify(userData));
+    } catch (error) {
+      console.error("Failed to persist auth state:", error);
+      // Fallback ke memori agar login tetap bisa lanjut walau storage diblokir
+      try {
+        secondary.setItem("token", token);
+        secondary.setItem("user", JSON.stringify(userData));
+      } catch {
+        // abaikan
+      }
+    }
     setIsAuthenticated(true);
     setUser(userData);
   };
 
   const logout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+    try {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      sessionStorage.removeItem("token");
+      sessionStorage.removeItem("user");
+    } catch {
+      // abaikan
+    }
     setIsAuthenticated(false);
     setUser(null);
   };

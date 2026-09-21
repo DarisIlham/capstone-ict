@@ -28,16 +28,16 @@ export default function DateRangeFilter({ value, onChange, disabled = false, cla
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] text-[10px] font-medium text-[var(--soc-text-primary)] hover:border-purple-500/40 hover:bg-[var(--soc-elevated)] transition-all disabled:opacity-50"
       >
-        <CalendarDays className="h-3 w-3 text-purple-400" />
+        <CalendarDays className="h-3 w-3 text-[var(--soc-accent)] theme-light:text-slate-800" />
         <span className="truncate max-w-[120px]">{displayLabel}</span>
         <ChevronDown className={`h-3 w-3 text-[var(--soc-text-muted)] transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-[100] w-56 rounded-xl border border-[var(--soc-border)] shadow-2xl overflow-hidden" style={{ backgroundColor: "#0a0f2a" }}>
-          <div className="p-3 space-y-3" style={{ backgroundColor: "#0a0f2a" }}>
+        <div className="absolute right-0 top-full mt-1 z-[100] w-56 rounded-xl border border-[var(--soc-border)] shadow-2xl overflow-hidden bg-[var(--soc-elevated)]">
+          <div className="p-3 space-y-3 bg-[var(--soc-elevated)]">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-slate-400 w-8">From</span>
+              <span className="text-[10px] text-[var(--soc-text-muted)] w-8">From</span>
               <input
                 type="datetime-local"
                 value={value?.start || ""}
@@ -48,11 +48,11 @@ export default function DateRangeFilter({ value, onChange, disabled = false, cla
                   if (new Date(next.start) > new Date(next.end)) next.end = next.start;
                   onChange(next);
                 }}
-                className="flex-1 text-[10px] rounded-md border border-[var(--soc-border)] px-2 py-1.5 text-slate-200 focus:border-purple-500/50 focus:outline-none" style={{ backgroundColor: "#141b3d" }}
+                className="soc-date-time-input soc-date-time-input--from flex-1 text-[10px] rounded-md border border-[var(--soc-border)] px-2 py-1.5 bg-[var(--soc-card)] text-[var(--soc-text-primary)] focus:border-purple-500/50 focus:outline-none"
               />
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-slate-400 w-8">To</span>
+              <span className="text-[10px] text-[var(--soc-text-muted)] w-8">To</span>
               <input
                 type="datetime-local"
                 value={value?.end || ""}
@@ -63,7 +63,7 @@ export default function DateRangeFilter({ value, onChange, disabled = false, cla
                   if (new Date(next.start) > new Date(next.end)) next.start = next.end;
                   onChange(next);
                 }}
-                className="flex-1 text-[10px] rounded-md border border-[var(--soc-border)] px-2 py-1.5 text-slate-200 focus:border-purple-500/50 focus:outline-none" style={{ backgroundColor: "#141b3d" }}
+                className="soc-date-time-input soc-date-time-input--to flex-1 text-[10px] rounded-md border border-[var(--soc-border)] px-2 py-1.5 bg-[var(--soc-card)] text-[var(--soc-text-primary)] focus:border-purple-500/50 focus:outline-none"
               />
             </div>
             <button

@@ -61,7 +61,7 @@
   /* FIM payload CHANGES boxes (PAYLOAD detail) */
   --soc-payload-bg: rgba(13, 17, 41, 0.8);
   --soc-payload-border: rgba(30, 42, 74, 0.6);
-  --soc-payload-text: #10B981;
+  --soc-payload-text: #34D399;
 
   /* Tailwind slate remap for existing pages (dark purple) */
   --color-slate-950: #080B1A;
@@ -1256,6 +1256,113 @@ input[type="password"] {
   box-sizing: border-box;
 }
 
+/* =============================================
+   Login Page - cyber animated background (purple)
+   Grid perspektif + orb glow + garis scan + hujan
+   karakter. Hormat ke tema via opacity/warna.
+   ============================================= */
+.login-cyber-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.login-cyber-grid {
+  position: absolute;
+  left: -25%;
+  right: -25%;
+  bottom: -12%;
+  height: 62%;
+  background-image:
+    linear-gradient(rgba(168, 85, 247, 0.22) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(168, 85, 247, 0.22) 1px, transparent 1px);
+  background-size: 44px 44px;
+  transform: perspective(600px) rotateX(62deg);
+  animation: login-grid-scroll 9s linear infinite;
+  -webkit-mask-image: linear-gradient(to top, black 25%, transparent 92%);
+  mask-image: linear-gradient(to top, black 25%, transparent 92%);
+}
+
+@keyframes login-grid-scroll {
+  from { background-position-y: 0; }
+  to { background-position-y: 44px; }
+}
+
+.login-cyber-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(70px);
+  opacity: 0.32;
+  animation: login-orb-float 13s ease-in-out infinite alternate;
+}
+
+@keyframes login-orb-float {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(46px, -56px) scale(1.15); }
+}
+
+.login-cyber-scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 130px;
+  background: linear-gradient(to bottom, transparent, rgba(168, 85, 247, 0.13), transparent);
+  animation: login-scan 8s linear infinite;
+}
+
+@keyframes login-scan {
+  from { top: -18%; }
+  to { top: 112%; }
+}
+
+.login-cyber-rain {
+  position: absolute;
+  top: -25%;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(192, 132, 252, 0.45);
+  writing-mode: vertical-rl;
+  white-space: nowrap;
+  animation-name: login-rain;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes login-rain {
+  from { transform: translateY(-8%); }
+  to { transform: translateY(135vh); }
+}
+
+/* Tema terang: semua lapisan dibuat jauh lebih samar */
+:root[data-theme="light"] .login-cyber-grid {
+  background-image:
+    linear-gradient(rgba(124, 58, 237, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124, 58, 237, 0.1) 1px, transparent 1px);
+}
+
+:root[data-theme="light"] .login-cyber-orb {
+  opacity: 0.16;
+}
+
+:root[data-theme="light"] .login-cyber-scan {
+  background: linear-gradient(to bottom, transparent, rgba(124, 58, 237, 0.07), transparent);
+}
+
+:root[data-theme="light"] .login-cyber-rain {
+  color: rgba(124, 58, 237, 0.28);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-cyber-grid,
+  .login-cyber-orb,
+  .login-cyber-scan,
+  .login-cyber-rain {
+    animation: none;
+  }
+}
+
 @media (max-height: 640px) {
   .login-page-shell {
     justify-content: flex-start;
@@ -1273,7 +1380,6 @@ input[type="password"] {
 .login-recaptcha-wrap {
   display: flex;
   justify-content: center;
-  width: 100%;
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
@@ -1292,27 +1398,21 @@ input[type="password"] {
   max-width: 100%;
 }
 
-/* Dark-mode reCAPTCHA: Google still paints a light edge border around its
-   dark widget (cross-origin iframe, cannot be styled from inside).
-   Neutralize it with a dark slot backdrop and a 2px-narrower frame so only
-   dark pixels flank the widget. Light theme is untouched. */
-:root[data-theme="dark"] .login-recaptcha-wrap .g-recaptcha > div {
-  background: #222 !important;
-  border-radius: 4px !important;
-  line-height: 0 !important;
-}
-
-:root[data-theme="dark"] .login-recaptcha-wrap .g-recaptcha iframe {
+:root[data-theme="dark"] .login-recaptcha-wrap iframe {
   display: block !important;
+  width: 304px !important;
+  height: 78px !important;
   border: 0 !important;
   outline: none !important;
   box-shadow: none !important;
-  background: #222 !important;
-  /* Crop 1.5px tepi luar iframe (tempat garis terang Google berada).
-      Tidak menyentuh checkbox/logo di dalam; tanpa overlay; tanpa invert. */
-  clip-path: inset(1.5px) !important;
-  border-radius: 4px !important;
+  background: transparent !important;
+  color-scheme: dark !important;
+  /* Akal-akalan: geser widget grayscale Google ke biru aksen dashboard.
+     Hapus baris ini untuk kembali ke hitam bawaan. */
+  filter: sepia(0.5) saturate(3) hue-rotate(170deg) brightness(1.02) !important;
+  clip-path: inset(4px 5px 6px 5px) !important;
 }
+
 
 /* Captcha scale is driven proportionally from JS (see LoginPage
    captchaZoom), so no stepped breakpoint zoom is needed here. */
@@ -1625,6 +1725,16 @@ span {
 .soc-date-time-input {
   inline-size: 9.75rem;
   max-inline-size: 100%;
+}
+
+/* Native datetime-local controls (text + calendar picker icon) follow the
+   active theme. Without this the picker icon keeps the dark-scheme glyph
+   and becomes invisible on light inputs. */
+:root[data-theme="dark"] .soc-date-time-input {
+  color-scheme: dark;
+}
+:root[data-theme="light"] .soc-date-time-input {
+  color-scheme: light;
 }
 
 .soc-date-time-input::-webkit-calendar-picker-indicator,
@@ -3503,6 +3613,10 @@ span {
    Keeps [back] [date] [Light] on one row without overlap. Short date
    ("Sep 11, 2026") replaces the full date only below 280px; same data.
    ========================================================================== */
+/* Light theme: topbar gets a shadow like the sidebar (mirrored downward). */
+:root[data-theme="light"] .soc-topbar {
+  box-shadow: 0 4px 24px rgba(15, 23, 42, 0.1);
+}
 .soc-topbar .soc-topbar-date-short {
   display: none;
 }
@@ -6293,15 +6407,26 @@ aside.w-60 {
   overflow: hidden;
 }
 
-/* Most Changed Files di Dashboard: kunci seluruh stack konten di dalam card.
-   Label path file bisa sangat panjang — paksa truncate + bar tidak
-   boleh melebar melebihi container. */
+/* Most Changed Files di Dashboard: kunci lebar konten di dalam card,
+   tapi tinggi card stretch mengikuti baris grid (sama tinggi dengan
+   Threat Classification). Label path file yang panjang dipaksa truncate
+   horizontal saja, jangan clip vertikal (itu yang bikin progress bar
+   terakhir terpotong). */
 .grid:has(.dash-most-changed),
 .chart-card:has(.dash-most-changed) {
   min-width: 0;
   max-width: 100%;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: visible;
   box-sizing: border-box;
+}
+
+.chart-card.dash-most-changed {
+  height: auto;
+  min-height: 0;
+  align-self: stretch;
+  overflow-x: hidden;
+  overflow-y: visible;
 }
 
 .dash-most-changed,
@@ -6314,7 +6439,8 @@ aside.w-60 {
 }
 
 .dash-most-changed-item {
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: visible;
 }
 
 .dash-most-changed-label,
@@ -6339,6 +6465,113 @@ aside.w-60 {
 
 .chart-card:hover {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+/* Main dashboard fluid layout. Keep the two-column composition until the
+   chart and companion panel can no longer remain readable side by side. */
+.dashboard-main,
+.dashboard-main > *,
+.dashboard-content-grid > *,
+.dashboard-kpi-grid > * {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.dashboard-header {
+  gap: clamp(10px, 1.25vw, 18px);
+}
+
+.dashboard-header h1 {
+  font-size: clamp(1rem, 1.15vw, 1.25rem);
+  line-height: 1.25;
+}
+
+.dashboard-filters {
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.dashboard-kpi-grid,
+.dashboard-content-grid {
+  gap: clamp(10px, 1vw, 16px);
+}
+
+.dashboard-kpi-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dashboard-content-grid {
+  grid-template-columns: minmax(0, 2.3fr) minmax(220px, 1fr);
+}
+
+.dashboard-content-grid > .xl\:col-span-2 {
+  grid-column: 1;
+}
+
+.dashboard-content-grid > .xl\:col-start-3 {
+  grid-column: 2;
+}
+
+.dashboard-content-grid > .xl\:row-start-1 {
+  grid-row: 1;
+}
+
+.dashboard-content-grid > .xl\:row-start-2 {
+  grid-row: 2;
+}
+
+.dashboard-content-grid .chart-card {
+  padding: clamp(10px, 1vw, 16px);
+}
+
+.dashboard-content-grid .min-h-\[220px\] {
+  min-height: clamp(180px, 18vw, 260px);
+}
+
+@media (max-width: 1099px) {
+  .dashboard-content-grid {
+    grid-template-columns: minmax(0, 2fr) minmax(200px, 0.8fr);
+  }
+
+  .dashboard-kpi-grid {
+    gap: 10px;
+  }
+}
+
+@media (max-width: 767px) {
+  .dashboard-header {
+    align-items: stretch;
+  }
+
+  .dashboard-filters {
+    justify-content: flex-start;
+  }
+
+  .dashboard-content-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-content-grid > .xl\:col-span-2,
+  .dashboard-content-grid > .xl\:col-start-3 {
+    grid-column: 1;
+  }
+
+  .dashboard-content-grid > .xl\:row-start-1,
+  .dashboard-content-grid > .xl\:row-start-2 {
+    grid-row: auto;
+  }
+}
+
+@media (max-width: 479px) {
+  .dashboard-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .dashboard-content-grid .chart-card {
+    padding: 10px;
+  }
 }
 
 /* Button Modern */

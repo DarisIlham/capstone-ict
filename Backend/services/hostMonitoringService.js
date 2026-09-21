@@ -62,7 +62,7 @@ export async function listHosts(query) {
       aggs: {
         by_agent: {
           terms: {
-            field: "agent.name.keyword",
+            field: "agent.name",
             size: 50
           },
           aggs: {
@@ -87,7 +87,7 @@ export async function listHosts(query) {
           }
         },
         total_agents: {
-          cardinality: { field: "agent.name.keyword" }
+          cardinality: { field: "agent.name" }
         }
       }
     })
@@ -159,7 +159,7 @@ export async function getHostStats(query) {
       query: { bool: { must } },
       aggs: {
         total_agents: {
-          cardinality: { field: "agent.name.keyword" }
+          cardinality: { field: "agent.name" }
         },
         avg_cpu: {
           avg: { field: "system.cpu.total" }
@@ -171,7 +171,7 @@ export async function getHostStats(query) {
           avg: { field: "system.filesystem.used.pct" }
         },
         by_status: {
-          terms: { field: "agent.name.keyword", size: 50 },
+          terms: { field: "agent.name", size: 50 },
           aggs: {
             latest_ts: { max: { field: "@timestamp" } }
           }
@@ -337,7 +337,7 @@ export async function getTopAgents(query) {
       query: { bool: { must } },
       aggs: {
         by_agent: {
-          terms: { field: "agent.name.keyword", size: 5 },
+          terms: { field: "agent.name", size: 5 },
           aggs: {
             doc_count: { value_count: { field: "@timestamp" } },
             os: {
@@ -382,13 +382,15 @@ export async function getTopSessions(query) {
         query: { bool: { must } },
         aggs: {
           by_session: {
-            terms: { field: "linux.session.keyword", size: 5 },
+            // NOTE: linux.session is mapped as `keyword` directly (no
+            // `.keyword` subfield), so aggregate on the field itself.
+            terms: { field: "linux.session", size: 5 },
             aggs: {
               by_user: {
-                terms: { field: "linux.user.keyword", size: 1 },
+                terms: { field: "linux.user", size: 1 },
               },
               by_agent: {
-                terms: { field: "agent.name.keyword", size: 1 },
+                terms: { field: "agent.name", size: 1 },
               },
             },
           },

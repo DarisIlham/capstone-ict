@@ -13,7 +13,14 @@ export const API_BASE_URL = `${window.location.origin}${APP_BASE_PATH}`;
 export const SOCKET_URL = `http://${HOST}:${SOCKET_PORT}`;
 export const LOGIN_PATH = `${APP_BASE_PATH}/login`;
 
-// Create Axios instance with default config
+// Token bisa tersimpan di localStorage (remember me) atau sessionStorage.
+export const getAuthToken = () => {
+  try {
+    return localStorage.getItem("token") || sessionStorage.getItem("token");
+  } catch {
+    return null;
+  }
+};
 const API = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -24,7 +31,7 @@ const API = axios.create({
 // Add request interceptor to include token
 API.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -39,8 +46,14 @@ API.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       // Token expired, clear and redirect to login
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
+      try {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        sessionStorage.removeItem("token");
+        sessionStorage.removeItem("user");
+      } catch {
+        // abaikan
+      }
       if (window.location.pathname !== LOGIN_PATH) {
         window.location.replace(LOGIN_PATH);
       }
