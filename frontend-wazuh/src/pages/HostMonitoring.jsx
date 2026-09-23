@@ -28,6 +28,7 @@ import {
   toDateTimeLocalValue,
 } from "../utils/dateRange";
 import { adaptiveLeftGutter } from "../utils/chartAxis";
+import { InlineEmptyState } from "../components/EmptyState";
 import { API_BASE_URL } from "../config/Api";
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -226,7 +227,7 @@ const DonutChart = ({ items, size = 120, stroke = 14, centerTop, centerBottom })
 // ══════════════════════════════════════════════════════════════════════════════
 const HorizontalBarList = ({ items, emptyLabel = "No data" }) => {
   if (!items || items.length === 0) {
-    return <div className="flex h-full min-h-16 flex-col items-center justify-center text-center"><p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">{emptyLabel}</p></div>;
+    return <InlineEmptyState title={emptyLabel} description="No activity available for the selected time range." />;
   }
   const maxCount = Math.max(...items.map((d) => d.value), 1);
   const COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
@@ -260,12 +261,7 @@ const HorizontalBarList = ({ items, emptyLabel = "No data" }) => {
 // ══════════════════════════════════════════════════════════════════════════════
 const TopAgentChart = ({ items, emptyLabel = "No agent data" }) => {
   if (!items || items.length === 0) {
-    return (
-      <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
-        <p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">{emptyLabel}</p>
-        <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">No agent activity available for the selected time range.</p>
-      </div>
-    );
+    return <InlineEmptyState title={emptyLabel} description="No agent activity available for the selected time range." />;
   }
 
   const maxValue = Math.max(...items.map((d) => d.value), 1);

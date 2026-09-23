@@ -4,7 +4,6 @@ import express from "express";
 import axios from "axios";
 import https from "https";
 import cors from "cors";
-import { sendAlert } from "./telegram.js";
 import os from "os";
 import { Pool } from "pg";
 // MongoDB removed: no connectDB import

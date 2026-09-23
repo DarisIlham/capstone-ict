@@ -28,6 +28,7 @@ import {
   toDateTimeLocalValue,
 } from "../utils/dateRange";
 import { adaptiveLeftGutter } from "../utils/chartAxis";
+import { InlineEmptyState } from "../components/EmptyState";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -413,11 +414,7 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items", onP
   const width = size.width;
   const height = size.height;
   if (!items || items.length === 0) {
-    return (
-      <div className="flex m-auto items-center justify-center px-2 py-10 text-center text-[11px] text-slate-500">
-        No data available
-      </div>
-    );
+    return <InlineEmptyState title="No data available" />;
   }
 
   const sorted = [...items].sort((a, b) => b.value - a.value);
@@ -496,10 +493,19 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items", onP
             const halfLabel = Math.ceil(String(p.label ?? "").length * 5.4 / 2) + 3;
             const labelX = clamp(p.x, halfLabel + 2, Math.max(halfLabel + 2, width - halfLabel - 2));
             return (
-              <g key={`${p.label}-${p.index}`}>
+              <g
+                key={`${p.label}-${p.index}`}
+                onMouseEnter={() => setSelected(p)}
+                onMouseLeave={() => setSelected(null)}
+                onPointerEnter={() => setSelected(p)}
+                onPointerMove={() => setSelected(p)}
+              >
+                <title>{`${p.label}: ${p.value} ${totalLabel}`}</title>
                 <circle cx={p.x} cy={p.y} r={isSel ? "6" : "9"} fill="transparent" className="cursor-pointer focus:outline-none" style={{ outline: "none" }}
                   onMouseEnter={() => setSelected(p)}
                   onMouseLeave={() => setSelected(null)}
+                  onPointerEnter={() => setSelected(p)}
+                  onPointerMove={() => setSelected(p)}
                   onFocus={() => setSelected(p)}
                   onBlur={() => setSelected(null)}
                   onClick={() => {
@@ -522,7 +528,7 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items", onP
             );
           })}
         </svg>
-        {selected && !onPointClick &&
+        {selected &&
           (() => {
             const pos = getContainedTooltip(selected.x, selected.y, width, height);
             return (
@@ -558,12 +564,7 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items", onP
 
 const CompactBarChart = ({ items, emptyLabel = "No data available", onItemClick = null, activeValue = null }) => {
   if (!items || items.length === 0) {
-    return (
-      <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
-        <p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">{emptyLabel}</p>
-        <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">No data for the selected time range.</p>
-      </div>
-    );
+    return <InlineEmptyState title={emptyLabel} />;
   }
 
   const maxValue = Math.max(...items.map((d) => d.value), 1);
@@ -610,12 +611,7 @@ const CompactBarChart = ({ items, emptyLabel = "No data available", onItemClick 
 
 const TopAgentsCard = ({ agents, onItemClick = null, activeName = null }) => {
   if (!agents || agents.length === 0) {
-    return (
-      <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
-        <p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">No agent data</p>
-        <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">No agent activity available for the selected time range.</p>
-      </div>
-    );
+    return <InlineEmptyState title="No agent data" description="No agent activity available for the selected time range." />;
   }
   const maxValue = Math.max(...agents.map((a) => a.value), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
@@ -821,7 +817,7 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
     };
   }, [syncSize, words]);
 
-  if (!words || words.length === 0) return <div className="m-auto flex items-center justify-center px-2 py-10 text-center text-slate-600 text-xs">No command data</div>;
+  if (!words || words.length === 0) return <InlineEmptyState title="No command data" description="No command activity available for the selected time range." />;
 
   // Follow the measured box (presentation only): never assume a minimum
   // wider than the actual container, or words overflow on small phones.
@@ -843,29 +839,9 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
   })();
 
   const toWeight = (fs) => (fs > 26 ? "800" : fs > 18 ? "700" : "500");
-  const SAFE_X = 14;
-  const SAFE_Y = 12;
-  const minInnerW = 2 * SAFE_X;
-  const minInnerH = 2 * SAFE_Y;
-
-  const fitFontSize = (text, fs) => {
-    const maxW = W - minInnerW;
-    const maxH = H - minInnerH;
-    if (maxW < 12 || maxH < 12) return 8;
-    let f = fs;
-    let weight = toWeight(f);
-    for (let iter = 0; iter < 3; iter++) {
-      const w = measureTextWidth(text, f, weight);
-      const h = f * 1.4;
-      const scale = Math.min(maxW / w, maxH / h);
-      if (scale >= 1) break;
-      f = Math.max(8, Math.floor(f * scale));
-      weight = toWeight(f);
-    }
-    return f;
-  };
-
-  const fontSize = (count) => Math.round(15 + ((count - minCount) / range) * 40);
+  const SAFE_X = 18;
+  const SAFE_Y = 14;
+  const fontSize = (count) => Math.round(30 + ((count - minCount) / range) * 60);
   const placed = [];
   const rects = [];
   const overlaps = (nx, ny, nw, nh) => {
@@ -880,25 +856,26 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
 
   for (let i = 0; i < words.length; i++) {
     const { text, count } = words[i];
-    const fs = fitFontSize(text, fontSize(count));
+    const fs = fontSize(count);
     const weight = toWeight(fs);
     const tw = measureTextWidth(text, fs, weight);
     const th = Math.ceil(fs * 1.4);
-    if (tw > W - minInnerW || th > H - minInnerH) continue;
+    if (tw > W - 2 * SAFE_X || th > H - 2 * SAFE_Y) continue;
 
-    const xRatio = words.length > 1 ? (i * 0.61803398875 + 0.17) % 1 : 0.5;
-    const yRatio = words.length > 1 ? (i * 0.41421356237 + 0.23) % 1 : 0.5;
-    const targetX = SAFE_X + xRatio * (W - 2 * SAFE_X);
-    const targetY = SAFE_Y + yRatio * (H - 2 * SAFE_Y);
+    // Start inside a moderate central zone. The local spiral fills this area
+    // first, then expands only as needed instead of spanning the full card.
+    const zoneW = (W - 2 * SAFE_X) * 0.55;
+    const zoneH = (H - 2 * SAFE_Y) * 0.6;
+    const zoneX = (W - zoneW) / 2;
+    const zoneY = (H - zoneH) / 2;
+    const targetX = zoneX + (((i * 0.61803398875 + 0.17) % 1) * zoneW);
+    const targetY = zoneY + (((i * 0.41421356237 + 0.23) % 1) * zoneH);
     let placedX = targetX;
     let placedY = targetY;
     let found = false;
     for (let step = 0; step < 800; step++) {
       const angle = step * 0.35;
-      // Wider spiral fills short-wide boxes edge-to-edge so the cloud
-      // does not collapse into a flat band in the middle (closer to
-      // the File Integrity cloud behaviour).
-      const radius = step * 0.8;
+      const radius = step * 0.45;
       const cx = targetX + radius * Math.cos(angle);
       const cy = targetY + radius * Math.sin(angle) * 0.6;
       if (cx - tw / 2 >= SAFE_X && cx + tw / 2 <= W - SAFE_X && cy - th / 2 >= SAFE_Y && cy + th / 2 <= H - SAFE_Y && !overlaps(cx, cy, tw, th)) {
@@ -1121,6 +1098,33 @@ const HostMonitoring = () => {
 
   const logsTableRef = useRef(null);
   const topAgentsPanelRef = useRef(null);
+  const knownDangerousIdsRef = useRef(null);
+  const audioContextRef = useRef(null);
+
+  const playDangerAlert = useCallback(() => {
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+      const audioContext = audioContextRef.current || new AudioContextClass();
+      audioContextRef.current = audioContext;
+      if (audioContext.state === "suspended") audioContext.resume();
+
+      const oscillator = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
+      oscillator.frequency.setValueAtTime(660, audioContext.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.18, audioContext.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.28);
+      oscillator.connect(gain);
+      gain.connect(audioContext.destination);
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + 0.3);
+    } catch (audioError) {
+      console.warn("Danger alert sound is unavailable:", audioError);
+    }
+  }, []);
 
   React.useEffect(() => {
     if (!urlAgent && urlFocus !== "logs") return;
@@ -1218,14 +1222,25 @@ const HostMonitoring = () => {
       const normalizedLogs = (listResponse.data || []).map(normalizeLinuxCommand);
       const normalizedAnalyticsLogs = (analyticsResponse.data || []).map(normalizeLinuxCommand);
       const normalizedDangerousLogs = (dangerousResponse.data || []).map(normalizeLinuxCommand);
+      const currentDangerousLogs = normalizedDangerousLogs.length
+        ? normalizedDangerousLogs
+        : normalizedLogs.filter((log) => log.command.risk === "suspicious");
+      const currentDangerousIds = new Set(
+        currentDangerousLogs.map((log) => String(
+          log.id || `${log.timestamp}|${log.agentName}|${log.command?.cmd}`
+        ))
+      );
+      if (knownDangerousIdsRef.current) {
+        const hasNewDanger = [...currentDangerousIds].some(
+          (id) => !knownDangerousIdsRef.current.has(id)
+        );
+        if (hasNewDanger) playDangerAlert();
+      }
+      knownDangerousIdsRef.current = currentDangerousIds;
 
       setLogs(normalizedLogs);
       setAnalyticsLogs(normalizedAnalyticsLogs.length ? normalizedAnalyticsLogs : normalizedLogs);
-      setDangerousLogs(
-        normalizedDangerousLogs.length
-          ? normalizedDangerousLogs
-          : normalizedLogs.filter((log) => log.command.risk === "suspicious")
-      );
+      setDangerousLogs(currentDangerousLogs);
       setPagination(
         listResponse.pagination || {
           page,
@@ -1247,7 +1262,7 @@ const HostMonitoring = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [page, pageSize, rangeKey, filterMode, customDateRange, searchQuery, selectedTimelinePoint, statusFilter, userFilter, agentFilter, sessionFilter, selectedCommandFilter]);
+  }, [page, pageSize, rangeKey, filterMode, customDateRange, searchQuery, selectedTimelinePoint, statusFilter, userFilter, agentFilter, sessionFilter, selectedCommandFilter, playDangerAlert]);
 
   const handleExportCsv = async () => {
     try {
@@ -2038,12 +2053,7 @@ const HostMonitoring = () => {
               </div>
               {(() => {
                 const items = analytics.topUsers || [];
-                if (!items.length) return (
-                  <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
-                    <p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">No active user data</p>
-                    <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">No user activity for the selected time range.</p>
-                  </div>
-                );
+                if (!items.length) return <InlineEmptyState title="No active user data" description="No user activity for the selected time range." />;
                 const maxValue = Math.max(...items.map(d=>d.value), 1);
                 const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
                 return (
@@ -2265,11 +2275,17 @@ const HostMonitoring = () => {
                     <td colSpan={6} className="px-2 md:px-4 py-10 text-center text-[10px] md:text-[11px] text-slate-500">
                       {keywordFilterActive ? (
                         <div className="flex flex-col items-center gap-2">
-                          <span>No logs match the selected filters.</span>
+                          <div>
+                            <p className="text-[10px] font-semibold text-[var(--soc-text-secondary)]">No logs match the selected filters</p>
+                            <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">Try adjusting the selected filters.</p>
+                          </div>
                           <button onClick={clearKeywordFilter} className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-semibold text-slate-300 hover:border-sky-500/50 hover:text-sky-300 transition-colors">Clear filters</button>
                         </div>
                       ) : (
-                        "No audit log entries found for the current filter."
+                        <div>
+                          <p className="text-[10px] font-semibold text-[var(--soc-text-secondary)]">No audit log entries found</p>
+                          <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">No audit log entries match the current filter.</p>
+                        </div>
                       )}
                     </td>
                   </tr>

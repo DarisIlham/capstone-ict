@@ -337,7 +337,7 @@ export default function Alert() {
             Monitor and investigate security events across all sources
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 min-[420px]:gap-2">
           <RangeFilter
             rangeKey={rangeKey}
             onRangeChange={handleRangeChange}
@@ -346,7 +346,7 @@ export default function Alert() {
             value={customDateRange}
             onChange={handleCustomRangeChange}
           />
-          <div className="relative flex items-center bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)]">
+          <div className="relative flex items-center shrink-0 bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)] h-8">
             <select
               value={pageSize}
               onChange={(event) => {
@@ -354,7 +354,7 @@ export default function Alert() {
                 setPageSize(Number(event.target.value));
               }}
               aria-label="Rows per page"
-              className="appearance-none bg-transparent py-2 pl-2.5 pr-5 text-[11px] font-medium leading-tight text-[var(--soc-text-primary)] focus:outline-none"
+              className="appearance-none bg-transparent py-1.5 pl-2 pr-4 text-[10px] font-medium leading-tight text-[var(--soc-text-primary)] focus:outline-none"
             >
               {PAGE_SIZE_OPTIONS.map((size) => (<option key={size} value={size} className="bg-[var(--soc-card)] text-[var(--soc-text-primary)]">{size}</option>))}
             </select>
@@ -392,34 +392,34 @@ export default function Alert() {
       </div>
 
       {/* Search + Filters */}
-      <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--soc-text-muted)]" />
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 min-w-0">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--soc-text-muted)]" />
           <input
             type="text"
             value={search}
             onChange={(e) => { setPage(1); setSearch(e.target.value); }}
-            placeholder="Search alerts by title, source, asset, or reason..."
-            className="w-full pl-10 pr-4 py-2 bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg text-[11px] text-[var(--soc-text-primary)] placeholder-[var(--soc-text-muted)] focus:outline-none focus:border-purple-500/50 transition-colors"
+            placeholder="Search alerts..."
+            className="w-full h-8 pl-9 pr-3 bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg text-[10px] text-[var(--soc-text-primary)] placeholder-[var(--soc-text-muted)] focus:outline-none focus:border-purple-500/50 transition-colors"
           />
         </div>
         <div ref={filtersRef} className="relative shrink-0">
           <button
             type="button"
             onClick={() => setFiltersOpen((c) => !c)}
-            className="flex items-center gap-2 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-3 pr-2.5 text-[11px] text-[var(--soc-text-primary)] focus:outline-none focus:ring-1 focus:ring-purple-500/50 transition-colors hover:bg-[var(--soc-elevated)]"
+            className="flex items-center gap-1.5 h-8 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] pl-2.5 pr-2 text-[10px] text-[var(--soc-text-primary)] focus:outline-none focus:ring-1 focus:ring-purple-500/50 transition-colors hover:bg-[var(--soc-elevated)]"
           >
-            <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--soc-text-muted)]" />
+            <SlidersHorizontal className="h-3 w-3 text-[var(--soc-text-muted)]" />
             <span className="font-medium">Filters</span>
             {activeFilterCount > 0 && (
               <span className="flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-purple-500/20 text-purple-300 text-[9px] font-bold">
                 {activeFilterCount}
               </span>
             )}
-            <ChevronDown className={`h-3.5 w-3.5 text-[var(--soc-text-muted)] transition-transform ${filtersOpen ? "rotate-180" : ""}`} />
+            <ChevronDown className={`h-3 w-3 text-[var(--soc-text-muted)] transition-transform ${filtersOpen ? "rotate-180" : ""}`} />
           </button>
           {filtersOpen && (
-            <div className="absolute right-0 top-full mt-1 z-[100] w-[240px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] shadow-2xl overflow-hidden">
+            <div className="absolute right-0 top-full mt-1 z-[100] w-[220px] max-w-[calc(100vw-3rem)] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] shadow-2xl overflow-hidden">
               <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--soc-border)]">
                 <span className="text-[10px] font-semibold text-[var(--soc-text-primary)]">Filter Options</span>
                 {activeFilterCount > 0 && (
@@ -533,31 +533,27 @@ export default function Alert() {
                   <div className="flex items-start gap-3">
                     <div className={`mt-1 w-2 h-2 rounded-full shrink-0 ${sev.dot}`} />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
                         <span className={`inline-flex items-center px-2 py-0.5 text-[9px] font-semibold rounded-full border ${sev.bg} ${sev.color} ${sev.border}`}>
                           {sev.label}
                         </span>
-                        <span className="text-[10px] text-[var(--soc-text-muted)] font-medium">{alert.source}</span>
-                        <span className="text-[10px] text-[var(--soc-text-muted)]">·</span>
-                        <span className="text-[10px] text-[var(--soc-text-muted)]">{alert.asset}</span>
-                        {alert.user && alert.user !== "-" && (
-                          <>
-                            <span className="text-[10px] text-[var(--soc-text-muted)]">·</span>
-                            <span className="text-[10px] text-[var(--soc-text-muted)]">User: {alert.user}</span>
-                          </>
-                        )}
+                        <span className="text-[10px] text-[var(--soc-text-muted)] font-medium truncate min-w-0">{alert.source}</span>
+                        <span className="ml-auto text-[9px] text-[var(--soc-text-muted)] shrink-0 flex items-center gap-1 pl-2">
+                          <Clock className="h-3 w-3" />
+                          {new Date(alert.timestamp).toLocaleString("en-US", {
+                            month: "short",
+                            day: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
                       </div>
-                      <p className="text-[12px] text-[var(--soc-text-primary)] mt-1 truncate font-medium">{alert.title}</p>
-                      <p className="text-[10px] text-[var(--soc-text-muted)] mt-0.5 truncate">{alert.reason}</p>
-                    </div>
-                    <div className="text-[9px] text-[var(--soc-text-muted)] shrink-0 flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {new Date(alert.timestamp).toLocaleString("en-US", {
-                        month: "short",
-                        day: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      <p className="text-[10px] text-[var(--soc-text-muted)] mt-1 break-all">{alert.asset}</p>
+                      {alert.user && alert.user !== "-" && (
+                        <p className="text-[10px] text-[var(--soc-text-muted)] break-all">User: {alert.user}</p>
+                      )}
+                      <p className="text-[12px] text-[var(--soc-text-primary)] mt-1 break-words font-medium">{alert.title}</p>
+                      <p className="text-[10px] text-[var(--soc-text-muted)] mt-0.5 break-words">{alert.reason}</p>
                     </div>
                   </div>
                 </div>
@@ -566,9 +562,9 @@ export default function Alert() {
           </div>
         )}
         {filteredAlerts.length > 0 && (
-          <div className="border-t border-[var(--soc-border)] bg-[var(--soc-elevated)]/50 px-2 md:px-4 py-3">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2 md:gap-0">
-              <div className="text-[10px] md:text-[11px] font-mono text-[var(--soc-text-muted)]">
+          <div className="border-t border-[var(--soc-border)] bg-[var(--soc-elevated)]/50 px-2 md:px-4 py-2.5">
+            <div className="flex flex-col items-center justify-between gap-2 md:flex-row md:gap-0">
+              <div className="text-[9px] md:text-[11px] font-mono text-[var(--soc-text-muted)] text-center">
                 <span className="hidden md:inline">SHOWING </span>
                 <span className="font-bold text-[var(--soc-text-primary)]">{(activePage - 1) * pageSize + 1}</span>
                 <span className="hidden md:inline"> - </span><span className="md:hidden">-</span>
@@ -577,12 +573,12 @@ export default function Alert() {
                 <span className="font-bold text-[var(--soc-text-primary)]">{filteredAlerts.length}</span>
                 <span className="hidden md:inline"> ALERTS</span>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button disabled={activePage === 1 || loading} onClick={() => setPage(1)} className="rounded border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-[var(--soc-text-secondary)] transition-all hover:border-purple-500/50 hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-20">FIRST</button>
-                <button disabled={activePage === 1 || loading} onClick={() => setPage(Math.max(1, activePage - 1))} className="rounded border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-[var(--soc-text-secondary)] transition-all hover:border-purple-500/50 hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-20">PREV</button>
-                <span className="px-1 text-[10px] md:text-[11px] font-black text-[var(--soc-text-muted)]"><span className="hidden md:inline">PAGE </span><span className="text-[var(--soc-text-primary)]">{activePage}</span> / {totalPages}</span>
-                <button disabled={activePage >= totalPages || loading} onClick={() => setPage(Math.min(totalPages, activePage + 1))} className="rounded border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-[var(--soc-text-secondary)] transition-all hover:border-purple-500/50 hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-20">NEXT</button>
-                <button disabled={activePage >= totalPages || loading} onClick={() => setPage(totalPages)} className="rounded border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-[var(--soc-text-secondary)] transition-all hover:border-purple-500/50 hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-20">LAST</button>
+              <div className="flex items-center justify-center gap-1 min-[420px]:gap-1.5">
+                <button disabled={activePage === 1 || loading} onClick={() => setPage(1)} className="rounded border border-[var(--soc-border)] bg-[var(--soc-card)] px-2 py-1 text-[9px] md:text-[11px] md:px-3 md:py-1.5 font-bold text-[var(--soc-text-secondary)] transition-all hover:border-purple-500/50 hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-20 inline-flex items-center justify-center min-w-[44px] min-[420px]:min-w-[54px]">FIRST</button>
+                <button disabled={activePage === 1 || loading} onClick={() => setPage(Math.max(1, activePage - 1))} className="rounded border border-[var(--soc-border)] bg-[var(--soc-card)] px-2 py-1 text-[9px] md:text-[11px] md:px-3 md:py-1.5 font-bold text-[var(--soc-text-secondary)] transition-all hover:border-purple-500/50 hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-20 inline-flex items-center justify-center min-w-[44px] min-[420px]:min-w-[54px]">PREV</button>
+                <span className="px-1 text-[9px] md:text-[11px] font-black text-[var(--soc-text-muted)] whitespace-nowrap"><span className="hidden md:inline">PAGE </span><span className="text-[var(--soc-text-primary)]">{activePage}</span> / {totalPages}</span>
+                <button disabled={activePage >= totalPages || loading} onClick={() => setPage(Math.min(totalPages, activePage + 1))} className="rounded border border-[var(--soc-border)] bg-[var(--soc-card)] px-2 py-1 text-[9px] md:text-[11px] md:px-3 md:py-1.5 font-bold text-[var(--soc-text-secondary)] transition-all hover:border-purple-500/50 hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-20 inline-flex items-center justify-center min-w-[44px] min-[420px]:min-w-[54px]">NEXT</button>
+                <button disabled={activePage >= totalPages || loading} onClick={() => setPage(totalPages)} className="rounded border border-[var(--soc-border)] bg-[var(--soc-card)] px-2 py-1 text-[9px] md:text-[11px] md:px-3 md:py-1.5 font-bold text-[var(--soc-text-secondary)] transition-all hover:border-purple-500/50 hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-20 inline-flex items-center justify-center min-w-[44px] min-[420px]:min-w-[54px]">LAST</button>
               </div>
             </div>
           </div>

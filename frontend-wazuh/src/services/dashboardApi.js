@@ -637,7 +637,13 @@ export async function getMainDashboardData(dateRange = createDefaultDateRange())
   const fimEventsRaw = safeArray(responses.fimEvents?.data);
   const fimTimelineRaw = safeArray(responses.fimTimeline?.data);
   const fimAgentBuckets = safeArray(responses.fimAgentStats?.data);
-  const fimTotalHits = toCount(responses.fimEvents?.total_hits);
+  // Total FIM memakai agregasi full-range distribution (size:0) sebagai sumber
+  // utama — sumber yang sama dipakai halaman File Integrity sebagai acuan —
+  // agar kartu dashboard selalu sama dengan /fim-events untuk range yang sama.
+  // Fallback ke total_hits /events bila endpoint agregasi gagal.
+  const fimEventsTotalHits = toCount(responses.fimEvents?.total_hits);
+  const fimDistTotal = toCount(responses.fimDistribution?.total);
+  const fimTotalHits = fimDistTotal > 0 ? fimDistTotal : fimEventsTotalHits;
   const mlStats = responses.mlStats?.data || {};
   const mlTimelineRaw = safeArray(responses.mlTimeline?.data);
   const mlPredictionsRaw = safeArray(responses.mlPredictions?.data);

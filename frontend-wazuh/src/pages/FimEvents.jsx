@@ -16,6 +16,7 @@ import {
   toDateTimeLocalValue,
 } from "../utils/dateRange";
 import { adaptiveLeftGutter } from "../utils/chartAxis";
+import { InlineEmptyState } from "../components/EmptyState";
 
 const API_BASE = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
 
@@ -261,12 +262,7 @@ const Legend = ({ items, activeLabel = null, onSelect = null, compact = false })
 
 const TopAgentsCard = ({ agents, onItemClick = null, activeName = null }) => {
   if (!agents || agents.length === 0) {
-    return (
-      <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
-        <p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">No agent data</p>
-        <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">No agent activity available.</p>
-      </div>
-    );
+    return <InlineEmptyState title="No agent data" description="No agent activity available." />;
   }
   const maxCount = Math.max(...agents.map((a) => a.count), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
@@ -419,22 +415,40 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
   const wrapRef = useRef(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
 
-  React.useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const update = () => {
-      const rect = el.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) setSize({ width: rect.width, height: rect.height });
-    };
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-    return () => observer.disconnect();
+  // viewBox harus selalu mengikuti lebar aktual container, kalau tidak
+  // SVG me-render sebagai blob sempit di tengah (meet) dan kotaknya
+  // terlihat tidak memenuhi container.
+  const syncSize = useCallback(() => {
+    const node = wrapRef.current;
+    if (!node) return;
+    const rect = node.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      setSize((prev) =>
+        Math.abs(prev.width - rect.width) < 1 && Math.abs(prev.height - rect.height) < 1
+          ? prev
+          : { width: rect.width, height: rect.height }
+      );
+    }
   }, []);
 
-  if (!words || words.length === 0) return <div className="flex items-center justify-center h-auto min-h-16 px-3 py-6 text-center text-slate-600 text-xs">No payload data</div>;
-  const W = Math.max(size.width || 0, 140);
-  const H = Math.max(size.height || 0, 120);
+  useEffect(() => {
+    const node = wrapRef.current;
+    if (!node) return undefined;
+    syncSize();
+    const raf = requestAnimationFrame(() => syncSize());
+    const observer = new ResizeObserver(syncSize);
+    observer.observe(node);
+    window.addEventListener("resize", syncSize);
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+      window.removeEventListener("resize", syncSize);
+    };
+  }, [syncSize, words]);
+
+  if (!words || words.length === 0) return <InlineEmptyState title="No payload data" description="No payload activity for the selected time range." />;
+  const W = Math.max(size.width || 300, 140);
+  const H = Math.max(size.height || 160, 120);
   const maxCount = words[0].count;
   const minCount = words[words.length - 1].count;
   const range = Math.max(1, maxCount - minCount);
@@ -481,8 +495,8 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
   }
 
   return (
-    <div ref={wrapRef} className="relative w-full h-full min-h-0">
-      <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="block w-full h-full">
+    <div ref={wrapRef} className="relative w-full h-full min-w-0 max-w-full min-h-0 overflow-hidden box-border">
+      <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="block w-full h-full min-w-0 max-w-full">
         <defs>
           <radialGradient id="wcGlow" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="var(--soc-wc-center, #0f172a)" stopOpacity="var(--soc-wc-edge-opacity, 0)" />
@@ -523,7 +537,7 @@ const KPICard = ({ label, value, icon: Icon, color, desc, loading, index = 0 }) 
       )}
     </div>
     {desc && (
-      <div className="text-[9px] text-[var(--soc-text-muted)]">{desc}</div>
+      <div className="block max-w-full truncate text-[9px] text-[var(--soc-text-muted)]" title={desc}>{desc}</div>
     )}
   </div>
 );
@@ -577,7 +591,6 @@ const FimEvents = ({ agentId = "all" }) => {
   const [events, setEvents] = useState([]);
   const [totalEventHits, setTotalEventHits] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [fetchError, setFetchError] = useState("");
   const [distData, setDistData] = useState(null);
   const [agentsStats, setAgentsStats] = useState(null);
@@ -604,6 +617,10 @@ const FimEvents = ({ agentId = "all" }) => {
   const [pageSize, setPageSize] = useState(25);
   const topAgentsPanelRef = useRef(null);
   const logsTableRef = useRef(null);
+  // Tinggi cloud mengikuti tinggi aktual kartu Top 5 Changed Files
+  const topFilesCardRef = useRef(null);
+  const payloadHeaderRef = useRef(null);
+  const [payloadCloudH, setPayloadCloudH] = useState(260);
 
   const focusLogs = useCallback(() => {
     setClientPage(1);
@@ -716,7 +733,6 @@ const FimEvents = ({ agentId = "all" }) => {
   const fetchRealData = useCallback(async () => {
     try {
       setLoading(true);
-      setLoadingMore(false);
       setFetchError("");
       const isCustom = filterMode === "custom";
       const baseEvents = agentId && agentId !== "all" ? `${API_BASE}/events/${encodeURIComponent(agentId)}` : `${API_BASE}/events`;
@@ -740,7 +756,6 @@ const FimEvents = ({ agentId = "all" }) => {
         return r.json();
       });
       const effRange = getEffectiveRange();
-      let firstSliceShown = false;
       const [eventsRes, distRes, agentsRes, usersRes] = await Promise.all([
         fetchAllEvents(fetchJson, {
           baseUrl: baseEvents,
@@ -749,24 +764,6 @@ const FimEvents = ({ agentId = "all" }) => {
           severity: severityFilter,
           slices: 2,
           pageSize: 500,
-          onProgress: (partialRows) => {
-            // Tampilkan data sebagian secepatnya; gabung + dedup + urut
-            setEvents((prev) => {
-              const seen = new Map(prev.map((e) => [e?.id ?? `${e?.timestamp}-${e?.agentName}-${e?.syscheckPath}`, e]));
-              for (const e of partialRows) {
-                const key = e?.id ?? `${e?.timestamp}-${e?.agentName}-${e?.syscheckPath}`;
-                if (!seen.has(key)) seen.set(key, e);
-              }
-              return Array.from(seen.values()).sort(
-                (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
-              );
-            });
-            if (!firstSliceShown) {
-              firstSliceShown = true;
-              setLoading(false);
-              setLoadingMore(true);
-            }
-          },
         }),
         fetch(distUrl).then(async (r) => {
           if (!r.ok) throw new Error(`distribution ${r.status}`);
@@ -792,7 +789,6 @@ const FimEvents = ({ agentId = "all" }) => {
       setFetchError(e?.message || "Failed to load FIM events");
     } finally {
       setLoading(false);
-      setLoadingMore(false);
     }
   }, [rangeKey, filterMode, customDateRange, agentId, severityFilter, getEffectiveRange]);
 
@@ -979,6 +975,31 @@ const FimEvents = ({ agentId = "all" }) => {
       criticalCount, uniqueFiles: byFile.size, mostSevereEvent: mostSevere,
     };
   }, [events, totalEventHits, distData, agentsStats, usersStats, rangeKey, filterMode, customDateRange]);
+
+  // Tinggi cloud mengikuti tinggi aktual kartu Top 5 Changed Files (diukur,
+  // bukan dipaksa stretch) sehingga tidak ada space kosong di kartu mana pun.
+  useEffect(() => {
+    const syncCloudHeight = () => {
+      const card = topFilesCardRef.current;
+      const header = payloadHeaderRef.current;
+      if (!card || !header) return;
+      const cardH = card.getBoundingClientRect().height;
+      const headerH = header.getBoundingClientRect().height;
+      // 32 = padding atas+bawah .chart-card (16px), 12 = mb-3 header
+      const next = Math.max(Math.round(cardH - headerH - 32 - 12), 180);
+      setPayloadCloudH((prev) => (Math.abs(prev - next) < 1 ? prev : next));
+    };
+    syncCloudHeight();
+    const raf = requestAnimationFrame(syncCloudHeight);
+    const observer = new ResizeObserver(syncCloudHeight);
+    if (topFilesCardRef.current) observer.observe(topFilesCardRef.current);
+    window.addEventListener("resize", syncCloudHeight);
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+      window.removeEventListener("resize", syncCloudHeight);
+    };
+  }, [derived?.topFiles?.length]);
 
   const filterOptions = useMemo(() => {
     const agentSet = new Set();
@@ -1174,7 +1195,7 @@ const FimEvents = ({ agentId = "all" }) => {
             </div>
             <div className="text-right min-w-0">
               <div className="text-[9px] text-[var(--soc-text-muted)]">Last {rangeKey}</div>
-              <div className="text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatTime(lastUpdated)}{loadingMore ? " · Syncing…" : ""}</div>
+              <div className="text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatTime(lastUpdated)}</div>
             </div>
           </div>
           <div className="h-[220px]" style={{ background: "transparent" }}>
@@ -1218,7 +1239,7 @@ const FimEvents = ({ agentId = "all" }) => {
           </div>
           {(() => {
             const items = derived.eventItems || [];
-            if (!items.length) return <div className="flex h-full min-h-16 flex-col items-center justify-center text-center"><p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">No event data</p></div>;
+            if (!items.length) return <InlineEmptyState title="No event data" description="No file integrity events for the selected time range." />;
             const maxV = Math.max(...items.map((d) => d.value), 1);
             return (
               <div className="w-full min-w-0 max-w-full space-y-1.5">
@@ -1259,7 +1280,7 @@ const FimEvents = ({ agentId = "all" }) => {
           </div>
           {(() => {
             const items = derived.severityItems || [];
-            if (!items.length) return <div className="flex h-full min-h-16 flex-col items-center justify-center text-center"><p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">No severity data</p></div>;
+            if (!items.length) return <InlineEmptyState title="No severity data" description="No severity data for the selected time range." />;
             const maxV = Math.max(...items.map((d) => d.value), 1);
             return (
               <div className="w-full min-w-0 max-w-full space-y-1.5">
@@ -1299,7 +1320,7 @@ const FimEvents = ({ agentId = "all" }) => {
           </div>
           {(() => {
             const items = derived.topUsers || [];
-            if (!items.length) return <div className="flex h-full min-h-16 flex-col items-center justify-center text-center"><p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">No user data</p></div>;
+            if (!items.length) return <InlineEmptyState title="No user data" description="No user activity for the selected time range." />;
             const maxV = Math.max(...items.map((d) => d.value), 1);
             return (
               <div className="w-full min-w-0 max-w-full space-y-1.5">
@@ -1327,9 +1348,9 @@ const FimEvents = ({ agentId = "all" }) => {
       </div>
 
       {/* Payload Pattern Cloud (bawah Event/Severity) + Top 5 Changed Files di kanannya — Payload span2 + Changed Files span1 */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
-        <div className="xl:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col overflow-hidden" style={{ opacity: 0 }}>
-          <div className="flex items-center justify-between mb-3 shrink-0">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-start w-full min-w-0 max-w-full box-border">
+        <div className="xl:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col w-full min-w-0 max-w-full self-start box-border overflow-hidden" style={{ opacity: 0, maxWidth: "100%" }}>
+          <div ref={payloadHeaderRef} className="flex items-center justify-between mb-3 shrink-0">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-cyan-500/10">
                 <Cloud className="h-3.5 w-3.5 text-cyan-400" />
@@ -1340,17 +1361,17 @@ const FimEvents = ({ agentId = "all" }) => {
               </div>
             </div>
           </div>
-          {/* Fixed height (not flex-1): word cloud has no intrinsic height, so a
-              flex/percentage chain makes the row height unstable/circular.
-              280px matches the natural height of the Top 5 Changed Files card. */}
-          <div className="w-full h-[280px] shrink-0 overflow-hidden rounded-xl" style={{ background: "transparent" }}>
-            <div className="w-full h-full rounded-xl overflow-hidden" style={{ background: "transparent" }}>
+          {/* Tinggi cloud mengikuti tinggi aktual kartu Top 5 Changed Files
+              (payloadCloudH); grid items-start menjaga tiap card pas dengan
+              isinya tanpa space kosong. */}
+          <div className="w-full min-w-0 max-w-full shrink-0 overflow-hidden rounded-xl box-border" style={{ background: "transparent", maxWidth: "100%", height: payloadCloudH }}>
+            <div className="w-full h-full min-w-0 max-w-full rounded-xl overflow-hidden box-border" style={{ background: "transparent", maxWidth: "100%" }}>
               <PayloadWordCloud words={derived.payloadWords} activeWord={selectedPayloadPattern} onWordClick={(w) => setSelectedPayloadPattern((p) => p === w ? null : w)} />
             </div>
           </div>
         </div>
 
-        <div className="chart-card animate-fadeInUp stagger-2 flex flex-col overflow-hidden" style={{ opacity: 0 }}>
+        <div ref={topFilesCardRef} className="chart-card animate-fadeInUp stagger-2 flex flex-col self-start w-full min-w-0 max-w-full box-border overflow-hidden" style={{ opacity: 0, maxWidth: "100%" }}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-sky-500/10">
@@ -1365,10 +1386,10 @@ const FimEvents = ({ agentId = "all" }) => {
           </div>
           {(() => {
             const items = derived.topFiles || [];
-            if (!items.length) return <div className="flex h-full min-h-16 flex-col items-center justify-center text-center"><p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">No file data</p></div>;
+            if (!items.length) return <InlineEmptyState title="No file data" description="No file activity for the selected time range." />;
             const maxV = Math.max(...items.map((d) => d.value), 1);
             return (
-              <div className="w-full min-w-0 max-w-full space-y-1.5 flex-1 overflow-y-auto">
+              <div className="w-full min-w-0 max-w-full space-y-1.5">
                 {items.map((item, i) => (
                   <div key={item.label} onClick={() => handleFileSummaryClick(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg cursor-pointer ${pathFilter && String(pathFilter) === String(item.label) ? "bg-emerald-500/10 ring-1 ring-emerald-500/30" : ""}`} title={`Filter events for ${item.label}`}>
                     <div className="flex items-center justify-between">
@@ -1443,12 +1464,17 @@ const FimEvents = ({ agentId = "all" }) => {
               {loading ? (
                 <tr><td colSpan={7} className="px-4 py-8 text-center text-xs text-slate-500">Loading FIM events...</td></tr>
               ) : visibleEvents.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-xs text-slate-500">No FIM events found.</td></tr>
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center">
+                    <p className="text-[10px] font-semibold text-[var(--soc-text-secondary)]">No FIM events found</p>
+                    <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">No file integrity events match the current filter.</p>
+                  </td>
+                </tr>
               ) : visibleEvents.map((evt, idx) => (
                 <tr key={evt.id} className={`border-b border-slate-800/60 hover:bg-slate-800/40 ${idx % 2 !== 0 ? "bg-slate-900/60" : ""}`}>
-                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-slate-500 text-[10px] md:text-[11px] lg:text-[10px]">{formatTime(evt.timestamp)}</td>
-                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-sky-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]">{evt.agentName}</td>
-                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-violet-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]">{evt.username}</td>
+                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 whitespace-nowrap text-slate-500 text-[10px] md:text-[11px] lg:text-[10px]">{formatTime(evt.timestamp)}</td>
+                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 whitespace-nowrap text-sky-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]">{evt.agentName}</td>
+                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 whitespace-nowrap text-violet-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]">{evt.username}</td>
                   <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-emerald-400 font-mono text-[10px] md:text-[11px] lg:text-[10px] max-w-[140px] sm:max-w-[180px] md:max-w-[220px] lg:max-w-[260px]">
                     <div className="truncate max-w-[140px] sm:max-w-[180px] md:max-w-[220px] lg:max-w-[260px] overflow-hidden text-ellipsis whitespace-nowrap" title={evt.syscheckPath}>
                       {evt.syscheckPath}
@@ -1459,8 +1485,8 @@ const FimEvents = ({ agentId = "all" }) => {
                       {evt.syscheckEvent}
                     </span>
                   </td>
-                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 max-w-[320px] sm:max-w-[400px] md:max-w-[480px] lg:max-w-[580px] xl:max-w-[680px] align-top">
-                    <div className="flex flex-col gap-1 max-w-[320px] sm:max-w-[400px] md:max-w-[480px] lg:max-w-[580px] xl:max-w-[680px]">
+                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 w-full min-w-[280px] max-w-[320px] sm:max-w-[400px] md:max-w-[560px] lg:max-w-none align-top">
+                    <div className="flex flex-col gap-1 w-full min-w-0 max-w-[320px] sm:max-w-[400px] md:max-w-[560px] lg:max-w-none">
                       <div className="rounded-md border bg-[var(--soc-payload-bg)] px-2.5 py-2" style={{ borderColor: "var(--soc-payload-border)" }}>
                         <div className="text-[9px] font-bold tracking-wider text-cyan-400 uppercase mb-1">CHANGES:</div>
                         <pre className="whitespace-pre-wrap break-words font-mono text-[10px] leading-[1.4] text-[var(--soc-payload-text)] max-h-[120px] overflow-y-auto scrollbar-thin">
@@ -1473,7 +1499,7 @@ ${evt.syscheckEvent}${evt.fileDiff ? `\n${String(evt.fileDiff).replace(/\\n/g, "
                       </div>
                     </div>
                   </td>
-                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2">{renderSeverityBadge(evt.ruleLevel)}</td>
+                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 whitespace-nowrap">{renderSeverityBadge(evt.ruleLevel)}</td>
                 </tr>
               ))}
             </tbody>

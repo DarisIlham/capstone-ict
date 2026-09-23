@@ -144,15 +144,23 @@ export default function TopSessionsChart({ items, color = "#F97316", totalLabel 
             const halfLabel = Math.ceil(p.label.length * 5.4 / 2) + 3;
             const labelX = clamp(p.x, halfLabel + 2, Math.max(halfLabel + 2, width - halfLabel - 2));
             return (
-              <g key={`${p.label}-${p.index}`}>
+              <g
+                key={`${p.label}-${p.index}`}
+                className="cursor-pointer"
+                onMouseEnter={() => setSelected(p)}
+                onMouseLeave={() => setSelected(null)}
+                onPointerEnter={() => setSelected(p)}
+                onPointerMove={() => setSelected(p)}
+              >
+                <title>{`${p.full}: ${fmt(p.value)} ${totalLabel}${p.sub ? ` (${p.sub})` : ""}`}</title>
                 <circle
                   cx={p.x}
                   cy={p.y}
-                  r={isSel ? 6 : 9}
+                  r={isSel ? 8 : 11}
                   fill="transparent"
-                  className="cursor-pointer"
-                  onMouseEnter={() => setSelected(p)}
-                  onMouseLeave={() => setSelected(null)}
+                  pointerEvents="all"
+                  onPointerEnter={() => setSelected(p)}
+                  onPointerMove={() => setSelected(p)}
                   onClick={() => setSelected(isSel ? null : p)}
                 />
                 <circle cx={p.x} cy={p.y} r={isSel ? 5 : 3.5} fill={p.color} stroke="var(--soc-bg)" strokeWidth="1.5" opacity="0.95" className="pointer-events-none" />
@@ -189,6 +197,7 @@ export default function TopSessionsChart({ items, color = "#F97316", totalLabel 
                 transform: placeBelow ? "translateX(-50%)" : "translate(-50%, -100%)",
               }}
             >
+              <div className="mb-0.5 text-[10px] uppercase tracking-wide text-slate-500">Session</div>
               <div className="break-words font-semibold text-slate-300" title={selected.full}>{selected.full}</div>
               {selected.sub && <div className="mt-0.5 break-words text-slate-500">{selected.sub}</div>}
               <div className="mt-1 text-slate-500">{fmt(selected.value)} {totalLabel}</div>

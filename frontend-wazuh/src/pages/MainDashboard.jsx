@@ -17,6 +17,7 @@ import {
   toDateTimeLocalValue,
 } from "../utils/dateRange";
 import { adaptiveLeftGutter } from "../utils/chartAxis";
+import { InlineEmptyState } from "../components/EmptyState";
 import {
   Activity,
   AlertTriangle,
@@ -186,8 +187,9 @@ const WaveChart = ({ data, color = "#A855F7", height: _height = 140, rangeKey = 
   }
 
   const maxV = Math.max(1, ...data.map((d) => d.v));
-  const yAxisFontSize = 11;
-  const xAxisFontSize = 10;
+  const narrow = width < 420;
+  const yAxisFontSize = narrow ? 9 : 11;
+  const xAxisFontSize = narrow ? 8.5 : 10;
   const padding = { ...baseP, l: adaptiveLeftGutter([Math.round(maxV)], baseP.l, 12, `500 ${yAxisFontSize}px sans-serif`) };
   const innerW = width - padding.l - padding.r;
   const innerH = height - padding.t - padding.b;
@@ -334,27 +336,22 @@ const WaveChart = ({ data, color = "#A855F7", height: _height = 140, rangeKey = 
 };
 
 const CompactBarChart = ({ items, collapsedCount = 5, onItemClick = null }) => {
-  const [showAll, setShowAll] = useState(false);
   if (!items || items.length === 0) {
-    return (
-      <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
-        <p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">No active agent data</p>
-        <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">No agent activity for the selected time range.</p>
-      </div>
-    );
+    return <InlineEmptyState title="No active agent data" description="No agent activity for the selected time range." />;
   }
 
-  const visibleItems = showAll ? items : items.slice(0, collapsedCount);
+  const visibleItems = items.slice(0, collapsedCount);
   const maxValue = Math.max(...items.map((d) => d.value), 1);
 
   return (
     <div>
-      <div className={`space-y-1.5 ${showAll ? "max-h-64 overflow-y-auto pr-1" : ""}`}>
+      {/* Tinggi dikunci untuk 5 data: 5 x 30px + 4 x 6px gap = 174px */}
+      <div className="space-y-1.5 h-[174px] shrink-0 overflow-hidden">
         {visibleItems.map((item, i) => (
           <div
             key={item.label}
             onClick={() => onItemClick?.(item)}
-            className={`list-item-interactive px-2 py-1 rounded-lg ${onItemClick ? "cursor-pointer" : ""}`}
+            className={`list-item-interactive px-2 py-1 rounded-lg h-[30px] shrink-0 overflow-hidden ${onItemClick ? "cursor-pointer" : ""}`}
             title={onItemClick ? `View activity for ${item.label}` : item.label}
           >
             <div className="flex items-center justify-between">
@@ -362,11 +359,11 @@ const CompactBarChart = ({ items, collapsedCount = 5, onItemClick = null }) => {
                 <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold text-purple-400 shrink-0">
                   {i + 1}
                 </span>
-                <span className="text-[10px] font-medium text-[var(--soc-text-secondary)] truncate" title={item.label}>
+                <span className="text-[9px] min-[700px]:text-[10px] font-medium text-[var(--soc-text-secondary)] truncate" title={item.label}>
                   {item.label}
                 </span>
               </div>
-              <span className="text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-2 shrink-0">
+              <span className="text-[9px] min-[700px]:text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-2 shrink-0">
                 {new Intl.NumberFormat("en-US").format(item.value)}
               </span>
             </div>
@@ -379,14 +376,6 @@ const CompactBarChart = ({ items, collapsedCount = 5, onItemClick = null }) => {
           </div>
         ))}
       </div>
-      {items.length > collapsedCount && (
-        <button
-          onClick={() => setShowAll((v) => !v)}
-          className="mt-1.5 w-full text-center text-[10px] font-medium text-purple-400 hover:text-purple-300 transition-colors"
-        >
-          {showAll ? "Show less" : `Show all ${items.length} agents`}
-        </button>
-      )}
     </div>
   );
 };
@@ -428,12 +417,7 @@ const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items", onP
   const xLabelFontSize = width < 500 ? 7 : width < 1000 ? 8 : 9;
   const xLabelOffset = width < 500 ? 12 : width < 1000 ? 14 : 16;
   if (!items || items.length === 0) {
-    return (
-      <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
-        <p className="text-[10px] min-[768px]:text-[11px] font-medium text-[var(--soc-text-secondary)]">No data available</p>
-        <p className="mt-0.5 text-[9px] min-[768px]:text-[10px] text-[var(--soc-text-muted)]">No data for the selected time range.</p>
-      </div>
-    );
+    return <InlineEmptyState title="No data available" />;
   }
 
   const sorted = [...items].sort((a, b) => b.value - a.value);
@@ -597,17 +581,15 @@ const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items", onP
 const DomainBarChart = ({ items, emptyLabel = "No affected hosts detected", emptySub = "No host activity is available for the selected time range.", onItemClick = null }) => {
   if (!items || items.length === 0)
     return (
-      <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
-        <p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">{emptyLabel}</p>
-        <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">{emptySub}</p>
-      </div>
+      <InlineEmptyState title={emptyLabel} description={emptySub} />
     );
 
   const maxCount = Math.max(...items.map((d) => d.value), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
 
   return (
-    <div className="dash-most-changed-list w-full min-w-0 max-w-full overflow-x-hidden overflow-y-visible space-y-1.5 box-border">
+    // Tinggi dikunci untuk 5 data: 5 x 52px + 4 x 6px gap = 284px
+    <div className="dash-most-changed-list w-full min-w-0 max-w-full overflow-hidden space-y-1.5 h-[284px] shrink-0 box-border">
       {items.map((item, i) => {
         const color = CHART_COLORS[i % CHART_COLORS.length];
         const label = item.label || item.name;
@@ -616,7 +598,7 @@ const DomainBarChart = ({ items, emptyLabel = "No affected hosts detected", empt
           <div
             key={label}
             onClick={() => onItemClick?.(item)}
-            className={`dash-most-changed-item w-full min-w-0 max-w-full overflow-x-hidden overflow-y-visible box-border list-item-interactive px-2 py-1 rounded-lg ${onItemClick ? "cursor-pointer" : ""}`}
+            className={`dash-most-changed-item w-full min-w-0 max-w-full overflow-hidden box-border list-item-interactive px-2 py-1 rounded-lg h-[52px] shrink-0 flex flex-col justify-center ${onItemClick ? "cursor-pointer" : ""}`}
             title={onItemClick ? `View FIM events for ${label}` : label}
           >
             <div className="flex items-center justify-between gap-2 min-w-0 max-w-full overflow-hidden">
@@ -624,17 +606,17 @@ const DomainBarChart = ({ items, emptyLabel = "No affected hosts detected", empt
                 <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold shrink-0" style={{ color }}>
                   {i + 1}
                 </span>
-                <span className="dash-most-changed-label min-w-0 flex-1 max-w-full truncate block overflow-hidden text-ellipsis whitespace-nowrap text-[10px] font-medium text-[var(--soc-text-secondary)]" title={label}>
+                <span className="dash-most-changed-label min-w-0 flex-1 max-w-full truncate block overflow-hidden text-ellipsis whitespace-nowrap text-[9px] min-[700px]:text-[10px] font-medium text-[var(--soc-text-secondary)]" title={label}>
                   {label}
                 </span>
               </div>
-              <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">
+              <span className="min-w-[1.5rem] shrink-0 text-right text-[9px] min-[700px]:text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">
                 {new Intl.NumberFormat("en-US").format(value)}
               </span>
             </div>
             {item.sub && (
               <div className="-mt-0.5 ml-7 min-w-0 max-w-[calc(100%-1.75rem)] overflow-hidden leading-none">
-                <span className="dash-most-changed-sub block truncate overflow-hidden text-ellipsis whitespace-nowrap text-[9px] text-[var(--soc-text-muted)]" title={`by ${item.sub}`}>by {item.sub}</span>
+                <span className="dash-most-changed-sub block truncate overflow-hidden text-ellipsis whitespace-nowrap text-[8px] min-[700px]:text-[9px] text-[var(--soc-text-muted)]" title={`by ${item.sub}`}>by {item.sub}</span>
               </div>
             )}
             <div className="dash-most-changed-bar mt-0.5 ml-7 h-1.5 max-w-[calc(100%-1.75rem)] box-border bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
@@ -925,7 +907,9 @@ export default function MainDashboard() {
                 </div>
               </div>
             </div>
-            <div className="min-h-[260px] flex-1">
+            {/* Tinggi dikunci 284px agar card kiri sama tinggi dengan
+                Most Changed Files isi 5 data */}
+            <div className="h-[284px] shrink-0 overflow-hidden">
               <CategoryLineChart
                 items={dashboardData.threatTypes}
                 color="#EF4444"
@@ -959,7 +943,9 @@ export default function MainDashboard() {
                 </div>
               </div>
             </div>
-            <div className="min-h-[260px] flex-1">
+            {/* Tinggi dikunci 206px (= 174px list + 32px baris tab kanan)
+                agar card kiri sama tinggi dengan Top Active Agents isi 5 data */}
+            <div className="h-[206px] shrink-0 overflow-hidden">
               <CategoryLineChart items={dashboardData.riskDistribution} color="#F97316" totalLabel="incidents" />
             </div>
           </div>
@@ -996,8 +982,9 @@ export default function MainDashboard() {
             </div>
           </div>
 
-          {/* Top Agents Card */}
-          <div className="chart-card animate-fadeInUp stagger-4 xl:row-start-2 xl:col-start-3 w-full min-w-0" style={{ opacity: 0 }}>
+          {/* Top Agents Card — self-start agar tingginya pas mengikuti isi 5 data,
+              tidak ikut melar setinggi Risk Distribution di sebelahnya */}
+          <div className="chart-card animate-fadeInUp stagger-4 xl:row-start-2 xl:col-start-3 w-full min-w-0 max-w-full self-start box-border" style={{ opacity: 0, maxWidth: "100%" }}>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 rounded-lg bg-purple-500/10">
@@ -1151,8 +1138,8 @@ export default function MainDashboard() {
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[11px] text-[var(--soc-text-muted)]">{section.title} Timeline ({selectedRangeLabel})</span>
               </div>
-              <div className="w-full h-[160px] rounded-lg overflow-hidden" style={{ background: "transparent" }}>
-                <WaveChart
+                <div className="w-full h-[180px] rounded-lg overflow-hidden" style={{ background: "transparent" }}>
+                  <WaveChart
                   data={section.data}
                   color={section.chartColor}
                   height={160}

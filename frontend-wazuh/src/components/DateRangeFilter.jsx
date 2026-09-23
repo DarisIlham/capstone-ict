@@ -26,10 +26,10 @@ export default function DateRangeFilter({ value, onChange, disabled = false, cla
         type="button"
         disabled={disabled}
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] text-[10px] font-medium text-[var(--soc-text-primary)] hover:border-purple-500/40 hover:bg-[var(--soc-elevated)] transition-all disabled:opacity-50"
+        className="flex items-center gap-1.5 h-8 px-2 min-[420px]:px-3 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] text-[9px] min-[420px]:text-[10px] font-medium text-[var(--soc-text-primary)] hover:border-purple-500/40 hover:bg-[var(--soc-elevated)] transition-all disabled:opacity-50"
       >
-        <CalendarDays className="h-3 w-3 text-[var(--soc-accent)] theme-light:text-slate-800" />
-        <span className="truncate max-w-[120px]">{displayLabel}</span>
+        <CalendarDays className="h-3 w-3 text-[var(--soc-accent)] theme-light:text-slate-800 shrink-0" />
+        <span className="truncate max-w-[72px] min-[420px]:max-w-[120px]">{displayLabel}</span>
         <ChevronDown className={`h-3 w-3 text-[var(--soc-text-muted)] transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 

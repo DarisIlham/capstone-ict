@@ -458,7 +458,11 @@ export const requestPasswordResetLink = async (req, res) => {
 
     const { token } = await createResetToken(row.id);
     const frontendBase = (process.env.FRONTEND_URL || req.headers.origin || "").replace(/\/$/, "");
-    const resetUrl = `${frontendBase}/reset-password?token=${token}`;
+    const frontendPath = `/${(process.env.FRONTEND_BASE_PATH || "project").replace(/^\/+|\/+$/g, "")}`;
+    const resetBase = frontendBase.endsWith(frontendPath)
+      ? frontendBase
+      : `${frontendBase}${frontendPath}`;
+    const resetUrl = `${resetBase}/reset-password?token=${token}`;
     try {
       await sendPasswordResetEmail({
         to: row.email,

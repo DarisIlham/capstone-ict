@@ -6552,6 +6552,14 @@ aside.w-60 {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .dashboard-content-grid .min-h-\[260px\] {
+    min-height: clamp(240px, 68vw, 290px) !important;
+  }
+
+  .dashboard-content-grid .dashboard-category-chart {
+    min-height: clamp(240px, 68vw, 290px) !important;
+  }
+
   .dashboard-content-grid > .xl\:col-span-2,
   .dashboard-content-grid > .xl\:col-start-3 {
     grid-column: 1;
@@ -6571,6 +6579,43 @@ aside.w-60 {
 
   .dashboard-content-grid .chart-card {
     padding: 10px;
+  }
+
+  .dashboard-content-grid .dashboard-category-chart {
+    min-height: clamp(190px, 55vw, 230px) !important;
+  }
+
+  .dashboard-kpi-grid .kpi-modern {
+    min-height: 0;
+    padding: 11px 12px;
+  }
+
+  .dashboard-kpi-grid .kpi-modern > div:first-child {
+    margin-bottom: 8px;
+  }
+
+  .dashboard-kpi-grid .kpi-modern > div:first-child > span {
+    font-size: 8px;
+  }
+
+  .dashboard-kpi-grid .kpi-modern > div:first-child > div {
+    padding: 6px;
+  }
+
+  .dashboard-kpi-grid .kpi-modern > div:first-child svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  .dashboard-kpi-grid .kpi-modern > div:nth-child(2) {
+    font-size: 1.05rem;
+    line-height: 1.2;
+    margin-bottom: 4px;
+  }
+
+  .dashboard-kpi-grid .kpi-modern > div:last-child {
+    font-size: 8px;
+    line-height: 1.25;
   }
 }
 

@@ -15,6 +15,7 @@ import {
   toDateTimeLocalValue,
 } from "../utils/dateRange";
 import { adaptiveLeftGutter } from "../utils/chartAxis";
+import { InlineEmptyState } from "../components/EmptyState";
 
 const clamp = (n, a, b) => Math.min(Math.max(n, a), b);
 
@@ -151,12 +152,7 @@ const KPICard = ({ label, value, icon: Icon, color, desc, loading, index = 0 }) 
 // ── BarList (seperti FileSecurityScanner) ────────────────────────────────────
 const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue = null }) => {
   if (!items || items.length === 0) {
-    return (
-      <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
-        <p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">{emptyLabel}</p>
-        <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">No data for the selected time range.</p>
-      </div>
-    );
+    return <InlineEmptyState title={emptyLabel} />;
   }
   const maxValue = Math.max(...items.map((d) => d.value), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
@@ -196,12 +192,7 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
 
 const TopAgentsCard = ({ agents, onItemClick = null, activeName = null }) => {
   if (!agents || agents.length === 0) {
-    return (
-      <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
-        <p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">No agent data</p>
-        <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">No agent activity available.</p>
-      </div>
-    );
+    return <InlineEmptyState title="No agent data" description="No agent activity available." />;
   }
   const maxCount = Math.max(...agents.map((a) => Number(a.count) || 0), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
@@ -351,12 +342,7 @@ const CategoryLineChart = ({ items, color = "#a78bfa", totalLabel = "items", onP
   const width = size.width;
   const height = size.height;
   if (!items || items.length === 0) {
-    return (
-      <div className="flex h-full min-h-24 w-full flex-col items-center justify-center text-center text-xs text-slate-600">
-        <p>No data available</p>
-        <p className="mt-0.5">No data for the selected time range.</p>
-      </div>
-    );
+    return <InlineEmptyState title="No data available" />;
   }
   const sorted = [...items].sort((a, b) => b.value - a.value);
   const total = sorted.reduce((s, it) => s + it.value, 0) || 1;
@@ -1083,7 +1069,12 @@ export default function MlDashboard() {
               {loading ? (
                 <tr><td colSpan={7} className="px-4 py-8 text-center text-xs text-slate-500">Loading predictions...</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-xs text-slate-500">No predictions match current filters.</td></tr>
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center">
+                    <p className="text-[10px] font-semibold text-[var(--soc-text-secondary)]">No predictions match current filters</p>
+                    <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">Try adjusting the selected filters or time range.</p>
+                  </td>
+                </tr>
               ) : pageItems.map((p, idx) => (
                 <tr key={p.id || p.zeekUid || idx} className={`border-b border-slate-800/60 hover:bg-slate-800/40 transition-colors ${idx % 2 !== 0 ? 'bg-slate-900/60' : ''}`}>
                   <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-slate-500 text-[10px] md:text-[11px] lg:text-[10px] whitespace-nowrap" title={formatTimeFull(p.timestamp)}>{formatTime(p.timestamp)}</td>

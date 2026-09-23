@@ -14,6 +14,7 @@ import {
   toDateTimeLocalValue,
 } from "../utils/dateRange";
 import { adaptiveLeftGutter } from "../utils/chartAxis";
+import { InlineEmptyState } from "../components/EmptyState";
 import {
   AlertTriangle,
   Copy,
@@ -528,12 +529,7 @@ const FileSecCombinedFilter = ({ agentFilter, onAgentChange, agentOptions = [], 
 // ── Bar list (severity / folders / etc) seperti FimEvents ──────────────────
 const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue = null }) => {
   if (!items || items.length === 0) {
-    return (
-      <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
-        <p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">{emptyLabel}</p>
-        <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">No data for the selected time range.</p>
-      </div>
-    );
+    return <InlineEmptyState title={emptyLabel} />;
   }
   const maxValue = Math.max(...items.map((d) => d.value), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
@@ -573,12 +569,7 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
 
 const TopAgentsCard = ({ agents, onItemClick = null, activeName = null }) => {
   if (!agents || agents.length === 0) {
-    return (
-      <div className="flex h-full min-h-16 flex-col items-center justify-center text-center">
-        <p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">No agent data</p>
-        <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">No agent activity available.</p>
-      </div>
-    );
+    return <InlineEmptyState title="No agent data" description="No agent activity available." />;
   }
   const maxCount = Math.max(...agents.map((a) => Number(a.count) || 0), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
@@ -661,8 +652,13 @@ const PaginationControls = ({ pagination, page, pageSize, loading, onPageChange 
   );
 };
 
-const EmptyState = ({ message }) => (
-  <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-500">{message}</td></tr>
+const EmptyState = ({ title, description }) => (
+  <tr>
+    <td colSpan={8} className="px-4 py-10 text-center">
+      <p className="text-[10px] font-semibold text-[var(--soc-text-secondary)]">{title}</p>
+      <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">{description}</p>
+    </td>
+  </tr>
 );
 
 const FileSecurityScanner = () => {
@@ -1067,7 +1063,7 @@ const FileSecurityScanner = () => {
           </div>
           {(() => {
             const items = analytics.topSuspiciousFiles || [];
-            if (!items.length) return <div className="flex h-full min-h-16 flex-col items-center justify-center text-center"><p className="text-[10px] font-medium text-[var(--soc-text-secondary)]">No suspicious file data</p></div>;
+            if (!items.length) return <InlineEmptyState title="No suspicious file data" description="No suspicious file activity for the selected time range." />;
             const maxV = Math.max(...items.map((d) => d.value), 1);
             return (
               <div className="w-full min-w-0 max-w-full space-y-1.5">
@@ -1153,7 +1149,10 @@ const FileSecurityScanner = () => {
               {loading ? (
                 <tr><td colSpan={8} className="px-4 py-8 text-center text-xs text-slate-500">Loading file scans...</td></tr>
               ) : filteredFiles.length === 0 ? (
-                <EmptyState message="No suspicious file scan data found on this page." />
+                <EmptyState
+                  title="No suspicious file scan data"
+                  description="No suspicious file scan data found on this page."
+                />
               ) : filteredFiles.map((file, idx) => {
                 const maxSeverity = file.findings.reduce((max, finding)=>(severityOrder[finding.severity] > severityOrder[max.severity] ? finding : max), file.findings[0]);
                 return (

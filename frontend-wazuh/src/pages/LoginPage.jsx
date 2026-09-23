@@ -156,8 +156,8 @@ const LoginPage = () => {
     setStep(next);
   };
 
-  const sanitizeInput = (value) => {
-    return value.replace(/<[^>]*>?/gm, "").replace(/[<>{}[\]()&^%$#!]/g, "");
+  const sanitizeIdentifier = (value) => {
+    return value.replace(/[^a-zA-Z0-9@._+\-]/g, "");
   };
 
   // Kolom hujan karakter cyber (dibuat sekali, stabil antar render)
@@ -193,11 +193,11 @@ const LoginPage = () => {
   };
 
   const handleEmailChange = (e) => {
-    setEmail(sanitizeInput(e.target.value));
+    setEmail(sanitizeIdentifier(e.target.value));
   };
 
   const handlePasswordChange = (e) => {
-    setPassword(sanitizeInput(e.target.value));
+    setPassword(e.target.value);
   };
 
   const handleRecaptchaChange = (value) => {
@@ -695,7 +695,7 @@ const LoginPage = () => {
                 type="email"
                 autoComplete="off"
                 value={forgotEmail}
-                onChange={(e) => setForgotEmail(sanitizeInput(e.target.value))}
+                onChange={(e) => setForgotEmail(sanitizeIdentifier(e.target.value))}
                 disabled={isLoading}
                 className="w-full h-[clamp(40px,12vw,44px)] pl-9 pr-3.5 bg-[var(--soc-elevated)] border border-[var(--soc-border)] rounded-lg text-[clamp(12px,3.6vw,14px)] text-[var(--soc-text-primary)] placeholder-[var(--soc-text-muted)] focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all disabled:opacity-50"
                 placeholder="admin@example.com"

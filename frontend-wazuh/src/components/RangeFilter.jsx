@@ -21,7 +21,7 @@ export default function RangeFilter({
   return (
     <div className={`soc-range-filter flex min-w-0 shrink-0 items-center ${className}`}>
       <div
-        className={`flex items-center gap-1 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-2 h-8 ${
+        className={`flex items-center gap-0.5 min-[420px]:gap-1 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-1.5 min-[420px]:px-2 h-8 ${
           dimmed ? "opacity-50" : ""
         }`}
       >
@@ -35,7 +35,7 @@ export default function RangeFilter({
               <button
                 key={value}
                 onClick={() => onRangeChange(value)}
-                className={`rounded-md px-2 py-1 text-[10px] font-medium transition-all ${
+                className={`rounded-md px-1.5 min-[420px]:px-2 py-1 text-[9px] min-[420px]:text-[10px] font-medium transition-all ${
                   active
                     ? "bg-purple-500/15 text-purple-400"
                     : "text-[var(--soc-text-muted)] hover:text-[var(--soc-text-primary)] hover:bg-[var(--soc-elevated)]"

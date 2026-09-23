@@ -44,3 +44,16 @@ export default function EmptyState({
     </div>
   );
 }
+
+export function InlineEmptyState({
+  title = "No data available",
+  description = "No data for the selected time range.",
+  className = "",
+}) {
+  return (
+    <div className={`flex h-full min-h-16 flex-col items-center justify-center px-3 py-6 text-center ${className}`}>
+      <p className="text-[10px] font-semibold text-[var(--soc-text-secondary)]">{title}</p>
+      <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">{description}</p>
+    </div>
+  );
+}
