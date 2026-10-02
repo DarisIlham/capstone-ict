@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -6,6 +6,7 @@ import {
   Activity,
   FileSearch,
   BrainCircuit,
+  Radar,
   Bell,
   Users,
   LogOut,
@@ -17,6 +18,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
+import { useAlarms } from "../context/AlarmContext";
 import { useTheme } from "../hooks/useTheme";
 import ThemeToggle from "./ThemeToggle";
 import logoDark from "../assets/soc_undip_dark_theme.png";
@@ -38,6 +40,7 @@ const NAV_GROUPS = [
       { label: "File Integrity", href: "/fim-events", icon: ShieldAlert },
       { label: "File Security", href: "/file-security", icon: FileSearch },
       { label: "ML Detection", href: "/ml-dashboard", icon: BrainCircuit },
+      { label: "Bot Detection", href: "/bot-detection", icon: Radar },
     ],
   },
   {
@@ -48,11 +51,118 @@ const NAV_GROUPS = [
   },
 ];
 
+// Panel riwayat alarm yang muncul dari ikon lonceng di topbar.
+const AlarmPanel = ({ history, onClose, onClear, onViewAll, onOpenItem }) => {
+  const ref = useRef(null);
+
+  // Klik di luar atau tekan Escape menutup panel.
+  useEffect(() => {
+    const onPointerDown = (event) => {
+      if (ref.current && !ref.current.contains(event.target)) onClose();
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={ref}
+      className="absolute right-0 top-full mt-1.5 w-[340px] max-w-[calc(100vw-2rem)] rounded-xl border border-[var(--soc-border)] shadow-2xl overflow-hidden z-[80] animate-fadeInUp"
+      style={{ background: "var(--soc-card)" }}
+    >
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-[var(--soc-border)]">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="p-1.5 rounded-lg bg-pink-500/10 shrink-0">
+            <Bell className="h-3.5 w-3.5 text-pink-400" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Alarm History</h3>
+            <p className="text-[9px] text-[var(--soc-text-muted)]">
+              {history.length > 0 ? `${history.length} recorded alarm${history.length > 1 ? "s" : ""}` : "No alarm recorded"}
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={onClose}
+          aria-label="Close alarm history"
+          className="p-1 rounded-lg text-[var(--soc-text-muted)] hover:text-[var(--soc-text-primary)] hover:bg-[var(--soc-elevated)] transition-colors shrink-0"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <div className="max-h-[360px] overflow-y-auto">
+        {history.length === 0 ? (
+          <div className="px-3 py-8 text-center">
+            <Bell className="h-5 w-5 text-[var(--soc-text-muted)] mx-auto mb-2 opacity-50" />
+            <p className="text-[10px] text-[var(--soc-text-muted)]">No critical alerts yet</p>
+            <p className="text-[9px] text-[var(--soc-text-muted)] mt-0.5 opacity-70">Alarms appear here when they arrive</p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-[var(--soc-border)]">
+            {history.map((item) => {
+              const isBotnet = item.source === "Bot Detection";
+              const Icon = isBotnet ? Radar : ShieldAlert;
+              return (
+                <li key={item.id || item.key}>
+                  <button
+                    type="button"
+                    onClick={() => onOpenItem(item.link)}
+                    className="flex items-start gap-2 w-full text-left px-3 py-2.5 hover:bg-[var(--soc-elevated)] transition-colors"
+                  >
+                    <div className="p-1 rounded-lg bg-red-500/10 shrink-0">
+                      <Icon className="h-3 w-3 text-red-400" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10.5px] font-medium text-[var(--soc-text-primary)] break-words">{item.title}</p>
+                      <p className="text-[9px] text-[var(--soc-text-muted)] mt-0.5 truncate">
+                        {item.source} &middot; {item.asset}
+                      </p>
+                      <p className="text-[8px] text-[var(--soc-text-muted)] mt-0.5 opacity-70">
+                        {item.seenAt ? new Date(item.seenAt).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}
+                      </p>
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 px-3 py-2 border-t border-[var(--soc-border)]">
+        <button
+          onClick={onViewAll}
+          className="flex-1 rounded-lg px-3 py-1.5 text-[10px] font-semibold text-purple-300 hover:bg-purple-500/15 border border-purple-500/30 transition-colors"
+        >
+          View all alerts
+        </button>
+        {history.length > 0 && (
+          <button
+            onClick={onClear}
+            className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-[var(--soc-text-muted)] hover:text-red-300 hover:bg-red-500/10 transition-colors"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export default function AppLayout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
   const { theme } = useTheme();
+  const { history, unread, panelOpen, togglePanel, closePanel, clearHistory } = useAlarms();
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem("sidebar-collapsed") === "1"
   );
@@ -277,16 +387,34 @@ export default function AppLayout({ children }) {
 
           <div className="flex items-center gap-2">
             <ThemeToggle compact />
-            <button
-              type="button"
-              aria-label="Open alerts"
-              title="Open alerts"
-              onClick={() => navigate("/alerts")}
-              className="p-1.5 rounded-lg text-[var(--soc-text-muted)] hover:text-[var(--soc-text-primary)] hover:bg-[var(--soc-elevated)] transition-colors relative"
-            >
-              <Bell className="h-4 w-4" />
-              <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-pink-500 rounded-full"></span>
-            </button>
+            {/* Ikon lonceng membuka daftar riwayat alarm, bukan navigasi ke
+                halaman /alerts. Halaman penuh tetap tersedia lewat "View all". */}
+            <div className="relative">
+              <button
+                type="button"
+                aria-label={`Alarm history${unread > 0 ? `, ${unread} unread` : ""}`}
+                aria-expanded={panelOpen}
+                title="Alarm history"
+                onClick={togglePanel}
+                className="p-1.5 rounded-lg text-[var(--soc-text-muted)] hover:text-[var(--soc-text-primary)] hover:bg-[var(--soc-elevated)] transition-colors relative"
+              >
+                <Bell className="h-4 w-4" />
+                {unread > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-[3px] rounded-full bg-pink-500 text-white text-[8px] font-bold flex items-center justify-center">
+                    {unread > 99 ? "99+" : unread}
+                  </span>
+                )}
+              </button>
+              {panelOpen && (
+                <AlarmPanel
+                  history={history}
+                  onClose={closePanel}
+                  onClear={clearHistory}
+                  onViewAll={() => { closePanel(); navigate("/alerts"); }}
+                  onOpenItem={(href) => { closePanel(); navigate(href || "/alerts"); }}
+                />
+              )}
+            </div>
           </div>
         </header>
 

@@ -1,12 +1,14 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
+import { AlarmProvider } from "./context/AlarmContext";
 import PrivateRoute from "./components/PrivateRoute";
 import AppLayout from "./components/AppLayout";
 import LoginPage from "./pages/LoginPage.jsx";
 import ResetPasswordPage from "./pages/ResetPasswordPage.jsx";
 import MainDashboard from "./pages/MainDashboard.jsx";
 import MlDashboard from "./pages/MlDashboard.jsx";
+import BotDetection from "./pages/BotDetection.jsx";
 import FimEvents from "./pages/FimEvents.jsx";
 import AttackDashboard from "./pages/AttackDashboard.jsx";
 import FileSecurityScanner from "./pages/FileSecurityScanner.jsx";
@@ -24,7 +26,10 @@ function App() {
     <ThemeProvider>
       <AuthProvider>
         <Router basename={routerBasename}>
-          <Routes>
+          {/* Di dalam Router karena panel alarm memakai navigate, dan hanya
+              aktif setelah login karena bergantung pada AuthContext. */}
+          <AlarmProvider>
+            <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
 
@@ -100,6 +105,16 @@ function App() {
               }
             />
             <Route
+              path="/bot-detection"
+              element={
+                <PrivateRoute>
+                  <AppLayout>
+                    <BotDetection />
+                  </AppLayout>
+                </PrivateRoute>
+              }
+            />
+            <Route
               path="/users"
               element={
                 <PrivateRoute requiredRole="admin">
@@ -111,7 +126,8 @@ function App() {
             />
 
             <Route path="*" element={<Navigate to="/login" replace />} />
-          </Routes>
+            </Routes>
+          </AlarmProvider>
         </Router>
       </AuthProvider>
     </ThemeProvider>

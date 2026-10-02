@@ -197,6 +197,13 @@ const WaveChart = ({ data, color = "#f97316", rangeKey = "24h", height = 80, com
   const tickCount = clamp(Math.floor(innerW / (compact ? 260 : 160)), compact ? 2 : 3, compact ? 4 : 7);
   const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
 
+  // Indeks bucket yang sedang diklik, untuk garis vertikal putus-putus.
+  // Samakan dengan logika isActive di bawah supaya penanda dan garisnya
+  // selalu referring ke titik yang sama.
+  const activeIdx = (activePointKey !== null && typeof activePointKey !== "undefined")
+    ? data.findIndex((d) => String(d.t) === String(activePointKey))
+    : -1;
+
   return (
     <div ref={rootRef} className="relative h-full w-full" onMouseLeave={() => setHoveredPoint(null)}>
       <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block w-full h-full">
@@ -216,6 +223,11 @@ const WaveChart = ({ data, color = "#f97316", rangeKey = "24h", height = 80, com
           </linearGradient>
         </defs>
         <path d={pathD + ` L ${padding.l + (data.length - 1) * pointSpacing} ${padding.t + innerH} L ${padding.l} ${padding.t + innerH} Z`} fill="url(#cmdWaveGradient)" />
+
+        {activeIdx >= 0 && (
+            <line x1={padding.l + activeIdx * pointSpacing} y1={padding.t} x2={padding.l + activeIdx * pointSpacing} y2={padding.t + innerH}
+              stroke={color} strokeWidth="1.5" strokeDasharray="3,3" opacity="0.85" className="pointer-events-none" />
+        )}
 
         {data.map((d, i) => {
           const x = padding.l + i * pointSpacing;
@@ -271,8 +283,7 @@ const WaveChart = ({ data, color = "#f97316", rangeKey = "24h", height = 80, com
                 cy={y}
                 r={visualR}
                 fill={isActive ? "#fb923c" : color}
-                stroke={isActive ? "#0f172a" : "none"}
-                strokeWidth="2.5"
+                stroke="none"
                 opacity="0.95"
                 className="pointer-events-none"
               />
@@ -372,6 +383,9 @@ const Legend = ({ items }) => (
 
 const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items", onPointClick = null }) => {
   const [selected, setSelected] = useState(null);
+  // Kategori yang diklik - sumber garis vertikal putus-putus. Terpisah dari
+  // `selected` karena itu hanya hidup saat hover.
+  const [pinnedIndex, setPinnedIndex] = useState(-1);
   const rootRef = useRef(null);
   const [size, setSize] = useState({ width: 1000, height: 210 });
   // Responsive plot padding (presentation only): reclaim horizontal space
@@ -449,6 +463,13 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items", onP
     index: i,
   }));
 
+  // Warna garis penanda mengikuti titik yang ditekan, supaya menyatu dengan
+  // kurvanya; jatuh ke `color` default kartu kalau titik itu tidak punya warna.
+  const pinnedColor = (() => {
+    const hit = points.find((p) => p.index === pinnedIndex);
+    return hit?.color || color;
+  })();
+
   const segments = [];
   for (let i = 0; i < points.length - 1; i++) {
     const a = points[i];
@@ -486,8 +507,19 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items", onP
           {segments.map((seg) => (
             <path key={seg.key} d={seg.d} stroke={seg.color} strokeWidth="2.5" fill="none" opacity="0.85" />
           ))}
+          {(() => {
+            // Garis vertikal putus-putus di titik yang diklik. Pakai state
+            // terpisah dari `selected` karena itu hanya hidup saat hover.
+            const pi = points.findIndex((p) => p.index === pinnedIndex);
+            if (pi < 0) return null;
+            return (
+              <line x1={points[pi].x} y1={padding.t} x2={points[pi].x} y2={padding.t + innerH}
+                stroke={pinnedColor} strokeWidth="1.5" strokeDasharray="3,3" opacity="0.85" className="pointer-events-none" />
+            );
+          })()}
           {points.map((p) => {
             const isSel = selected?.index === p.index;
+            const isPinned = pinnedIndex === p.index;
             // Keep edge labels inside the SVG box: shift the centered label
             // so its estimated half-width never crosses the box border.
             const halfLabel = Math.ceil(String(p.label ?? "").length * 5.4 / 2) + 3;
@@ -510,11 +542,13 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items", onP
                   onBlur={() => setSelected(null)}
                   onClick={() => {
                     setSelected(isSel ? null : p);
+                    setPinnedIndex((prev) => (prev === p.index ? -1 : p.index));
                     onPointClick?.(p);
                   }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
+                      setPinnedIndex((prev) => (prev === p.index ? -1 : p.index));
                       onPointClick?.(p);
                     }
                   }}
@@ -522,7 +556,7 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items", onP
                   tabIndex={onPointClick ? 0 : undefined}
                   aria-label={onPointClick ? `Filter logs for session ${p.label}` : undefined}
                 />
-                <circle cx={p.x} cy={p.y} r={isSel ? "5" : "3.5"} fill={p.color} stroke={isSel && onPointClick ? p.color : onPointClick ? "none" : "var(--soc-bg)"} strokeWidth={isSel && onPointClick ? "2.5" : "1.5"} opacity="0.95" className="pointer-events-none" />
+                <circle cx={p.x} cy={p.y} r={isSel ? "5" : "3.5"} fill={p.color} stroke="none" opacity="0.95" className="pointer-events-none" />
                 <text x={labelX} y={padding.t + innerH + 18} textAnchor="middle" fontSize="10" fill="var(--soc-text-muted)" fontWeight="500">{p.label}</text>
               </g>
             );
@@ -1098,33 +1132,6 @@ const HostMonitoring = () => {
 
   const logsTableRef = useRef(null);
   const topAgentsPanelRef = useRef(null);
-  const knownDangerousIdsRef = useRef(null);
-  const audioContextRef = useRef(null);
-
-  const playDangerAlert = useCallback(() => {
-    try {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextClass) return;
-      const audioContext = audioContextRef.current || new AudioContextClass();
-      audioContextRef.current = audioContext;
-      if (audioContext.state === "suspended") audioContext.resume();
-
-      const oscillator = audioContext.createOscillator();
-      const gain = audioContext.createGain();
-      oscillator.type = "sine";
-      oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
-      oscillator.frequency.setValueAtTime(660, audioContext.currentTime + 0.12);
-      gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.18, audioContext.currentTime + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.28);
-      oscillator.connect(gain);
-      gain.connect(audioContext.destination);
-      oscillator.start();
-      oscillator.stop(audioContext.currentTime + 0.3);
-    } catch (audioError) {
-      console.warn("Danger alert sound is unavailable:", audioError);
-    }
-  }, []);
 
   React.useEffect(() => {
     if (!urlAgent && urlFocus !== "logs") return;
@@ -1225,18 +1232,6 @@ const HostMonitoring = () => {
       const currentDangerousLogs = normalizedDangerousLogs.length
         ? normalizedDangerousLogs
         : normalizedLogs.filter((log) => log.command.risk === "suspicious");
-      const currentDangerousIds = new Set(
-        currentDangerousLogs.map((log) => String(
-          log.id || `${log.timestamp}|${log.agentName}|${log.command?.cmd}`
-        ))
-      );
-      if (knownDangerousIdsRef.current) {
-        const hasNewDanger = [...currentDangerousIds].some(
-          (id) => !knownDangerousIdsRef.current.has(id)
-        );
-        if (hasNewDanger) playDangerAlert();
-      }
-      knownDangerousIdsRef.current = currentDangerousIds;
 
       setLogs(normalizedLogs);
       setAnalyticsLogs(normalizedAnalyticsLogs.length ? normalizedAnalyticsLogs : normalizedLogs);
@@ -1262,7 +1257,7 @@ const HostMonitoring = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [page, pageSize, rangeKey, filterMode, customDateRange, searchQuery, selectedTimelinePoint, statusFilter, userFilter, agentFilter, sessionFilter, selectedCommandFilter, playDangerAlert]);
+  }, [page, pageSize, rangeKey, filterMode, customDateRange, searchQuery, selectedTimelinePoint, statusFilter, userFilter, agentFilter, sessionFilter, selectedCommandFilter]);
 
   const handleExportCsv = async () => {
     try {

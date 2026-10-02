@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+﻿import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, ChevronDown, Clock, Shield, Search, AlertTriangle, CalendarRange, SlidersHorizontal } from "lucide-react";
 import DateRangeFilter from "../components/DateRangeFilter";
@@ -10,6 +10,13 @@ import {
   normalizeDateRange,
   getIsoDateRange,
 } from "../utils/dateRange";
+import {
+  hostCommandSeverity,
+  fileScanSeverity,
+  fimSeverity,
+  mlSeverity,
+  isMaliciousLabel,
+} from "../utils/alertSeverity";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -59,9 +66,9 @@ export default function Alert() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersRef = useRef(null);
 
-  const loadAlerts = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
+  const loadAlerts = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
+    if (!silent) setLoadError("");
     try {
       const APP_BASE_PATH = import.meta.env.BASE_URL.replace(/\/$/, "");
       const API_BASE = `${window.location.origin}${APP_BASE_PATH}`;
@@ -112,7 +119,7 @@ export default function Alert() {
       const esTotalPages = (body) => Number(body?.pagination?.totalPages || 0);
 
       const rangeQs = `start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
-      const [attackRes, fileRes, fimRes, mlRes] = await Promise.allSettled([
+      const [attackRes, fileRes, fimRes, mlRes, botRes] = await Promise.allSettled([
         fetchAllPages(`${API_BASE}/api/linux-commands?suspicious=true&${rangeQs}`, { pageSize: 1000, getRows: esRows, getTotalPages: esTotalPages }),
         fetchAllPages(`${API_BASE}/api/file-scans/suspicious?${rangeQs}`, { pageSize: 100, getRows: esRows, getTotalPages: esTotalPages }),
         fetchAllEvents(fetchAlertSource, {
@@ -120,6 +127,10 @@ export default function Alert() {
           start, end, slices: 6, pageSize: 1000,
         }).then((r) => r.rows),
         fetchAllPages(`${API_BASE}/api/ml/predictions?${rangeQs}`, { pageSize: 1000, getRows: esRows, getTotalPages: esTotalPages }),
+        // Botnet dipakai untuk baris alert sekaligus pemicu bunyi. Cukup halaman 1:
+        // endpoint diurutkan timestamp desc, jadi dokumen baru selalu ada di
+        // sana. Kegagalan di sini sengaja tidak masuk failedSources.
+        fetchAlertSource(`${API_BASE}/api/bot-detection/alerts?${rangeQs}&page=1&limit=200`).then(esRows),
       ]);
 
       const getResponseRows = (result) => (result.status === "fulfilled" && Array.isArray(result.value) ? result.value : []);
@@ -137,6 +148,7 @@ export default function Alert() {
       const fileData = getResponseRows(fileRes);
       const fimData = getResponseRows(fimRes);
       const mlData = getResponseRows(mlRes);
+      const botData = getResponseRows(botRes);
       const failedSources = [
         attackRes.status !== "fulfilled" ? "host monitoring" : "",
         fileRes.status !== "fulfilled" ? "file scanner" : "",
@@ -152,7 +164,7 @@ export default function Alert() {
         ...attackData.map((a, i) => ({
           id: `attack-${a.id || i}`,
           title: a.description || a.command || "Suspicious command detected",
-          severity: String(a.risk_level || a.riskLevel || "medium").toLowerCase() === "high" ? "critical" : String(a.risk_level || a.riskLevel || "medium").toLowerCase() === "medium" ? "high" : "medium",
+          severity: hostCommandSeverity(a),
           source: "Host Monitoring",
           asset: pick(a.hostName, a.hostname, a.host, a.agentName, a.agent_name) || "Unknown",
           agent: pick(a.agentName, a.agent_name) || "-",
@@ -171,7 +183,7 @@ export default function Alert() {
           return {
             id: `file-${f.id || i}`,
             title: pick(f.fileName, f.threat_name, f.file_name) || "Suspicious file detected",
-            severity: count >= 5 ? "critical" : count >= 2 ? "high" : "medium",
+            severity: fileScanSeverity(count),
             source: "File Scanner",
             asset: pick(f.filePath, f.file_path) || "Unknown",
             agent: pick(f.agentName, f.agent_name) || "-",
@@ -188,7 +200,7 @@ export default function Alert() {
           return {
             id: `fim-${e.id || i}`,
             title: `${e.syscheckEvent && e.syscheckEvent !== "-" ? e.syscheckEvent : e.type || "File change"} detected`,
-            severity: ruleLevel >= 10 ? "critical" : ruleLevel >= 7 ? "high" : ruleLevel >= 4 ? "medium" : "low",
+            severity: fimSeverity(ruleLevel),
             source: "FIM",
             asset: pick(e.syscheckPath, e.file, e.path, e.filePath) || "Unknown",
             agent: pick(e.agentName, e.agent_name, e.agent?.name) || "-",
@@ -202,17 +214,14 @@ export default function Alert() {
           };
         }),
         ...mlData
-          .filter((p) => {
-            const label = String(p.predictedLabel || p.label || "").toLowerCase();
-            return label && !label.includes("benign") && !label.includes("normal");
-          })
+          .filter((p) => isMaliciousLabel(p.predictedLabel || p.label))
           .map((p, i) => {
             const rawConf = typeof p.confidence === "number" ? p.confidence : parseFloat(p.confidence);
             const conf = Number.isNaN(rawConf) ? null : Math.min(Math.max(rawConf > 1 ? rawConf : rawConf * 100, 0), 100);
             return {
               id: `ml-${p.id || i}`,
               title: `${p.predictedLabel || p.label || "Threat"} detected by ML`,
-              severity: conf === null ? "medium" : conf >= 80 ? "critical" : conf >= 60 ? "high" : conf >= 40 ? "medium" : "low",
+              severity: mlSeverity(conf),
               source: "ML Predictions",
               asset: p.agent || "Unknown",
               agent: p.agent || "-",
@@ -224,20 +233,52 @@ export default function Alert() {
               }),
             };
           }),
+        // Deteksi botnet ML. Backend selalu mengirim severity: null untuk tipe
+        // ini (botDetectionService.js), jadi dipetakan ke critical di sini.
+        ...botData
+          .filter((b) => b?.detectorType === "ml")
+          .map((b, i) => {
+            const rawProb = typeof b.probability === "number" ? b.probability : parseFloat(b.probability);
+            const probPct = Number.isNaN(rawProb) ? null : Math.round((rawProb > 1 ? rawProb : rawProb * 100) * 10) / 10;
+            return {
+              id: `botnet-${b.id || i}`,
+              title: "Botnet activity detected by ML detector",
+              severity: "critical",
+              source: "Bot Detection",
+              asset: pick(b.agent, b.hostname) || "Unknown",
+              agent: pick(b.agent) || "-",
+              user: "-",
+              reason: `Protocol: ${String(b.protocol || "-").toUpperCase()} | ${b.sourceIp || "-"} → ${b.destinationIp || "-"}${probPct === null ? "" : ` | Probability: ${probPct}%`}`,
+              timestamp: b.timestamp || b.eventTimestamp || b.created_at,
+              link: buildAlertLink("/bot-detection"),
+            };
+          }),
       ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
       setAlerts(allAlerts);
     } catch (err) {
       console.error("Failed to load alerts", err);
-      setLoadError("Security alert data is currently unavailable.");
-      setAlerts([]);
+      if (!silent) {
+        setLoadError("Security alert data is currently unavailable.");
+        setAlerts([]);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [rangeKey, filterMode, customDateRange]);
 
   useEffect(() => {
     loadAlerts();
+  }, [loadAlerts]);
+
+  // Refresh tabel secara berkala. Deteksi alarm, popup peringatan, dan suara
+  // TIDAK dilakukan di sini: semuanya ditangani AlarmProvider secara global
+  // supaya tidak berbunyi dua kali.
+  useEffect(() => {
+    const id = setInterval(() => {
+      loadAlerts({ silent: true });
+    }, 30000);
+    return () => clearInterval(id);
   }, [loadAlerts]);
 
   const handleRangeChange = (key) => {
@@ -435,7 +476,7 @@ export default function Alert() {
                 <div className="px-3 py-2">
                   <div className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">Source</div>
                   <div className="flex flex-wrap gap-1">
-                    {["all", "Host Monitoring", "File Scanner", "FIM", "ML Predictions"].map((source) => (
+                    {["all", "Host Monitoring", "File Scanner", "FIM", "ML Predictions", "Bot Detection"].map((source) => (
                       <button
                         key={source}
                         onClick={() => { setPage(1); setFilterSource(filterSource === source ? "all" : source); }}

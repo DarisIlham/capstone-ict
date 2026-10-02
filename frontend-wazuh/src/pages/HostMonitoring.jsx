@@ -68,8 +68,11 @@ const formatTimestamp = (ts) =>
 // ══════════════════════════════════════════════════════════════════════════════
 // SVG WAVE CHART
 // ══════════════════════════════════════════════════════════════════════════════
-const WaveChart = ({ data, color = "#3B82F6", height: _height = 140, rangeKey = "24h" }) => {
+const WaveChart = ({ data, color = "#3B82F6", height: _height = 140, rangeKey = "24h", activePointKey = null, onPointSelect = null }) => {
   const [selectedPoint, setSelectedPoint] = useState(null);
+  // Bucket yang diklik, bertahan setelah kursor pergi (selectedPoint hanya
+  // hidup saat hover, jadi tidak bisa jadi penanda garis vertikal).
+  const [pinnedIndex, setPinnedIndex] = useState(-1);
   const rootRef = useRef(null);
   const [size, setSize] = useState({ width: 1000, height: _height });
 
@@ -127,6 +130,12 @@ const WaveChart = ({ data, color = "#3B82F6", height: _height = 140, rangeKey = 
   const tickCount = narrowTicks ? 2 : clamp(Math.floor(innerW / 150), 3, 7);
   const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
 
+  const pinnedIdx = (() => {
+    if (pinnedIndex >= 0 && pinnedIndex < data.length) return pinnedIndex;
+    if (activePointKey === null || typeof activePointKey === "undefined") return -1;
+    return data.findIndex((d) => String(d.t) === String(activePointKey));
+  })();
+
   return (
     <div ref={rootRef} className="relative h-full w-full" onMouseLeave={() => setSelectedPoint(null)}>
       <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block w-full h-full">
@@ -146,6 +155,10 @@ const WaveChart = ({ data, color = "#3B82F6", height: _height = 140, rangeKey = 
         </defs>
         <path d={pathD + ` L ${padding.l + (data.length - 1) * pointSpacing} ${padding.t + innerH} L ${padding.l} ${padding.t + innerH} Z`} fill={`url(#hm-gradient-${color.replace("#", "")})`} />
         <path d={pathD} stroke={color} strokeWidth="2" fill="none" opacity="0.9" />
+        {pinnedIdx >= 0 && (
+          <line x1={padding.l + pinnedIdx * pointSpacing} y1={padding.t} x2={padding.l + pinnedIdx * pointSpacing} y2={padding.t + innerH}
+            stroke={color} strokeWidth="1.5" strokeDasharray="3,3" opacity="0.85" className="pointer-events-none" />
+        )}
         {data.map((d, i) => {
           const x = padding.l + i * pointSpacing;
           const y = padding.t + innerH - (d.v / maxV) * innerH;
@@ -155,8 +168,12 @@ const WaveChart = ({ data, color = "#3B82F6", height: _height = 140, rangeKey = 
               <circle cx={x} cy={y} r={isSelected ? "5" : "8"} fill="transparent" className="cursor-pointer"
                 onMouseEnter={() => setSelectedPoint({ index: i, x, y, value: d.v, time: d.t })}
                 onMouseLeave={() => setSelectedPoint(null)}
+                onClick={() => {
+                  setPinnedIndex((prev) => (prev === i ? -1 : i));
+                  onPointSelect?.(d, i);
+                }}
               />
-              <circle cx={x} cy={y} r={isSelected ? "3" : "2"} fill={color} stroke={isSelected ? "var(--soc-bg)" : "none"} strokeWidth="1.5" opacity="0.95" className="pointer-events-none" />
+              <circle cx={x} cy={y} r={isSelected || i === pinnedIdx ? "3" : "2"} fill={color} stroke="none" opacity="0.95" className="pointer-events-none" />
             </g>
           );
         })}

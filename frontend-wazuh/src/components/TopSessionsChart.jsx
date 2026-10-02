@@ -8,6 +8,9 @@ const clamp = (n, a, b) => Math.min(Math.max(n, a), b);
 // solid gridlines, bottom legend, hover tooltip — fed by top-sessions data.
 export default function TopSessionsChart({ items, color = "#F97316", totalLabel = "sessions", showTotal = true, showLegend = true }) {
   const [selected, setSelected] = useState(null);
+  // Sesi yang diklik - sumber garis vertikal putus-putus. `selected` hanya
+  // hidup saat hover, jadi tidak bisa dipakai sebagai penanda.
+  const [pinnedIndex, setPinnedIndex] = useState(-1);
   const plotRef = useRef(null);
   const [size, setSize] = useState({ width: 300, height: 180 });
 
@@ -107,6 +110,8 @@ export default function TopSessionsChart({ items, color = "#F97316", totalLabel 
   const maxXLabels = width < 360 ? (points.length > 3 ? 2 : points.length) : width < 500 ? 4 : points.length;
   const xLabelEvery = Math.max(1, Math.ceil(points.length / Math.max(1, maxXLabels)));
   const fmt = (v) => new Intl.NumberFormat("en-US").format(v ?? 0);
+  const pinnedPoint = points.find((p) => p.index === pinnedIndex);
+  const pinnedColor = pinnedPoint?.color || color;
 
   return (
     <div
@@ -136,6 +141,10 @@ export default function TopSessionsChart({ items, color = "#F97316", totalLabel 
           {segments.map((s) => (
             <path key={s.key} d={s.d} stroke={s.color} strokeWidth="3" fill="none" opacity="0.9" />
           ))}
+          {pinnedPoint && (
+            <line x1={pinnedPoint.x} y1={pad.t} x2={pinnedPoint.x} y2={pad.t + innerH}
+              stroke={pinnedColor} strokeWidth="1.5" strokeDasharray="3,3" opacity="0.85" className="pointer-events-none" />
+          )}
           {points.map((p) => {
             const isSel = selected?.index === p.index;
             const isFirst = p.index === 0;
@@ -161,9 +170,12 @@ export default function TopSessionsChart({ items, color = "#F97316", totalLabel 
                   pointerEvents="all"
                   onPointerEnter={() => setSelected(p)}
                   onPointerMove={() => setSelected(p)}
-                  onClick={() => setSelected(isSel ? null : p)}
+                  onClick={() => {
+                    setSelected(isSel ? null : p);
+                    setPinnedIndex((prev) => (prev === p.index ? -1 : p.index));
+                  }}
                 />
-                <circle cx={p.x} cy={p.y} r={isSel ? 5 : 3.5} fill={p.color} stroke="var(--soc-bg)" strokeWidth="1.5" opacity="0.95" className="pointer-events-none" />
+                <circle cx={p.x} cy={p.y} r={isSel ? 5 : 3.5} fill={p.color} stroke="none" opacity="0.95" className="pointer-events-none" />
                 {showXLabel && (
                   <text
                     x={isFirst ? pad.l : isLast ? pad.l + innerW : labelX}

@@ -5,6 +5,7 @@ import {
   createEmptyDashboardData,
   getMainDashboardData,
 } from "../services/dashboardApi";
+import botDetectionApi from "../services/botDetectionApi";
 import DateRangeFilter from "../components/DateRangeFilter";
 import RangeFilter from "../components/RangeFilter";
 import PageLoader from "../components/PageLoader";
@@ -21,6 +22,7 @@ import { InlineEmptyState } from "../components/EmptyState";
 import {
   Activity,
   AlertTriangle,
+  Bot,
   Bug,
   BrainCircuit,
   FileText,
@@ -140,8 +142,24 @@ const formatPointTimestamp = (timestamp, rangeKey) => {
   });
 };
 
-const WaveChart = ({ data, color = "#A855F7", height: _height = 140, rangeKey = "24h", onPointSelect }) => {
+// Ubah respons /api/bot-detection/trend ({ timestamp, mlBotnet, ... }) menjadi
+// bentuk yang dipakai WaveChart: { t, v, bucketMs }. Lebar bucket diambil dari
+// selisih dua titik supaya klik pada grafik bisa membawa rentang waktu yang tepat.
+const normalizeBotTrend = (rows) => {
+  const points = (Array.isArray(rows) ? rows : [])
+    .map((r) => ({ t: Date.parse(r?.timestamp), v: Number(r?.mlBotnet) || 0 }))
+    .filter((p) => Number.isFinite(p.t))
+    .sort((a, b) => a.t - b.t);
+  const bucketMs = points.length > 1 ? Math.max(points[1].t - points[0].t, 1) : 60 * 60 * 1000;
+  return points.map((p) => ({ ...p, bucketMs }));
+};
+
+const WaveChart = ({ data, color = "#A855F7", height: _height = 140, rangeKey = "24h", onPointSelect, activePointKey = null }) => {
   const [selectedPoint, setSelectedPoint] = useState(null);
+  // Bucket yang diklik, bertahan setelah kursor pergi - inilah yang memunculkan
+  // garis vertikal putus-putus. selectedPoint hanya hidup saat hover, jadi
+  // tidak bisa dipakai untuk penanda yang harus "nempel".
+  const [pinnedIndex, setPinnedIndex] = useState(-1);
   const rootRef = useRef(null);
   const [size, setSize] = useState({ width: 1000, height: _height });
 
@@ -223,6 +241,14 @@ const WaveChart = ({ data, color = "#A855F7", height: _height = 140, rangeKey = 
   const tickCount = narrowTicks ? 2 : clamp(Math.floor(innerW / 150), 3, 7);
   const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
 
+  // Prioritaskan bucket yang diklik; kalau tidak ada, pakai activePointKey
+  // dari parent (dipakai saat halaman ini menerima filter waktu dari navigasi).
+  const pinnedIdx = (() => {
+    if (pinnedIndex >= 0 && pinnedIndex < data.length) return pinnedIndex;
+    if (activePointKey === null || typeof activePointKey === "undefined") return -1;
+    return data.findIndex((d) => String(d.t) === String(activePointKey));
+  })();
+
   return (
     <div ref={rootRef} className="relative h-full w-full" onMouseLeave={() => setSelectedPoint(null)}>
       <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block w-full h-full">
@@ -244,6 +270,10 @@ const WaveChart = ({ data, color = "#A855F7", height: _height = 140, rangeKey = 
         </defs>
         <path d={pathD + ` L ${padding.l + (data.length - 1) * pointSpacing} ${padding.t + innerH} L ${padding.l} ${padding.t + innerH} Z`} fill={`url(#gradient-${color})`} />
         <path d={pathD} stroke={color} strokeWidth="2" fill="none" opacity="0.9" />
+        {pinnedIdx >= 0 && (
+          <line x1={padding.l + pinnedIdx * pointSpacing} y1={padding.t} x2={padding.l + pinnedIdx * pointSpacing} y2={padding.t + innerH}
+            stroke={color} strokeWidth="1.5" strokeDasharray="3,3" opacity="0.85" className="pointer-events-none" />
+        )}
         {data.map((d, i) => {
           const x = padding.l + i * pointSpacing;
           const y = padding.t + innerH - (d.v / maxV) * innerH;
@@ -265,16 +295,17 @@ const WaveChart = ({ data, color = "#A855F7", height: _height = 140, rangeKey = 
                 onBlur={() => setSelectedPoint(null)}
                 onClick={() => {
                   setSelectedPoint(isSelected ? null : pointData);
+                  // Toggle: klik titik yang sama membatalkan penanda.
+                  setPinnedIndex((prev) => (prev === i ? -1 : i));
                   onPointSelect?.(d);
                 }}
               />
               <circle
                 cx={x}
                 cy={y}
-                r={isSelected ? "3" : "2"}
+                r={isSelected || i === pinnedIdx ? "3" : "2"}
                 fill={color}
-                stroke={isSelected ? "var(--soc-bg)" : "none"}
-                strokeWidth="1.5"
+                stroke="none"
                 opacity="0.95"
                 className="pointer-events-none"
               />
@@ -385,6 +416,8 @@ const CompactBarChart = ({ items, collapsedCount = 5, onItemClick = null }) => {
 // ========================================
 const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items", onPointClick = null }) => {
   const [selected, setSelected] = useState(null);
+  // Kategori yang diklik - sumber garis vertikal putus-putus.
+  const [pinnedIndex, setPinnedIndex] = useState(-1);
   const rootRef = useRef(null);
   const [size, setSize] = useState({ width: 1000, height: 180 });
   useEffect(() => {
@@ -465,6 +498,11 @@ const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items", onP
   const maxXLabels = width < 360 ? (points.length > 3 ? 2 : points.length) : width < 500 ? 4 : points.length;
   const xLabelEvery = Math.max(1, Math.ceil(points.length / Math.max(1, maxXLabels)));
 
+  // Warna garis mengikuti kategori yang diklik; `selected` hanya hidup saat
+  // hover jadi tidak bisa dipakai sebagai penanda.
+  const pinnedPoint = points.find((p) => p.index === pinnedIndex);
+  const pinnedColor = pinnedPoint?.color || color;
+
   return (
     <div className="relative w-full flex flex-col h-full min-w-0" onMouseLeave={() => setSelected(null)}>
       <div className="flex items-center justify-between mb-1 px-1">
@@ -488,12 +526,19 @@ const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items", onP
           {segments.map((seg) => (
             <path key={seg.key} d={seg.d} stroke={seg.color} strokeWidth="3" fill="none" opacity="0.9" />
           ))}
+          {pinnedPoint && (
+            <line x1={pinnedPoint.x} y1={padding.t} x2={pinnedPoint.x} y2={padding.t + innerH}
+              stroke={pinnedColor} strokeWidth="1.5" strokeDasharray="3,3" opacity="0.85" className="pointer-events-none" />
+          )}
           {points.map((p) => {
             const isSel = selected?.index === p.index;
             const isFirst = p.index === 0;
             const isLast = p.index === points.length - 1;
             const showXLabel = xLabelEvery === 1 || p.index % xLabelEvery === 0 || isLast;
-            const handlePointClick = () => (onPointClick ? onPointClick(p) : setSelected(isSel ? null : p));
+            const handlePointClick = () => {
+              setPinnedIndex((prev) => (prev === p.index ? -1 : p.index));
+              return onPointClick ? onPointClick(p) : setSelected(isSel ? null : p);
+            };
             const handlePointKeyDown = (event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
@@ -514,7 +559,7 @@ const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items", onP
                     tabIndex={onPointClick ? 0 : undefined}
                     aria-label={onPointClick ? `View ${p.label}` : undefined}
                   />
-                <circle cx={p.x} cy={p.y} r={isSel ? "3" : "3.5"} fill={p.color} stroke="var(--soc-bg)" strokeWidth="1.5" opacity="0.95" className="pointer-events-none" />
+                <circle cx={p.x} cy={p.y} r={isSel ? "3" : "3.5"} fill={p.color} stroke="none" opacity="0.95" className="pointer-events-none" />
                 </g>
               );
             }
@@ -531,7 +576,7 @@ const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items", onP
                   tabIndex={onPointClick ? 0 : undefined}
                   aria-label={onPointClick ? `View ${p.label}` : undefined}
                 />
-                  <circle cx={p.x} cy={p.y} r={isSel ? "3" : "3.5"} fill={p.color} stroke="var(--soc-bg)" strokeWidth="1.5" opacity="0.95" className="pointer-events-none" />
+                  <circle cx={p.x} cy={p.y} r={isSel ? "3" : "3.5"} fill={p.color} stroke="none" opacity="0.95" className="pointer-events-none" />
                 <text
                   x={isFirst ? padding.l : isLast ? padding.l + innerW : p.x}
                   y={padding.t + innerH + xLabelOffset}
@@ -588,8 +633,8 @@ const DomainBarChart = ({ items, emptyLabel = "No affected hosts detected", empt
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
 
   return (
-    // Tinggi dikunci untuk 5 data: 5 x 52px + 4 x 6px gap = 284px
-    <div className="dash-most-changed-list w-full min-w-0 max-w-full overflow-hidden space-y-1.5 h-[284px] shrink-0 box-border">
+    // Tinggi dikunci untuk 5 data: 5 x 48px + 4 x 4px gap = 256px
+    <div className="dash-most-changed-list w-full min-w-0 max-w-full overflow-hidden space-y-1 h-[256px] shrink-0 box-border">
       {items.map((item, i) => {
         const color = CHART_COLORS[i % CHART_COLORS.length];
         const label = item.label || item.name;
@@ -598,7 +643,7 @@ const DomainBarChart = ({ items, emptyLabel = "No affected hosts detected", empt
           <div
             key={label}
             onClick={() => onItemClick?.(item)}
-            className={`dash-most-changed-item w-full min-w-0 max-w-full overflow-hidden box-border list-item-interactive px-2 py-1 rounded-lg h-[52px] shrink-0 flex flex-col justify-center ${onItemClick ? "cursor-pointer" : ""}`}
+            className={`dash-most-changed-item w-full min-w-0 max-w-full overflow-hidden box-border list-item-interactive px-2 py-0.5 rounded-lg h-[48px] shrink-0 flex flex-col justify-center ${onItemClick ? "cursor-pointer" : ""}`}
             title={onItemClick ? `View FIM events for ${label}` : label}
           >
             <div className="flex items-center justify-between gap-2 min-w-0 max-w-full overflow-hidden">
@@ -619,7 +664,7 @@ const DomainBarChart = ({ items, emptyLabel = "No affected hosts detected", empt
                 <span className="dash-most-changed-sub block truncate overflow-hidden text-ellipsis whitespace-nowrap text-[8px] min-[700px]:text-[9px] text-[var(--soc-text-muted)]" title={`by ${item.sub}`}>by {item.sub}</span>
               </div>
             )}
-            <div className="dash-most-changed-bar mt-0.5 ml-7 h-1.5 max-w-[calc(100%-1.75rem)] box-border bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
+            <div className="dash-most-changed-bar mt-1 ml-7 h-1.5 max-w-[calc(100%-1.75rem)] box-border bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
               <div
                 className="h-full rounded-full transition-all duration-500 max-w-full"
                 style={{
@@ -683,6 +728,9 @@ export default function MainDashboard() {
   );
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [botSummary, setBotSummary] = useState(null);
+  const [botTrend, setBotTrend] = useState([]);
+  const [botLoaded, setBotLoaded] = useState(false);
   const [topUsersSource, setTopUsersSource] = useState("host");
   const [showWarningToast, setShowWarningToast] = useState(false);
 
@@ -774,6 +822,47 @@ export default function MainDashboard() {
     return () => clearInterval(interval);
   }, [loadDashboardData]);
 
+  // Bot Detection summary strip — independent from the main dashboard data
+  // so a failure here never blocks the rest of the page.
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    const fetchBotSummary = async () => {
+      try {
+        const dateRange =
+          filterMode === "custom"
+            ? normalizeDateRange(customDateRange)
+            : rangeKeyToDateRange(rangeKey);
+        const { start, end } = getIsoDateRange(dateRange);
+        const opts = { signal: controller.signal };
+        // Summary dan trend paralel: trend untuk grafik timeline, summary untuk
+        // KPI. Salah satu gagal tidak boleh menghilangkan yang lain.
+        const [summaryRes, trendRes] = await Promise.allSettled([
+          botDetectionApi.getSummary({ start, end }, opts),
+          botDetectionApi.getTrend({ start, end }, opts),
+        ]);
+        if (cancelled) return;
+        if (summaryRes.status === "fulfilled" && summaryRes.value?.success) {
+          setBotSummary(summaryRes.value.data);
+        }
+        if (trendRes.status === "fulfilled" && trendRes.value?.success) {
+          setBotTrend(normalizeBotTrend(trendRes.value.data));
+        }
+      } catch {
+        if (!cancelled) setBotSummary(null);
+      } finally {
+        if (!cancelled) setBotLoaded(true);
+      }
+    };
+    fetchBotSummary();
+    const interval = setInterval(fetchBotSummary, 60_000);
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearInterval(interval);
+    };
+  }, [rangeKey, filterMode, customDateRange]);
+
   const handleRangeChange = (key) => {
     setRangeKey(key);
     setFilterMode("range");
@@ -797,6 +886,16 @@ export default function MainDashboard() {
     filterMode === "custom"
       ? formatDateRangeLabel(effectiveDateRange)
       : RANGE_LABELS[rangeKey] || rangeKey;
+
+  // Turunan untuk kartu ML Botnet Detection. Probability dari backend masih
+  // 0-1, jadi harus dikali 100 sebelum ditampilkan.
+  const botTrendPeak = botTrend.reduce((max, p) => (p.v > max ? p.v : max), 0);
+  const botTrendAvg =
+    botTrend.length > 0
+      ? botTrend.reduce((sum, p) => sum + p.v, 0) / botTrend.length
+      : null;
+  const rawMaxProb = Number(botSummary?.maxBotnetProbability);
+  const botMaxProb = Number.isFinite(rawMaxProb) ? rawMaxProb * 100 : null;
 
   if (loading && !dashboardData.lastUpdated) {
     return <PageLoader message="Loading..." fullScreen />;
@@ -852,7 +951,7 @@ export default function MainDashboard() {
       )}
 
       {/* KPI Cards */}
-      <div className="dashboard-kpi-grid grid grid-cols-2 min-[700px]:grid-cols-4 gap-3">
+      <div className="dashboard-kpi-grid grid grid-cols-2 gap-3">
         <KPICard
           label="Commands"
           value={formatInteger(dashboardData.stats.totalAttacks)}
@@ -872,21 +971,21 @@ export default function MainDashboard() {
           index={1}
         />
         <KPICard
-          label="Files Scanned"
-          value={formatInteger(dashboardData.stats.fileScanned)}
-          icon={Bug}
-          color="text-cyan-400"
-          desc="Clean scan completions"
-          loading={loading}
-          index={2}
-        />
-        <KPICard
           label="FIM Events"
           value={formatInteger(dashboardData.stats.fimEvents)}
           icon={FileText}
           color="text-emerald-400"
           desc="File integrity changes"
           loading={loading}
+          index={2}
+        />
+        <KPICard
+          label="ML Botnet"
+          value={botSummary ? formatInteger(botSummary.mlBotnetAlerts) : "-"}
+          icon={BrainCircuit}
+          color="text-cyan-400"
+          desc="ML-flagged connections"
+          loading={loading || !botLoaded}
           index={3}
         />
       </div>
@@ -907,9 +1006,9 @@ export default function MainDashboard() {
                 </div>
               </div>
             </div>
-            {/* Tinggi dikunci 284px agar card kiri sama tinggi dengan
+            {/* Tinggi dikunci 256px agar card kiri sama tinggi dengan
                 Most Changed Files isi 5 data */}
-            <div className="h-[284px] shrink-0 overflow-hidden">
+            <div className="h-[256px] shrink-0 overflow-hidden">
               <CategoryLineChart
                 items={dashboardData.threatTypes}
                 color="#EF4444"
@@ -985,12 +1084,12 @@ export default function MainDashboard() {
           {/* Top Agents Card — self-start agar tingginya pas mengikuti isi 5 data,
               tidak ikut melar setinggi Risk Distribution di sebelahnya */}
           <div className="chart-card animate-fadeInUp stagger-4 xl:row-start-2 xl:col-start-3 w-full min-w-0 max-w-full self-start box-border" style={{ opacity: 0, maxWidth: "100%" }}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-purple-500/10">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <div className="p-1.5 rounded-lg bg-purple-500/10 shrink-0">
                   <Activity className="h-3.5 w-3.5 text-purple-400" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Top Active Agents</h3>
                   <p className="text-[9px] text-[var(--soc-text-muted)]">Most active agents in the selected source</p>
                 </div>
@@ -1002,9 +1101,9 @@ export default function MainDashboard() {
                   file: "/file-security",
                   ml: "/ml-dashboard",
                 }[topUsersSource] ?? "/attack-dashboard")}
-                className="text-[10px] text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-0.5"
+                className="text-[10px] text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-0.5 whitespace-nowrap shrink-0"
               >
-                View all <ArrowRight className="h-2.5 w-2.5" />
+                View all <ArrowRight className="h-2.5 w-2.5 shrink-0" />
               </button>
             </div>
             <div className="flex flex-wrap items-center gap-1.5 mb-3">
@@ -1113,6 +1212,22 @@ export default function MainDashboard() {
             { label: "Top Risk", value: dashboardData.quickStats.ml.topRisk, color: "text-red-400" },
           ],
           nav: "/ml-dashboard",
+        },
+        {
+          title: "ML Botnet Detection",
+          subtitle: "ML classifier and heuristic botnet activity over time",
+          icon: Bot,
+          iconColor: "text-fuchsia-400",
+          iconBg: "bg-fuchsia-500/10",
+          chartColor: "#E879F9",
+          data: botTrend,
+          stats: [
+            { label: "Detections", value: botSummary ? formatInteger(botSummary.mlBotnetAlerts) : "-", color: "text-fuchsia-400" },
+            { label: "Peak", value: botTrend.length > 0 ? formatInteger(botTrendPeak) : "-", color: "text-pink-300" },
+            { label: "Avg / bucket", value: botTrendAvg === null ? "-" : formatDecimal(botTrendAvg), color: "text-yellow-400" },
+            { label: "Max Prob", value: botMaxProb === null ? "-" : `${formatDecimal(botMaxProb)}%`, color: "text-red-400" },
+          ],
+          nav: "/bot-detection",
         },
       ].map((section, idx) => (
         <div key={section.title} className={`chart-card animate-fadeInUp stagger-${Math.min(idx + 1, 5)}`} style={{ opacity: 0 }}>

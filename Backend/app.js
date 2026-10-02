@@ -6,6 +6,7 @@ import cors from "cors";
 // PENTING: Wajib tambahkan ekstensi .js untuk file lokal
 import es from "./config/elasticsearch.js";
 import mlRoutes from "./routes/mlRoutes.js";
+import botDetectionRoutes from "./routes/botDetectionRoutes.js";
 import fileScanRoutes from "./routes/fileScanRoutes.js";
 import linuxCommandRoutes from "./routes/linuxCommandRoutes.js";
 import virusTotalRoutes from "./routes/virusTotalRoutes.js";
@@ -50,6 +51,7 @@ app.get(
 
 // 2. Daftarkan Routes
 app.use("/api/ml", mlRoutes);
+app.use("/api/bot-detection", botDetectionRoutes);
 app.use("/api/file-scans", fileScanRoutes);
 app.use("/api/linux-commands", linuxCommandRoutes);
 app.use("/api/virustotal", virusTotalRoutes);

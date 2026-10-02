@@ -500,6 +500,16 @@ const WaveChart = ({ data, color = "#a78bfa", rangeKey = "24h", height = 220, co
         <path d={pathD} stroke={color} strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
         <defs><linearGradient id="waveGradientMl" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stopColor={color} stopOpacity="0.24" /><stop offset="100%" stopColor={color} stopOpacity="0" /></linearGradient></defs>
         <path d={pathD + ` L ${padding.l + (data.length - 1) * pointSpacing} ${padding.t + innerH} L ${padding.l} ${padding.t + innerH} Z`} fill="url(#waveGradientMl)" />
+        {(() => {
+          const ai = (activePointKey !== null && typeof activePointKey !== "undefined")
+            ? data.findIndex((d) => String(d.key ?? d.t) === String(activePointKey))
+            : -1;
+          if (ai < 0) return null;
+          return (
+            <line x1={padding.l + ai * pointSpacing} y1={padding.t} x2={padding.l + ai * pointSpacing} y2={padding.t + innerH}
+              stroke={color} strokeWidth="1.5" strokeDasharray="3,3" opacity="0.85" className="pointer-events-none" />
+          );
+        })()}
         {data.map((d, i) => {
           const x = padding.l + i * pointSpacing;
           const y = padding.t + innerH - (d.v / maxV) * innerH;
@@ -514,7 +524,7 @@ const WaveChart = ({ data, color = "#a78bfa", rangeKey = "24h", height = 220, co
           return (
             <g key={`point-${pointKey}`}>
               <circle cx={x} cy={y} r={hitR} fill="transparent" className="cursor-pointer focus:outline-none" style={{ outline: "none" }} role="button" tabIndex={0} aria-label={`Filter predictions for ${formatDetailedTimestamp(pointData.start)}`} onClick={() => onPointSelect?.(pointData)} onMouseEnter={() => setSelectedPoint(pointData)} onMouseLeave={() => setSelectedPoint(null)} onFocus={() => setSelectedPoint(pointData)} onBlur={() => setSelectedPoint(null)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onPointSelect?.(pointData); } }} />
-              <circle cx={x} cy={y} r={visualR} fill={isActive ? "#a78bfa" : color} stroke={isActive ? "#0f172a" : "none"} strokeWidth="2.5" opacity="0.95" className="pointer-events-none" />
+              <circle cx={x} cy={y} r={visualR} fill={isActive ? "#a78bfa" : color} stroke="none" opacity="0.95" className="pointer-events-none" />
             </g>
           );
         })}

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Activity, CalendarRange, ChevronDown, Clock, FileText, Search, X, Users, PieChart, Cloud, AlertTriangle, ShieldAlert, SlidersHorizontal } from "lucide-react";
+import { Activity, CalendarRange, ChevronDown, Clock, FileText, Search, X, Users, PieChart, Cloud, AlertTriangle, ShieldAlert, SlidersHorizontal, Copy, Check } from "lucide-react";
 import DateRangeFilter from "../components/DateRangeFilter";
 import RangeFilter from "../components/RangeFilter";
 import FilterSelect from "../components/FilterSelect";
@@ -99,6 +99,11 @@ const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey, compact = f
     }
   }
 
+  // Indeks bucket yang diklik - untuk garis vertikal putus-putus di bawah.
+  const activeIdx = activePointKey != null
+    ? data.findIndex((d) => String(d.t) === String(activePointKey))
+    : -1;
+
   const tickCount = clamp(Math.floor(innerW / (compact ? 260 : 160)), compact ? 2 : 3, compact ? 4 : 7);
   const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
 
@@ -121,6 +126,10 @@ const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey, compact = f
           </linearGradient>
         </defs>
         <path d={pathD + ` L ${padding.l + (data.length - 1) * pointSpacing} ${padding.t + innerH} L ${padding.l} ${padding.t + innerH} Z`} fill="url(#fimWaveGradient)" />
+        {activeIdx >= 0 && (
+          <line x1={padding.l + activeIdx * pointSpacing} y1={padding.t} x2={padding.l + activeIdx * pointSpacing} y2={padding.t + innerH}
+            stroke={color} strokeWidth="1.5" strokeDasharray="3,3" opacity="0.85" className="pointer-events-none" />
+        )}
         {data.map((d, i) => {
           const x = padding.l + i * pointSpacing;
           const y = padding.t + innerH - (d.v / maxV) * innerH;
@@ -139,7 +148,7 @@ const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey, compact = f
                 onMouseEnter={() => setSelectedPoint(pointData)}
                 onMouseLeave={() => setSelectedPoint(null)}
               />
-              <circle cx={x} cy={y} r={`${denseVisualR}`} fill={isActive ? "#34d399" : color} stroke={isActive ? "#0f172a" : "none"} strokeWidth="2.5" opacity="0.95" className="pointer-events-none" />
+              <circle cx={x} cy={y} r={`${denseVisualR}`} fill={isActive ? "#34d399" : color} stroke="none" opacity="0.95" className="pointer-events-none" />
             </g>
           );
         })}
@@ -516,6 +525,52 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
           </text>
         ))}
       </svg>
+    </div>
+  );
+};
+
+// ── Path dengan popup hover yang bisa di-copy ─────────────────────────────
+const CopyablePath = ({ value }) => {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const handleCopy = async (e) => {
+    e.stopPropagation();
+    const text = String(value ?? "");
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), 1500);
+    } catch {}
+  };
+  return (
+    <div className="group/path relative min-w-0">
+      <div className="truncate max-w-[140px] sm:max-w-[180px] md:max-w-[220px] lg:max-w-[260px] 2xl:max-w-[385px] overflow-hidden text-ellipsis whitespace-nowrap">
+        {value}
+      </div>
+      <div className="absolute left-0 top-full z-50 mt-1 hidden w-max max-w-[min(420px,60vw)] group-hover/path:block rounded-lg border border-[var(--soc-border)] bg-[var(--soc-elevated)] p-2 shadow-xl">
+        <div className="break-all font-mono text-[10px] leading-relaxed text-[var(--soc-text-primary)] max-h-[120px] overflow-y-auto">
+          {value}
+        </div>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="mt-1.5 flex items-center gap-1 rounded-md border border-[var(--soc-border)] bg-[var(--soc-card)] px-2 py-1 text-[10px] font-medium text-[var(--soc-text-secondary)] transition-colors hover:border-emerald-500/50 hover:text-emerald-300"
+        >
+          {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+          {copied ? "Copied!" : "Copy"}
+        </button>
+      </div>
     </div>
   );
 };
@@ -1392,10 +1447,10 @@ const FimEvents = ({ agentId = "all" }) => {
               <div className="w-full min-w-0 max-w-full space-y-1.5">
                 {items.map((item, i) => (
                   <div key={item.label} onClick={() => handleFileSummaryClick(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg cursor-pointer ${pathFilter && String(pathFilter) === String(item.label) ? "bg-emerald-500/10 ring-1 ring-emerald-500/30" : ""}`} title={`Filter events for ${item.label}`}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color: item.color }}>{i + 1}</span>
-                        <span className="min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)] font-mono" title={item.label}>{item.label}</span>
+                    <div className="flex items-center justify-between gap-2 min-w-0">
+                      <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
+                        <span className="w-5 h-5 shrink-0 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color: item.color }}>{i + 1}</span>
+                        <span className="min-w-0 flex-1 truncate text-[10px] font-medium text-[var(--soc-text-secondary)] font-mono" title={item.label}>{item.label}</span>
                       </div>
                       <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(item.value)}</span>
                     </div>
@@ -1456,7 +1511,7 @@ const FimEvents = ({ agentId = "all" }) => {
             <thead>
               <tr className="border-b border-slate-800 bg-slate-800/70">
                 {["↓ time", "agent", "user", "path", "event", "payload", "severity"].map((h) => (
-                  <th key={h} className="px-2 md:px-4 lg:px-3 py-2 md:py-3 lg:py-2 text-[9px] md:text-[11px] lg:text-[10px] font-semibold text-slate-400 uppercase">{h}</th>
+                  <th key={h} className="px-3 md:px-5 lg:px-4 py-2 md:py-3 lg:py-2 text-[9px] md:text-[11px] lg:text-[10px] font-semibold text-slate-400 uppercase">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -1472,21 +1527,19 @@ const FimEvents = ({ agentId = "all" }) => {
                 </tr>
               ) : visibleEvents.map((evt, idx) => (
                 <tr key={evt.id} className={`border-b border-slate-800/60 hover:bg-slate-800/40 ${idx % 2 !== 0 ? "bg-slate-900/60" : ""}`}>
-                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 whitespace-nowrap text-slate-500 text-[10px] md:text-[11px] lg:text-[10px]">{formatTime(evt.timestamp)}</td>
-                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 whitespace-nowrap text-sky-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]">{evt.agentName}</td>
-                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 whitespace-nowrap text-violet-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]">{evt.username}</td>
-                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-emerald-400 font-mono text-[10px] md:text-[11px] lg:text-[10px] max-w-[140px] sm:max-w-[180px] md:max-w-[220px] lg:max-w-[260px]">
-                    <div className="truncate max-w-[140px] sm:max-w-[180px] md:max-w-[220px] lg:max-w-[260px] overflow-hidden text-ellipsis whitespace-nowrap" title={evt.syscheckPath}>
-                      {evt.syscheckPath}
-                    </div>
+                  <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 whitespace-nowrap 2xl:w-[190px] 2xl:min-w-[190px] 2xl:max-w-[190px] text-slate-500 text-[10px] md:text-[11px] lg:text-[10px]">{formatTime(evt.timestamp)}</td>
+                  <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 whitespace-nowrap 2xl:w-[190px] 2xl:min-w-[190px] 2xl:max-w-[190px] text-sky-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]">{evt.agentName}</td>
+                  <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 whitespace-nowrap 2xl:w-[140px] 2xl:min-w-[140px] 2xl:max-w-[140px] text-violet-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]">{evt.username}</td>
+                  <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 text-emerald-400 font-mono text-[10px] md:text-[11px] lg:text-[10px] max-w-[140px] sm:max-w-[180px] md:max-w-[220px] lg:max-w-[260px] 2xl:w-[420px] 2xl:min-w-[420px] 2xl:max-w-[420px]">
+                    <CopyablePath value={evt.syscheckPath} />
                   </td>
-                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2">
+                  <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 2xl:w-[130px] 2xl:min-w-[130px] 2xl:max-w-[130px]">
                     <span className={`text-[10px] md:text-[11px] lg:text-[10px] px-1 md:px-2 lg:px-1.5 py-0.5 rounded border ${evt.syscheckEvent === "deleted" ? "text-red-400 bg-red-900/30" : "text-green-400 bg-green-900/30"}`}>
                       {evt.syscheckEvent}
                     </span>
                   </td>
-                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 w-full min-w-[280px] max-w-[320px] sm:max-w-[400px] md:max-w-[560px] lg:max-w-none align-top">
-                    <div className="flex flex-col gap-1 w-full min-w-0 max-w-[320px] sm:max-w-[400px] md:max-w-[560px] lg:max-w-none">
+                  <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 w-full min-w-[280px] max-w-[320px] sm:max-w-[400px] md:max-w-[560px] lg:max-w-none xl:max-w-[720px] 2xl:max-w-[640px] align-top">
+                    <div className="flex flex-col gap-1 w-full min-w-0 max-w-[320px] sm:max-w-[400px] md:max-w-[560px] lg:max-w-none xl:max-w-[720px] 2xl:max-w-[640px]">
                       <div className="rounded-md border bg-[var(--soc-payload-bg)] px-2.5 py-2" style={{ borderColor: "var(--soc-payload-border)" }}>
                         <div className="text-[9px] font-bold tracking-wider text-cyan-400 uppercase mb-1">CHANGES:</div>
                         <pre className="whitespace-pre-wrap break-words font-mono text-[10px] leading-[1.4] text-[var(--soc-payload-text)] max-h-[120px] overflow-y-auto scrollbar-thin">
@@ -1499,7 +1552,7 @@ ${evt.syscheckEvent}${evt.fileDiff ? `\n${String(evt.fileDiff).replace(/\\n/g, "
                       </div>
                     </div>
                   </td>
-                  <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 whitespace-nowrap">{renderSeverityBadge(evt.ruleLevel)}</td>
+                  <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 whitespace-nowrap 2xl:w-[150px] 2xl:min-w-[150px] 2xl:max-w-[150px]">{renderSeverityBadge(evt.ruleLevel)}</td>
                 </tr>
               ))}
             </tbody>
