@@ -10,6 +10,7 @@ import DateRangeFilter from "../components/DateRangeFilter";
 import RangeFilter from "../components/RangeFilter";
 import PageLoader from "../components/PageLoader";
 import {
+  buildTimelineSeries,
   createDefaultDateRange,
   formatDateRangeLabel,
   getIsoDateRange,
@@ -145,11 +146,21 @@ const formatPointTimestamp = (timestamp, rangeKey) => {
 // Ubah respons /api/bot-detection/trend ({ timestamp, mlBotnet, ... }) menjadi
 // bentuk yang dipakai WaveChart: { t, v, bucketMs }. Lebar bucket diambil dari
 // selisih dua titik supaya klik pada grafik bisa membawa rentang waktu yang tepat.
-const normalizeBotTrend = (rows) => {
+const normalizeBotTrend = (rows, dateRange) => {
   const points = (Array.isArray(rows) ? rows : [])
     .map((r) => ({ t: Date.parse(r?.timestamp), v: Number(r?.mlBotnet) || 0 }))
     .filter((p) => Number.isFinite(p.t))
     .sort((a, b) => a.t - b.t);
+  // Bucket ulang memakai interval yang SAMA dengan grafik dashboard lainnya
+  // (buildTimelineSeries: harian untuk rentang ≤90 hari). Backend mengembalikan
+  // bucket 3-jaman untuk 30 hari sehingga titiknya terlalu rapat.
+  if (dateRange) {
+    try {
+      return buildTimelineSeries(points, (p) => p.t, (p) => p.v, dateRange);
+    } catch {
+      /* jatuh ke bucket asli backend bila range tidak valid */
+    }
+  }
   const bucketMs = points.length > 1 ? Math.max(points[1].t - points[0].t, 1) : 60 * 60 * 1000;
   return points.map((p) => ({ ...p, bucketMs }));
 };
@@ -376,13 +387,13 @@ const CompactBarChart = ({ items, collapsedCount = 5, onItemClick = null }) => {
 
   return (
     <div>
-      {/* Tinggi dikunci untuk 5 data: 5 x 30px + 4 x 6px gap = 174px */}
-      <div className="space-y-1.5 h-[174px] shrink-0 overflow-hidden">
+      {/* Jarak disamakan Most Changed Files: 5 x 40px + 4 x 4px gap = 216px */}
+      <div className="space-y-1 h-[216px] shrink-0 overflow-hidden">
         {visibleItems.map((item, i) => (
           <div
             key={item.label}
             onClick={() => onItemClick?.(item)}
-            className={`list-item-interactive px-2 py-1 rounded-lg h-[30px] shrink-0 overflow-hidden ${onItemClick ? "cursor-pointer" : ""}`}
+            className={`list-item-interactive px-2 py-0.5 rounded-lg h-[40px] shrink-0 overflow-hidden flex flex-col justify-center ${onItemClick ? "cursor-pointer" : ""}`}
             title={onItemClick ? `View activity for ${item.label}` : item.label}
           >
             <div className="flex items-center justify-between">
@@ -846,7 +857,7 @@ export default function MainDashboard() {
           setBotSummary(summaryRes.value.data);
         }
         if (trendRes.status === "fulfilled" && trendRes.value?.success) {
-          setBotTrend(normalizeBotTrend(trendRes.value.data));
+          setBotTrend(normalizeBotTrend(trendRes.value.data, dateRange));
         }
       } catch {
         if (!cancelled) setBotSummary(null);
@@ -1042,9 +1053,9 @@ export default function MainDashboard() {
                 </div>
               </div>
             </div>
-            {/* Tinggi dikunci 206px (= 174px list + 32px baris tab kanan)
+            {/* Tinggi dikunci 248px (= 216px list + 32px baris tab kanan)
                 agar card kiri sama tinggi dengan Top Active Agents isi 5 data */}
-            <div className="h-[206px] shrink-0 overflow-hidden">
+            <div className="h-[248px] shrink-0 overflow-hidden">
               <CategoryLineChart items={dashboardData.riskDistribution} color="#F97316" totalLabel="incidents" />
             </div>
           </div>

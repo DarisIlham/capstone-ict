@@ -10,6 +10,8 @@ import { Pool } from "pg";
 import authRouter from "./routes/auth.routes.js";
 import userRouter from "./routes/userRoutes.js";
 import notificationRouter from "./routes/notificationRoutes.js";
+import { startLoginBotPolling } from "./services/telegramLoginService.js";
+import { startSuspiciousAlertWatcher } from "./services/suspiciousAlertWatcher.js";
 import app from "./app.js";
 
 // Environment variables are loaded via `import 'dotenv/config'` above
@@ -1190,6 +1192,20 @@ app.use((err, req, res, next) => {
 const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ Server berjalan di port: ${PORT}`);
   console.log(`📡 Frontend can access at http://localhost:${PORT}`);
+  // Bot approval login Telegram (long-polling, non-blocking). Tidak aktif
+  // bila TELEGRAM_LOGIN_TOKEN / TELEGRAM_LOGIN_CHAT_ID belum diisi.
+  try {
+    startLoginBotPolling();
+  } catch (err) {
+    console.warn("[telegram-login] gagal start polling:", err.message);
+  }
+  // Watcher suspicious alert Telegram (agregat per interval). Tidak aktif
+  // bila TELEGRAM_ALERT_TOKEN / TELEGRAM_ALERT_CHAT_ID belum diisi.
+  try {
+    startSuspiciousAlertWatcher();
+  } catch (err) {
+    console.warn("[suspicious-alert] gagal start watcher:", err.message);
+  }
 });
 
 // Pesan jelas bila port sudah dipakai backend lain (jangan jalankan 2x).

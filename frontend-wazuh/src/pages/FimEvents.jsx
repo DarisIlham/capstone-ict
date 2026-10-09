@@ -1235,9 +1235,9 @@ const FimEvents = ({ agentId = "all" }) => {
         />
       </div>
 
-      {/* Timeline + Top Agents — xl:grid-cols-3 like Host Monitoring */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div className="xl:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col" style={{ opacity: 0 }}>
+      {/* Timeline + Top Agents — sebaris mulai lg seperti Dashboard */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="md:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col" style={{ opacity: 0 }}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-emerald-500/10">
@@ -1277,8 +1277,8 @@ const FimEvents = ({ agentId = "all" }) => {
         </div>
       </div>
 
-      {/* Event + Severity dipisah — masing-masing container seperti Top 5 Agents */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      {/* Event + Severity + Top Users — sebaris (3 kolom) mulai lg */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="chart-card animate-fadeInUp stagger-1 flex flex-col" style={{ opacity: 0 }}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -1402,9 +1402,9 @@ const FimEvents = ({ agentId = "all" }) => {
         </div>
       </div>
 
-      {/* Payload Pattern Cloud (bawah Event/Severity) + Top 5 Changed Files di kanannya — Payload span2 + Changed Files span1 */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-start w-full min-w-0 max-w-full box-border">
-        <div className="xl:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col w-full min-w-0 max-w-full self-start box-border overflow-hidden" style={{ opacity: 0, maxWidth: "100%" }}>
+      {/* Payload Pattern Cloud + Top 5 Changed Files — sebaris mulai lg */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start w-full min-w-0 max-w-full box-border">
+        <div className="md:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col w-full min-w-0 max-w-full self-start box-border overflow-hidden" style={{ opacity: 0, maxWidth: "100%" }}>
           <div ref={payloadHeaderRef} className="flex items-center justify-between mb-3 shrink-0">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-cyan-500/10">
@@ -1526,7 +1526,7 @@ const FimEvents = ({ agentId = "all" }) => {
                   </td>
                 </tr>
               ) : visibleEvents.map((evt, idx) => (
-                <tr key={evt.id} className={`border-b border-slate-800/60 hover:bg-slate-800/40 ${idx % 2 !== 0 ? "bg-slate-900/60" : ""}`}>
+                <tr key={evt.id} className={`border-b border-slate-800/60 transition-all duration-150 hover:bg-purple-500/10 hover:shadow-[inset_3px_0_0_0_#a855f7] ${idx % 2 !== 0 ? "bg-slate-900/60" : ""}`}>
                   <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 whitespace-nowrap 2xl:w-[190px] 2xl:min-w-[190px] 2xl:max-w-[190px] text-slate-500 text-[10px] md:text-[11px] lg:text-[10px]">{formatTime(evt.timestamp)}</td>
                   <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 whitespace-nowrap 2xl:w-[190px] 2xl:min-w-[190px] 2xl:max-w-[190px] text-sky-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]">{evt.agentName}</td>
                   <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 whitespace-nowrap 2xl:w-[140px] 2xl:min-w-[140px] 2xl:max-w-[140px] text-violet-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]">{evt.username}</td>
@@ -1538,8 +1538,8 @@ const FimEvents = ({ agentId = "all" }) => {
                       {evt.syscheckEvent}
                     </span>
                   </td>
-                  <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 w-full min-w-[280px] max-w-[320px] sm:max-w-[400px] md:max-w-[560px] lg:max-w-none xl:max-w-[720px] 2xl:max-w-[640px] align-top">
-                    <div className="flex flex-col gap-1 w-full min-w-0 max-w-[320px] sm:max-w-[400px] md:max-w-[560px] lg:max-w-none xl:max-w-[720px] 2xl:max-w-[640px]">
+                  <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 w-full min-w-[280px] max-w-[320px] sm:max-w-[400px] md:max-w-[560px] lg:max-w-none xl:max-w-[880px] 2xl:max-w-[900px] align-top">
+                    <div className="flex flex-col gap-1 w-full min-w-0 max-w-[320px] sm:max-w-[400px] md:max-w-[560px] lg:max-w-none xl:max-w-[880px] 2xl:max-w-[900px]">
                       <div className="rounded-md border bg-[var(--soc-payload-bg)] px-2.5 py-2" style={{ borderColor: "var(--soc-payload-border)" }}>
                         <div className="text-[9px] font-bold tracking-wider text-cyan-400 uppercase mb-1">CHANGES:</div>
                         <pre className="whitespace-pre-wrap break-words font-mono text-[10px] leading-[1.4] text-[var(--soc-payload-text)] max-h-[120px] overflow-y-auto scrollbar-thin">

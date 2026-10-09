@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   BarChart3,
   BrainCircuit,
@@ -20,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import botDetectionApi from '../services/botDetectionApi';
+import { useIpGeo } from '../hooks/useIpGeo';
 import DateRangeFilter from "../components/DateRangeFilter";
 import RangeFilter from "../components/RangeFilter";
 import PageLoader from "../components/PageLoader";
@@ -30,9 +32,11 @@ import {
   normalizeDateRange,
   getIsoDateRange,
   getDateRangeMinutes,
+  toDateTimeLocalValue,
 } from "../utils/dateRange";
 import { adaptiveLeftGutter } from "../utils/chartAxis";
 import { InlineEmptyState } from "../components/EmptyState";
+import undipLogo from "../assets/Undip.svg";
 
 const clamp = (n, a, b) => Math.min(Math.max(n, a), b);
 
@@ -193,7 +197,7 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
 };
 
 // ── Multi-series WaveChart (idiom WaveChart MlDashboard, 3 seri) ─────────────
-  const MultiWaveChart = ({ data, series, rangeKey = "24h", height = 220, formatValue = null, formatAxis = null, logScale = false, axisColor = "var(--soc-border)", onPointSelect = null, activePointKey = null, pointHint = null }) => {
+  const MultiWaveChart = ({ data, series, rangeKey = "24h", height = 220, formatValue = null, formatAxis = null, logScale = false, axisColor = "var(--soc-border)", onPointSelect = null, activePointKey = null, activeColor = "#38bdf8", pointHint = null }) => {
   const [hovered, setHovered] = useState(null);
   const rootRef = useRef(null);
   const svgRef = useRef(null);
@@ -227,13 +231,19 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
   // Log scale reveals low-volume series (e.g. behavior counts in the
   // hundreds) next to a dominant series (ML in the tens of thousands).
   const useLog = logScale === true && maxV > 1;
-  // Ceiling the scale to a full decade keeps grid labels on exact powers
-  // of 10, so the top two labels can never collide (e.g. 10000 vs 13619).
-  const logMax = useLog ? Math.max(Math.ceil(Math.log10(maxV + 1)), 1) : 1;
+  // Grid jatuh pada pangkat 10 penuh agar dua label teratas tidak pernah
+  // bertabrakan (mis. 10000 vs 13619).
+  let logMax = 1;
   const gridVals = [];
   if (useLog) {
+    const fullDecades = Math.max(Math.ceil(Math.log10(maxV + 1)), 1);
     let powers = [];
-    for (let p = 0; p <= logMax; p += 1) powers.push(Math.pow(10, p));
+    for (let p = 0; p <= fullDecades; p += 1) powers.push(Math.pow(10, p));
+    // Jangkar skala ke pangkat TERATAS (sebelum penjarangan) sehingga garis
+    // grid teratas tepat di padding.t — sebelumnya memakai ceil() sebagai
+    // pembagi, garis teratas jatuh di ATAS area plot dan labelnya terpotong
+    // tepi atas container.
+    logMax = Math.log10(powers[powers.length - 1] + 1);
     while (powers.length > 6) powers = powers.filter((_, idx) => idx % 2 === 0);
     gridVals.push(...powers);
   } else {
@@ -242,7 +252,11 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
   }
   const axisLabel = (value) => (typeof formatAxis === "function" ? formatAxis(value) : value);
   const valueLabel = (value) => (typeof formatValue === "function" ? formatValue(Number(value) || 0) : (Number(value) || 0));
-  const padding = { l: adaptiveLeftGutter(gridVals, 28), r: 10, t: 8, b: 24 };
+  // Ukur label yang BENAR-BENAR dirender (sudah diformat) agar gutter kiri
+  // selalu muat — sebelumnya yang diukur angka mentah, sehingga label
+  // terpotong tepi kiri container (SVG meng-clip di luar viewBox).
+  const axisLabels = gridVals.map((v) => String(axisLabel(v)));
+  const padding = { l: adaptiveLeftGutter(axisLabels, 36, 14), r: 10, t: 14, b: 24 };
   const innerW = width - padding.l - padding.r;
   const innerH = plotH - padding.t - padding.b;
   const xFor = (i) => padding.l + (data.length > 1 ? (i / (data.length - 1)) * innerW : innerW / 2);
@@ -373,7 +387,7 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
                 )}
               </rect>
               {i === activeIdx && (
-                <line x1={xFor(i)} y1={padding.t} x2={xFor(i)} y2={padding.t + innerH} stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="3,3" opacity="0.8" className="pointer-events-none" />
+                <line x1={xFor(i)} y1={padding.t} x2={xFor(i)} y2={padding.t + innerH} stroke={activeColor} strokeWidth="1.5" strokeDasharray="3,3" opacity="0.8" className="pointer-events-none" />
               )}
               {i % tickEvery === 0 && (
                 <>
@@ -447,6 +461,71 @@ const levelTone = (tier) => {
   return "bg-slate-800/60 text-slate-300 border-slate-700/50";
 };
 
+const CountryFlag = ({ ip, entry }) => {
+  // Semua ikon (logo Undip maupun bendera) memakai kotak berukuran sama
+  // dan rata tengah, sehingga selalu sejajar antar baris.
+  const box = "inline-flex h-11 w-12 items-center justify-center align-middle";
+  if (!ip) return <span className="text-slate-600 text-[10px]">-</span>;
+
+  if (entry?.private) {
+    return (
+      <span className={box}>
+        <img
+          src={undipLogo}
+          alt="UNDIP"
+          title={`${ip} — jaringan internal UNDIP`}
+          className="h-10 w-10 object-contain"
+          loading="lazy"
+        />
+      </span>
+    );
+  }
+
+  if (!entry || entry.pending) {
+    return (
+      <span
+        className="inline-block w-3 h-3 rounded-full bg-slate-700 animate-pulse align-middle"
+        title={`Mengambil negara untuk ${ip}...`}
+      />
+    );
+  }
+
+  if (entry.failed) {
+    return (
+      <span className="text-amber-500/80 text-[9px]" title={`Gagal mengambil negara untuk ${ip}`}>
+        retry
+      </span>
+    );
+  }
+
+  if (!entry.code) {
+    return (
+      <span className="text-slate-600 text-[10px]" title={`${ip} — tidak ditemukan di database country.is`}>
+        ?
+      </span>
+    );
+  }
+
+  return (
+      <span className={box}>
+      <img
+        src={entry.flag}
+        alt={entry.code || ip}
+        title={`${entry.name || entry.code || ""} — ${ip}`}
+        className="h-5 w-7 rounded-[2px] border border-slate-800/60 shadow-sm object-cover"
+        loading="lazy"
+        onError={(e) => {
+          // Beberapa ISO mungkin tidak punya file di CDN (jarang), pakai
+          // fallback ke negara "UN" agar tidak muncul kotak kosong.
+          if (e.currentTarget.src !== "https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/un.svg") {
+            e.currentTarget.src = "https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/un.svg";
+          }
+        }}
+      />
+    </span>
+  );
+};
+
 const LevelBadge = ({ alert, label }) => {
   let tier = 0;
   let title = String(label ?? "-");
@@ -482,6 +561,7 @@ const LevelBadge = ({ alert, label }) => {
 
 // ── Bot Combined Filter (konsep MlCombinedFilter: satu tombol Filters + panel) ─
 const BotCombinedFilter = ({
+  detector, onDetectorChange,
   behaviorType, onBehaviorTypeChange,
   protocol, onProtocolChange,
   minProbability, onMinProbabilityChange,
@@ -527,6 +607,7 @@ const BotCombinedFilter = ({
     };
   }, [open, calcPosition]);
   const clearAll = () => {
+    onDetectorChange("ml");
     onBehaviorTypeChange("all");
     onProtocolChange("all");
     onMinProbabilityChange("all");
@@ -572,6 +653,14 @@ const BotCombinedFilter = ({
             </div>
           )}
           <div className="divide-y divide-[var(--soc-border)] max-h-[360px] overflow-y-auto">
+            <div className="px-3 py-2">
+              <div className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">Detector</div>
+              <div className="flex flex-wrap gap-1">
+                {[{ value: "ml", label: "Botnet" }, { value: "behavior", label: "Behavior" }].map((opt) => (
+                  <button key={opt.value} onClick={() => onDetectorChange(opt.value)} className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${detector === opt.value ? "bg-sky-500/20 text-sky-300 border border-sky-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}>{opt.label}</button>
+                ))}
+              </div>
+            </div>
             <Section label="Behavior Type" value={behaviorType} allLabel="All behavior" options={BEHAVIOR_TYPES.map((t) => ({ value: t.value, label: t.label }))} onChange={onBehaviorTypeChange} />
             <Section label="Agent" value={agentFilter} allLabel="All agents" options={agentOptions} onChange={onAgentChange} />
             <Section label="Source IP" value={srcIpFilter} allLabel="All source IPs" options={srcIpOptions} onChange={onSrcIpChange} />
@@ -600,13 +689,17 @@ export default function BotDetection() {
   const [ipTab, setIpTab] = useState("source");
   const [selectedPoint, setSelectedPoint] = useState(null);
   const [isolatedTrend, setIsolatedTrend] = useState(null);
-  const [isolatedVMs, setIsolatedVMs] = useState(null);
+  // Isolasi seri grafik Top VMs by Traffic saat titiknya diklik.
+  const [isolatedVm, setIsolatedVm] = useState(null);
   const [topAgents, setTopAgents] = useState({ agents: [], uniqueAgents: 0 });
   const [alerts, setAlerts] = useState([]);
   const [pagination, setPagination] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
 
   const [detectorTab] = useState("all");
+  // Filter detector KHUSUS tabel log (default botnet). Kartu/grafik atas
+  // tidak ikut — mereka memakai detectorTab + legend masing-masing.
+  const [detectorFilter, setDetectorFilter] = useState("ml");
   const [behaviorType, setBehaviorType] = useState("all");
   const [agentFilter, setAgentFilter] = useState("all");
   const [srcIpFilter, setSrcIpFilter] = useState("all");
@@ -628,6 +721,37 @@ export default function BotDetection() {
     }
   }, []);
 
+  // Deep-link dari halaman Alerts: ?start=&end=&agent=&focus=logs.
+  // Diterapkan sekali saat mount agar tabel langsung menampilkan data log
+  // yang sesuai dengan alert yang diklik.
+  const [searchParams] = useSearchParams();
+  const urlAppliedRef = useRef(false);
+  useEffect(() => {
+    if (urlAppliedRef.current) return;
+    urlAppliedRef.current = true;
+    const urlStart = searchParams.get("start");
+    const urlEnd = searchParams.get("end");
+    const urlAgent = searchParams.get("agent");
+    let applied = false;
+    if (urlStart && urlEnd) {
+      const s = new Date(urlStart);
+      const e = new Date(urlEnd);
+      if (!Number.isNaN(s.getTime()) && !Number.isNaN(e.getTime()) && s < e) {
+        setFilterMode("custom");
+        setCustomDateRange({ start: toDateTimeLocalValue(s), end: toDateTimeLocalValue(e) });
+        applied = true;
+      }
+    }
+    if (urlAgent) {
+      setAgentFilter(urlAgent);
+      applied = true;
+    }
+    if (applied && searchParams.get("focus") === "logs") {
+      setTimeout(scrollTableIntoView, 600);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Klik titik grafik ikut memfilter detektor yang di-point. Tanpa ini tabel
   // tetap menampilkan semua seri sehingga user menekan "Beaconing" tapi log
   // yang muncul malah didominasi ML botnet (klik pada kolom kosong di area
@@ -640,20 +764,36 @@ export default function BotDetection() {
       // dilepas di sini; kalau hanya CHIP waktu yang dihapus, tabel tetap
       // terkunci ke satu seri dan user mengira kliknya tidak berefek.
       setSelectedPoint(null);
-      if (selectedPoint.seriesKey && selectedPoint.seriesKey !== "mlBotnet") {
-        setBehaviorType("all");
+      if (source === "vms") {
+        setIsolatedVm(null);
+        setAgentFilter("all");
+      } else {
+        setIsolatedTrend(null);
+        if (selectedPoint.seriesKey && selectedPoint.seriesKey !== "mlBotnet") {
+          setBehaviorType("all");
+        }
       }
       return;
     }
     if (point.seriesKey) {
-      if (point.seriesKey === "mlBotnet") {
-        setBehaviorType("all");
-        setAgentFilter("all");
-        setSrcIpFilter("all");
-        setDstIpFilter("all");
+      if (source === "vms") {
+        // Sama seperti Alert Trend: kunci grafik ke agent yang diklik,
+        // garis putus-putus + tabel mengikuti agent & tanggal tersebut.
+        setIsolatedVm(point.seriesKey);
+        setAgentFilter(point.seriesKey);
       } else {
-        const meta = behaviorMeta(point.seriesKey);
-        if (meta) setBehaviorType(meta.value);
+        // Kunci grafik hanya ke seri yang diklik (berlaku untuk ML maupun
+        // behavior) — garis putus-putus + tabel mengikuti seri tersebut.
+        setIsolatedTrend(point.seriesKey);
+        if (point.seriesKey === "mlBotnet") {
+          setBehaviorType("all");
+          setAgentFilter("all");
+          setSrcIpFilter("all");
+          setDstIpFilter("all");
+        } else {
+          const meta = behaviorMeta(point.seriesKey);
+          if (meta) setBehaviorType(meta.value);
+        }
       }
     }
     setSelectedPoint({ ...point, source });
@@ -696,9 +836,11 @@ export default function BotDetection() {
       const scoped = { ...common, ...behaviorScope };
       // Click filters (agent / source IP / destination IP) scope ONLY the
       // alert table — cards, charts, and top lists keep showing all data.
+      // Tabel selalu terkunci ke satu detector: pilihan Detector (default
+      // botnet), kecuali behaviorType spesifik memaksa behavior-only.
       const alertParams = {
         ...buildParams({ page, limit: pageSize }),
-        ...behaviorScope,
+        detector: behaviorType !== "all" ? "behavior" : detectorFilter,
         ...(agentFilter !== "all" ? { agent: agentFilter } : {}),
         ...(srcIpFilter !== "all" ? { srcIp: srcIpFilter } : {}),
         ...(dstIpFilter !== "all" ? { dstIp: dstIpFilter } : {}),
@@ -767,7 +909,7 @@ export default function BotDetection() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [buildParams, page, pageSize, selectedPoint, agentFilter, srcIpFilter, dstIpFilter]);
+  }, [buildParams, page, pageSize, selectedPoint, agentFilter, srcIpFilter, dstIpFilter, detectorFilter, behaviorType]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -776,7 +918,7 @@ export default function BotDetection() {
     const interval = setInterval(() => { void loadAll(true, controller.signal); }, 60_000);
     return () => { clearTimeout(timer); clearInterval(interval); controller.abort(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buildParams, page, pageSize, selectedPoint, agentFilter, srcIpFilter, dstIpFilter]);
+  }, [buildParams, page, pageSize, selectedPoint, agentFilter, srcIpFilter, dstIpFilter, detectorFilter, behaviorType]);
 
   const handleAgentSummaryClick = useCallback((item) => {
     const value = String(item?.label || "all");
@@ -804,9 +946,10 @@ export default function BotDetection() {
   const handleExportCsv = async () => {
     // Export all rows matching the current filters (date range included),
     // not just the visible page — fetched page by page from the backend.
+    const tableDetector = behaviorType !== "all" ? "behavior" : detectorFilter;
     const params = {
       ...buildParams({}),
-      ...(behaviorType !== "all" ? { detector: "behavior" } : {}),
+      detector: tableDetector,
       ...(agentFilter !== "all" ? { agent: agentFilter } : {}),
       ...(srcIpFilter !== "all" ? { srcIp: srcIpFilter } : {}),
       ...(dstIpFilter !== "all" ? { dstIp: dstIpFilter } : {}),
@@ -822,7 +965,7 @@ export default function BotDetection() {
     // non-overlapping time slices (half-open windows would be ideal, but
     // the backend range is inclusive — duplicates across slice edges are
     // removed by id, so the result stays exact without cursor pagination).
-    const scopes = behaviorType !== "all" ? ["behavior"] : ["ml", "behavior"];
+    const scopes = [tableDetector];
     const seen = new Set();
     const all = [];
     const pushItems = (items) => {
@@ -860,21 +1003,46 @@ export default function BotDetection() {
     }
     all.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     const rows = all.slice(0, MAX_ROWS).map((a) => {
+      const geo = ipGeo.get(a.sourceIp);
+      let countryCol = "-";
+      if (geo) {
+        if (geo.private) countryCol = "UNDIP";
+        else if (geo.pending) countryCol = "LOADING";
+        else if (geo.failed) countryCol = "N/A";
+        else if (geo.code)       countryCol = geo.flag ? (
+        <img
+          src={geo.flag}
+          alt={geo.code || a.sourceIp}
+          title={`${geo.name || geo.code || ""} — ${a.sourceIp}`}
+          className="w-4 h-3 rounded-[1px] border border-slate-800/60 shadow-sm object-cover"
+          loading="lazy"
+          onError={(e) => {
+            if (e.currentTarget.src !== "https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/un.svg") {
+              e.currentTarget.src = "https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/un.svg";
+            }
+          }}
+        />
+      ) : "N/A";
+        else countryCol = "N/A";
+      }
       return [
       formatDetailedTimestamp(a.timestamp),
       a.agent || "-",
       a.detectorType === "ml" ? "BOTNET" : behaviorLabel(a.detectionType),
       a.sourceIp || "-",
+      countryCol,
       a.destinationIp || "-",
       a.protocol || a.method || "-",
       a.detectorType === "ml"
         ? (a.probability != null ? `${(a.probability * 100).toFixed(2)}%` : "-")
         : (a.primaryValue != null ? `${a.primaryValue} ${a.primaryLabel || "events"}` : "-"),
+      a.hits != null ? String(a.hits) : "-",
+      a.detectorType === "ml" && a.rulePackets != null ? `${a.rulePackets} packets` : "-",
       a.detectorType === "ml" && a.totalBytes != null ? `${a.totalBytes} bytes` : "-",
     ];});
     exportCsv({
       filename: `bot-detection-${new Date().toISOString().slice(0, 10)}.csv`,
-      header: ["Time", "Agent", "Detection", "Source IP", "Destination IP", "Protocol", "Confidence", "Traffic (bytes)"],
+      header: ["Time", "Agent", "Detection", "Source IP", "Country (source)", "Destination IP", "Protocol", "Confidence", "Hits", "Packets", "Traffic (bytes)"],
       rows,
     });
   };
@@ -894,10 +1062,32 @@ export default function BotDetection() {
   })), [topAgents]);
 
   const agentFilterOptions = useMemo(() => (topAgents?.agents || []).map((a) => ({ value: String(a.name), label: String(a.name) })), [topAgents]);
-  const srcIpFilterOptions = useMemo(() => (topSources || []).map((s) => ({ value: String(s.ip), label: String(s.ip) })), [topSources]);
+  // Opsi Source IP = gabungan top backend + IP yang benar-benar muncul di
+  // log halaman ini, masing-masing berlabel jumlah log seperti halaman ML.
+  const srcIpFilterOptions = useMemo(() => {
+    const counts = new Map();
+    for (const s of topSources || []) {
+      const ip = String(s.ip || "");
+      if (ip && !counts.has(ip)) counts.set(ip, Number(s.count) || 0);
+    }
+    const pageCounts = new Map();
+    for (const a of alerts || []) {
+      const ip = String(a.sourceIp || "");
+      if (!ip || ip === "-") continue;
+      pageCounts.set(ip, (pageCounts.get(ip) || 0) + 1);
+      if (!counts.has(ip)) counts.set(ip, 0);
+    }
+    return Array.from(counts.entries()).slice(0, 10).map(([ip, count]) => ({
+      value: ip,
+      label: `${ip} (${count > 0 ? count : (pageCounts.get(ip) || 0)})`,
+    }));
+  }, [topSources, alerts]);
   const dstIpFilterOptions = useMemo(() => (topDestinations?.destinations || []).map((d) => ({ value: String(d.ip), label: String(d.ip) })), [topDestinations]);
 
-  const VM_SERIES_COLORS = ["#38bdf8", "#f97316", "#f59e0b", "#2dd4bf", "#a78bfa"];
+  // Palet dipilih menyebar di roda hue (biru, oranye, hijau, ungu, pink)
+  // agar tidak ada dua seri berdekatan yang mirip — sebelumnya oranye
+  // (#f97316) vs amber (#f59e0b) hampir tak terbedakan.
+  const VM_SERIES_COLORS = ["#38bdf8", "#f97316", "#34d399", "#c084fc", "#f472b6"];
   const vmSeries = useMemo(() => (trafficTimeline?.agents || []).map((name, i) => ({
     key: String(name), label: String(name), color: VM_SERIES_COLORS[i % VM_SERIES_COLORS.length],
   })), [trafficTimeline]);
@@ -928,7 +1118,18 @@ export default function BotDetection() {
   // Legend mengikuti apa yang digambar, tapi saat isolation aktif semua seri tetap
   // ditampilkan supaya user bisa pindah pilihan atau balik ke "show all".
   const trendLegendSeries = isolatedTrend ? visibleSeries : visibleSeries.filter(hasTrendSignal);
-  const vmDisplaySeries = isolatedVMs ? vmSeries.filter((s) => s.key === isolatedVMs) : vmSeries;
+  // Warna garis putus-putus mengikuti warna legend seri yang diklik.
+  const activeTrendColor = useMemo(() => {
+    const key = selectedPoint?.source === "trend" ? selectedPoint.seriesKey : null;
+    if (!key) return "#38bdf8";
+    return SERIES.find((s) => s.key === key)?.color || "#38bdf8";
+  }, [selectedPoint]);
+  const vmDisplaySeries = isolatedVm ? vmSeries.filter((s) => s.key === isolatedVm) : vmSeries;
+  const activeVmColor = useMemo(() => {
+    const key = selectedPoint?.source === "vms" ? selectedPoint.seriesKey : null;
+    if (!key) return "#38bdf8";
+    return vmSeries.find((s) => s.key === key)?.color || "#38bdf8";
+  }, [selectedPoint, vmSeries]);
 
   const topDestBarItems = useMemo(() => (topDestinations?.destinations || []).map((d, i) => ({
     label: String(d.ip), value: Number(d.count) || 0, color: ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6"][i % 5],
@@ -937,6 +1138,11 @@ export default function BotDetection() {
   const avgProbability = summary?.averageBotnetProbability;
   const totalPages = pagination?.totalPages || 1;
   const activePage = pagination ? page : 1;
+
+  // Negara asal source IP. Hook ini yang mengurus cache, rate limit, dan
+  // IP privat, halaman ini hanya membacanya per baris.
+  const alertSourceIps = useMemo(() => alerts.map((a) => a.sourceIp), [alerts]);
+  const ipGeo = useIpGeo(alertSourceIps);
 
   if (loading && !summary && alerts.length === 0 && !error) {
     return <PageLoader message="Loading..." fullScreen />;
@@ -1021,8 +1227,8 @@ export default function BotDetection() {
       </div>
 
       {/* Alert Trend + Top 5 Agents — komposisi seperti halaman lain */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div className="xl:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col" style={{ opacity: 0 }}>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="md:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col" style={{ opacity: 0 }}>
           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-violet-500/10"><BarChart3 className="h-3.5 w-3.5 text-violet-400" /></div>
@@ -1039,6 +1245,7 @@ export default function BotDetection() {
           <div className="h-[220px]" style={{ background: "transparent" }}>
             <MultiWaveChart data={trend} series={trendDisplaySeries} rangeKey={trendRangeKey} height={220} logScale
               onPointSelect={(point) => handlePointSelect(point, "trend")}
+              activeColor={activeTrendColor}
               pointHint={(point) => {
                 const near = nearestTrendSeries(point);
                 return near ? `Filter table: ${near.label} - ${formatDetailedTimestamp(point.timestamp)}` : `Filter table: ${formatDetailedTimestamp(point.timestamp)}`;
@@ -1058,7 +1265,7 @@ export default function BotDetection() {
                   title={isActive ? "Show all series" : `Show only ${s.label}`}
                   className={`flex items-center gap-1.5 text-[11px] rounded px-1 py-0.5 transition-all ${isActive ? "font-bold text-slate-200 ring-1 ring-sky-500/40 bg-sky-500/10" : dimmed ? "text-slate-500 opacity-50 hover:opacity-80" : "text-slate-400 hover:text-slate-200"}`}
                 >
-                  <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: s.color }} />
+                <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: s.color }} />
                   <span>{s.label}</span>
                   <span className="text-slate-500 font-mono">{formatNumber(total)}</span>
                 </button>
@@ -1085,8 +1292,8 @@ export default function BotDetection() {
       </div>
 
       {/* Top VMs by Traffic — komposisi seperti Alert Trend (grafik + ranking) */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div className="xl:col-span-2 chart-card animate-fadeInUp stagger-4 flex flex-col" style={{ opacity: 0 }}>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="md:col-span-2 chart-card animate-fadeInUp stagger-4 flex flex-col" style={{ opacity: 0 }}>
           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-sky-500/10"><Server className="h-3.5 w-3.5 text-sky-400" /></div>
@@ -1100,22 +1307,30 @@ export default function BotDetection() {
               <div className="text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatLiveTimestamp(lastUpdated)}</div>
             </div>
           </div>
-        <div className="h-[220px]" style={{ background: "transparent" }}>
-          <MultiWaveChart data={trafficTimeline.points} series={vmDisplaySeries} rangeKey={trendRangeKey} height={220} formatValue={formatBytes} formatAxis={formatBytesCompact}
+        <div className="flex-1 min-h-[200px]" style={{ background: "transparent" }}>
+          <MultiWaveChart data={trafficTimeline.points} series={vmDisplaySeries} rangeKey={trendRangeKey} height={280} formatValue={formatBytes} formatAxis={formatBytesCompact}
             onPointSelect={(point) => handlePointSelect(point, "vms")}
+            activeColor={activeVmColor}
             activePointKey={selectedPoint?.source === "vms" ? selectedPoint.key : null} />
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 justify-center px-1 mt-2">
           {vmSeries.map((s) => {
             const info = (traffic?.topVMs || []).find((v) => String(v.agent) === String(s.key));
-            const isActive = isolatedVMs === s.key;
-            const dimmed = isolatedVMs && !isActive;
+            // Klik legend langsung memfilter tabel alert ke agent tersebut
+            // (toggle, sama seperti daftar Top lainnya) — tanpa perlu hover.
+            const isActive = agentFilter !== "all" && String(agentFilter) === String(s.key);
+            const dimmed = agentFilter !== "all" && !isActive;
             return (
               <button
                 key={s.key}
                 type="button"
-                onClick={() => setIsolatedVMs(isActive ? null : s.key)}
-                title={isActive ? "Show all series" : `Show only ${s.label}`}
+                onClick={() => {
+                  handleAgentSummaryClick({ label: s.key });
+                  // Selaraskan isolasi grafik dengan filter yang baru.
+                  const activating = !(agentFilter !== "all" && String(agentFilter) === String(s.key));
+                  setIsolatedVm(activating ? s.key : null);
+                }}
+                title={isActive ? "Show all agents" : `Filter table: ${s.label}`}
                 className={`flex items-center gap-1.5 text-[11px] rounded px-1 py-0.5 transition-all ${isActive ? "font-bold text-slate-200 ring-1 ring-sky-500/40 bg-sky-500/10" : dimmed ? "text-slate-500 opacity-50 hover:opacity-80" : "text-slate-400 hover:text-slate-200"}`}
               >
                 <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: s.color }} />
@@ -1175,6 +1390,7 @@ export default function BotDetection() {
                 className="w-full pl-10 pr-4 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500" />
             </div>
             <BotCombinedFilter
+              detector={detectorFilter} onDetectorChange={(v) => { setPage(1); setDetectorFilter(v); }}
               behaviorType={behaviorType} onBehaviorTypeChange={(v) => { setPage(1); setBehaviorType(v); }}
               protocol={protocol} onProtocolChange={(v) => { setPage(1); setProtocol(v); }}
               minProbability={minProbability} onMinProbabilityChange={(v) => { setPage(1); setMinProbability(v); }}
@@ -1197,20 +1413,32 @@ export default function BotDetection() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[880px] text-[10px] md:text-[11px] text-left">
+          <table className="w-full min-w-[960px] text-[10px] md:text-[11px] text-left">
+            <colgroup>
+              <col />
+              <col />
+              <col />
+              <col />
+              <col />
+              <col />
+              <col />
+              <col />
+              <col style={{ minWidth: "70px" }} />
+              <col />
+            </colgroup>
             <thead>
               <tr className="border-b border-slate-800 bg-slate-800/70">
-                {["time", "agent", "detection", "source", "destination", "protocol", "confidence", "traffic"].map((h) => (
+                {["time", "agent", "detection", "source", "country", "destination", "protocol", "confidence", "packets", "traffic"].map((h) => (
                   <th key={h} className="px-2 md:px-4 lg:px-3 py-2 md:py-3 lg:py-2 text-[9px] md:text-[11px] lg:text-[10px] font-semibold text-slate-400 uppercase whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={8} className="px-4 py-8 text-center text-xs text-slate-500">Loading alerts...</td></tr>
+                <tr><td colSpan={10} className="px-4 py-8 text-center text-xs text-slate-500">Loading alerts...</td></tr>
               ) : alerts.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center">
+                  <td colSpan={10} className="px-4 py-8 text-center">
                     <p className="text-[10px] font-semibold text-[var(--soc-text-secondary)]">No detection alerts found for the selected period.</p>
                     <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">Try adjusting the selected filters or time range.</p>
                   </td>
@@ -1229,14 +1457,19 @@ export default function BotDetection() {
                 }
                 return (
                   <tr key={a.id || idx}
-                    className={`border-b border-slate-800/60 hover:bg-slate-800/40 transition-colors ${idx % 2 !== 0 ? 'bg-slate-900/60' : ''}`}>
+                    className={`border-b border-slate-800/60 transition-all duration-150 hover:bg-purple-500/10 hover:shadow-[inset_3px_0_0_0_#a855f7] ${idx % 2 !== 0 ? 'bg-slate-900/60' : ''}`}>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-slate-500 whitespace-nowrap" title={formatDetailedTimestamp(a.timestamp)}>{formatDetailedTimestamp(a.timestamp)}</td>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-sky-400 font-medium" title={a.agent || "-"}><div className="truncate max-w-[140px] md:max-w-[200px]">{a.agent || "-"}</div></td>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 whitespace-nowrap"><DetectionBadge alert={a} /></td>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-emerald-400 font-mono" title={source}><div className="truncate max-w-[150px] md:max-w-[200px]">{source}</div></td>
+                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 whitespace-nowrap"><CountryFlag ip={a.sourceIp} entry={ipGeo.get(a.sourceIp)} /></td>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-violet-400 font-mono" title={destination}><div className="truncate max-w-[150px] md:max-w-[200px]">{destination}</div></td>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-slate-300 whitespace-nowrap">{protoMethod}</td>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 whitespace-nowrap"><LevelBadge alert={a} label={activity} /></td>
+                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 whitespace-nowrap font-mono text-[10px] md:text-[11px] text-slate-300"
+                      title={a.detectorType === "ml" && a.rulePackets != null ? `${formatNumber(a.rulePackets)} packets` : undefined}>
+                      {a.detectorType === "ml" && a.rulePackets != null ? `${formatNumber(a.rulePackets)} packets` : "-"}
+                    </td>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-slate-300 whitespace-nowrap font-mono"
                       title={a.detectorType === "ml" && a.totalBytes != null ? `${formatNumber(a.totalBytes)} bytes (${formatNumber(a.origBytes)} orig / ${formatNumber(a.respBytes)} resp)` : undefined}>
                       {a.detectorType === "ml" && a.totalBytes != null ? formatBytes(a.totalBytes) : "-"}

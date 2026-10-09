@@ -10,6 +10,7 @@ import {
   KeyRound,
   ArrowLeft,
   Mail,
+  ShieldCheck,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import ReCAPTCHA from "react-google-recaptcha";
@@ -37,7 +38,8 @@ const LoginPage = () => {
     type: "error",
   });
 
-  // Langkah login: "credentials" -> "otp"; lupa password: "forgot" -> "reset"
+  // Langkah login: "credentials" -> "otp" -> "waiting-approval" (luar jam kerja);
+  // lupa password: "forgot" -> "reset"
   const [step, setStep] = useState("credentials");
   const [rememberMe, setRememberMe] = useState(true);
   const [otpId, setOtpId] = useState(null);
@@ -45,6 +47,9 @@ const LoginPage = () => {
   const [otpDigits, setOtpDigits] = useState(["", "", "", "", "", ""]);
   const [otpExpiresAt, setOtpExpiresAt] = useState(null);
   const [resendAvailableAt, setResendAvailableAt] = useState(null);
+  // Approval admin via Telegram (login di luar jam kerja)
+  const [approvalId, setApprovalId] = useState(null);
+  const [approvalExpiresAt, setApprovalExpiresAt] = useState(null);
   const [nowTs, setNowTs] = useState(() => Date.now());
   const otpBoxRefs = useRef([]);
 
@@ -317,6 +322,20 @@ const LoginPage = () => {
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) throw new Error(data.message || "Verifikasi OTP gagal");
 
+      // Di luar jam kerja: OTP valid, tapi JWT terbit hanya setelah admin
+      // menyetujui via Telegram — masuk mode tunggu.
+      if (data.approvalRequired && data.approvalId) {
+        setApprovalId(data.approvalId);
+        setApprovalExpiresAt(Date.now() + Number(data.expiresIn || 300) * 1000);
+        setStep("waiting-approval");
+        setNotification({
+          show: true,
+          message: data.message || "Menunggu persetujuan admin via Telegram",
+          type: "success",
+        });
+        return;
+      }
+
       login(data.token, data.user, rememberMe);
 
       setNotification({
@@ -398,12 +417,60 @@ const LoginPage = () => {
     return `${m}:${s}`;
   };
 
-  // Detik berjalan untuk countdown OTP & jeda kirim ulang
+  // Detik berjalan untuk countdown OTP, jeda kirim ulang, & approval
   useEffect(() => {
-    if (step !== "otp") return undefined;
+    if (step !== "otp" && step !== "waiting-approval") return undefined;
     const timer = setInterval(() => setNowTs(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [step]);
+
+  // Polling status approval admin (tiap 3 detik) selama menunggu.
+  useEffect(() => {
+    if (step !== "waiting-approval" || !approvalId) return undefined;
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/auth/login/approval/${approvalId}`);
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (data.token) {
+          login(data.token, data.user, rememberMe);
+          setNotification({
+            show: true,
+            message: "Admin menyetujui login! Redirecting to dashboard...",
+            type: "success",
+          });
+          setTimeout(() => {
+            if (!cancelled) navigate("/");
+          }, 1500);
+        } else if (data.status === "denied" || res.status === 403) {
+          setApprovalId(null);
+          setStep("credentials");
+          setNotification({
+            show: true,
+            message: data.message || "Login ditolak oleh admin.",
+            type: "error",
+          });
+        } else if (data.status === "expired" || res.status === 410) {
+          setApprovalId(null);
+          setStep("credentials");
+          setNotification({
+            show: true,
+            message: data.message || "Waktu persetujuan habis. Silakan login ulang.",
+            type: "error",
+          });
+        }
+      } catch {
+        /* abaikan: coba lagi pada interval berikutnya */
+      }
+    };
+    void check();
+    const timer = setInterval(check, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [step, approvalId, login, navigate, rememberMe]);
 
   useEffect(() => {
     if (notification.show) {
@@ -666,6 +733,34 @@ const LoginPage = () => {
               {Date.now() < resendAvailableAt ? `Resend in ${formatCountdown(resendAvailableAt)}` : "Resend code"}
             </button>
           </div>
+          </>
+        )}
+
+        {step === "waiting-approval" && (
+          <>
+          <div className="flex flex-col items-center text-center">
+            <div className="p-3 rounded-2xl text-white shadow-lg" style={{ background: "var(--soc-gradient-purple)" }}>
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <h2 className="text-[clamp(15px,4.4vw,17px)] font-bold text-[var(--soc-text-primary)] mt-3">Menunggu persetujuan admin</h2>
+            <p className="text-[clamp(11px,3.4vw,13px)] text-[var(--soc-text-muted)] mt-1">
+              Di luar jam kerja (19:00–05:00 WIB), login membutuhkan persetujuan admin via Telegram.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-center gap-2 text-[clamp(11px,3.2vw,12px)] text-[var(--soc-text-muted)]">
+            <div className="animate-spin h-4 w-4 border-2 border-violet-500 border-t-transparent rounded-full"></div>
+            <span>Berlaku dalam <span className="font-semibold text-[var(--soc-accent)] font-mono">{formatCountdown(approvalExpiresAt)}</span></span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => { setApprovalId(null); goToStep("credentials"); }}
+            className="w-full h-[clamp(40px,12vw,44px)] flex justify-center items-center gap-1.5 rounded-lg text-[clamp(12px,3.6vw,14px)] font-semibold transition-all duration-200 bg-[var(--soc-elevated)] border border-[var(--soc-border)] text-[var(--soc-text-secondary)] hover:brightness-125"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Batalkan & kembali</span>
+          </button>
           </>
         )}
 

@@ -5,6 +5,16 @@ import axios from "axios";
 import { createAdminLoginNotification } from "../services/notificationService.js";
 import { sendOtpEmail } from "../services/mailerService.js";
 import {
+  createLoginApproval,
+  consumeLoginApproval,
+  getLoginApproval,
+  sendLoginApprovalMessage,
+  sendLoginInfoMessage,
+  isTelegramLoginConfigured,
+  isOutsideWorkingHours,
+} from "../services/telegramLoginService.js";
+import { touchPresence, removePresence } from "../services/presenceService.js";
+import {
   createOtp,
   verifyOtp,
   maskEmail,
@@ -239,40 +249,8 @@ return res.status(401).json({ success: false, message: "Incorrect email or passw
       }
     }
 
-    // Generate JWT Token
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        email: user.email,
-        role: user.role,
-      },
-      process.env.JWT_SECRET || "your-secret-key",
-      {
-        expiresIn: "7d",
-      }
-    );
-
-    if (user.role === "admin") {
-      createAdminLoginNotification({
-        name: user.name,
-        email: user.email,
-      }).catch((notificationError) => {
-        console.error("Failed to save admin login notification:", notificationError.message);
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      message: "Login successful",
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        status: user.status,
-      },
-    });
+    // Login langsung (tanpa OTP): terbitkan JWT + info login Telegram.
+    return issueLoginSuccess(res, user, true);
   } catch (error) {
     console.error("Login error:", error.message);
     res.status(500).json({
@@ -379,6 +357,37 @@ async function validateCredentialsForOtp(email, password, captchaToken) {
   return user;
 }
 
+/**
+ * Terbitkan JWT untuk user. Dipakai login normal maupun login yang sudah
+ * disetujui admin via Telegram (hindari duplikasi konfigurasi expiry).
+ */
+function signUserToken(row, rememberMe) {
+  return jwt.sign(
+    { userId: row.id, email: row.email, role: row.role || "user", loginAt: Date.now() },
+    process.env.JWT_SECRET || "your-secret-key",
+    { expiresIn: rememberMe ? "7d" : "12h" }
+  );
+}
+
+function publicUser(row) {
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name || null,
+    role: row.role || "user",
+    status: row.status || "active",
+  };
+}
+
+/**
+ * Login di luar jam kerja (default 19:00–05:00 WIB) wajib disetujui admin
+ * via bot Telegram, kecuali bot belum dikonfigurasi (fail-open + warning).
+ */
+function shouldRequireLoginApproval() {
+  if (process.env.LOGIN_APPROVAL_ENABLED === "0") return false;
+  if (!isTelegramLoginConfigured()) return false;
+  return isOutsideWorkingHours(new Date());
+}
 /**
  * Langkah 1 login OTP: validasi kredensial lalu kirim kode OTP ke email.
  * POST /api/auth/login/request-otp { email, password, captchaToken }
@@ -558,35 +567,154 @@ export const verifyLoginOtp = async (req, res) => {
     }
     const row = result.rows[0];
 
-    const token = jwt.sign(
-      { userId: row.id, email: row.email, role: row.role || "user" },
-      process.env.JWT_SECRET || "your-secret-key",
-      { expiresIn: rememberMe ? "7d" : "12h" }
-    );
-
-    if ((row.role || "user") === "admin") {
-      createAdminLoginNotification({ name: row.name, email: row.email }).catch((e) =>
-        console.error("Failed to save admin login notification:", e.message)
-      );
-    }
-
-    res.status(200).json({
-      success: true,
-      message: "Login successful",
-      token,
-      user: {
-        id: row.id,
+    // Di luar jam kerja: OTP valid belum cukup — admin harus menyetujui
+    // via tombol Telegram sebelum JWT diterbitkan.
+    if (shouldRequireLoginApproval()) {
+      const approval = createLoginApproval({
+        userId: row.id,
         email: row.email,
         name: row.name || null,
         role: row.role || "user",
-        status: row.status || "active",
-      },
-    });
+        rememberMe: rememberMe === true,
+        ip: req.ip || req.headers["x-forwarded-for"] || "-",
+        userAgent: req.headers["user-agent"] || "-",
+      });
+      try {
+        await sendLoginApprovalMessage(approval);
+        console.log(`[otp] approval login dibuat id=${approval.id} email=${row.email}`);
+      } catch (tgErr) {
+        // Telegram down tidak boleh mengunci user: login jalan normal.
+        console.error("[otp] kirim approval Telegram gagal, login dilanjutkan:", tgErr.message);
+        return issueLoginSuccess(res, row, rememberMe === true);
+      }
+      return res.status(202).json({
+        success: true,
+        approvalRequired: true,
+        message: "Di luar jam kerja: menunggu persetujuan admin via Telegram",
+        approvalId: approval.id,
+        expiresIn: Math.max(1, Math.round((approval.expiresAt - Date.now()) / 1000)),
+      });
+    }
+
+    return issueLoginSuccess(res, row, rememberMe === true);
   } catch (error) {
     console.error("Verify OTP error:", error.message);
     res.status(error.status || 500).json({
       success: false,
       message: error.message || "An error occurred while verifying OTP",
     });
+  }
+};
+
+/**
+ * Terbitkan respons login sukses standar (JWT + user + notifikasi admin).
+ * Setiap login jam kerja juga mengirim info login ke Telegram (tanpa tombol,
+ * fire-and-forget). Untuk login malam yang disetujui, info tidak dikirim
+ * (pesan request + keputusan sudah tercatat) — matikan via { notifyLogin: false }.
+ */
+function issueLoginSuccess(res, row, rememberMe, extra = {}, { notifyLogin = true } = {}) {
+  const token = signUserToken(row, rememberMe);
+
+  if ((row.role || "user") === "admin") {
+    createAdminLoginNotification({ name: row.name, email: row.email }).catch((e) =>
+      console.error("Failed to save admin login notification:", e.message)
+    );
+  }
+
+  if (notifyLogin) {
+    void sendLoginInfoMessage({
+      name: row.name || null,
+      email: row.email,
+      role: row.role || "user",
+      ip: res.req?.ip || res.req?.headers?.["x-forwarded-for"] || "-",
+      userAgent: res.req?.headers?.["user-agent"] || "-",
+    });
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: "Login successful",
+    token,
+    user: publicUser(row),
+    ...extra,
+  });
+}
+
+/**
+ * Heartbeat kehadiran (dipanggil frontend selama user login).
+ * POST /api/auth/presence/touch (butuh JWT)
+ */
+export const touchPresenceEndpoint = async (req, res) => {
+  try {
+    const u = req.user || {};
+    touchPresence({
+      userId: u.id,
+      email: u.email,
+      name: u.name,
+      role: u.role,
+      ip: req.ip || req.headers["x-forwarded-for"] || "-",
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Gagal mencatat kehadiran" });
+  }
+};
+
+/**
+ * Hapus kehadiran saat logout (best-effort; kedaluwarsa otomatis juga ada).
+ * DELETE /api/auth/presence (butuh JWT)
+ */
+export const removePresenceEndpoint = async (req, res) => {
+  try {
+    removePresence(req.user?.id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Gagal menghapus kehadiran" });
+  }
+};
+/**
+ * Status request approval login (dipolling frontend saat menunggu admin).
+ * GET /api/auth/login/approval/:id
+ *
+ * - pending → { status: "pending", expiresIn }
+ * - approved → JWT diterbitkan SEKALI (sekali pakai), lalu record dihapus
+ * - denied → 403 { status: "denied" }
+ * - expired / tidak dikenal → 410 { status: "expired" }
+ */
+export const getLoginApprovalStatus = async (req, res) => {
+  try {
+    const rec = getLoginApproval(req.params?.id);
+    if (!rec || rec.status === "expired") {
+      return res.status(410).json({
+        success: false,
+        status: "expired",
+        message: "Permintaan persetujuan kedaluwarsa. Silakan login ulang.",
+      });
+    }
+    if (rec.status === "denied") {
+      return res.status(403).json({
+        success: false,
+        status: "denied",
+        message: "Login ditolak oleh admin.",
+      });
+    }
+    if (rec.status === "pending") {
+      return res.json({
+        success: true,
+        status: "pending",
+        expiresIn: Math.max(0, Math.round((rec.expiresAt - Date.now()) / 1000)),
+      });
+    }
+    // approved → konsumsi sekali pakai lalu terbitkan JWT (tanpa info
+    // Telegram tambahan — request + keputusan sudah tercatat).
+    consumeLoginApproval(rec.id);
+    const result = await pool.query("SELECT * FROM users WHERE id = $1 LIMIT 1", [rec.userId]);
+    if (!result || !result.rows || result.rows.length === 0) {
+      return res.status(404).json({ success: false, status: "denied", message: "User tidak ditemukan" });
+    }
+    return issueLoginSuccess(res, result.rows[0], rec.rememberMe, { status: "approved" }, { notifyLogin: false });
+  } catch (error) {
+    console.error("Approval status error:", error.message);
+    res.status(500).json({ success: false, message: "Gagal memeriksa status persetujuan" });
   }
 };

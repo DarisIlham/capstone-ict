@@ -1,7 +1,7 @@
-// services/botDetectionService.js
+﻿// services/botDetectionService.js
 // Shadow-mode Bot Detection: ML botnet alerts (Zeek conn.log, ML model)
 // + behavior alerts (SUSPECTED_HTTP_BRUTE_FORCE / SUSPECTED_PORT_SCAN).
-// Monitoring only — no mitigation actions are exposed anywhere here.
+// Monitoring only â€” no mitigation actions are exposed anywhere here.
 
 import es from "../config/elasticsearch.js";
 import {
@@ -23,7 +23,7 @@ const ML_INDEX_PREFIX = "capstone-zeek-botnet-alerts-";
 const BEHAVIOR_INDEX_PREFIX = "capstone-zeek-behavior-alerts-";
 
 // Canonical behavior detector types (alert_type). Legacy detector versions
-// emitted SUSPECTED_* names — they are canonicalized, never double counted.
+// emitted SUSPECTED_* names â€” they are canonicalized, never double counted.
 export const BEHAVIOR_TYPES = [
   "HTTP_BRUTE_FORCE",
   "SSH_BRUTE_FORCE",
@@ -226,7 +226,7 @@ function firstArray(src, paths = []) {
 }
 
 // Primary count/indicator metric per behavior type:
-// { value, label } — label is a short unit ("attempts", "conns", "ports", "hosts").
+// { value, label } â€” label is a short unit ("attempts", "conns", "ports", "hosts").
 function behaviorPrimary(src, alertType) {
   switch (alertType) {
     case "HTTP_BRUTE_FORCE":
@@ -280,7 +280,7 @@ function normalizeAlert(hit) {
       detectorType: "ml",
       detectionType: "BOTNET",
       severity: null,
-      sourceIp: getField(src, "src_ip"),
+      sourceIp: getField(src, "original_src_ip") || (() => { const x = getField(src, "xff_chain"); if (Array.isArray(x) && x.length && typeof x[0] === "string") return x[0].trim(); if (typeof x === "string" && x.trim()) return x.split(",")[0].trim(); return null; })() || getField(src, "src_ip") || getField(src, "observed_src_ip") || getField(src, "zeek_src_ip"),
       sourcePort: getField(src, "src_port"),
       destinationIp: getField(src, "dst_ip"),
       destinationPort: getField(src, "dst_port"),
@@ -288,6 +288,8 @@ function normalizeAlert(hit) {
       indicator: getField(src, "service") || getField(src, "conn_state"),
       probability: Number.isFinite(probability) ? probability : null,
       threshold: getField(src, "threshold") ?? 0.5,
+      hits: numOrNull(getField(src, "rule_hits")),
+      rulePackets: numOrNull(getField(src, "rule_packets")),
       origBytes: Number.isFinite(origBytes) ? origBytes : null,
       respBytes: Number.isFinite(respBytes) ? respBytes : null,
       totalBytes: Number.isFinite(origBytes) || Number.isFinite(respBytes)
@@ -310,7 +312,7 @@ function normalizeAlert(hit) {
     detectionType: BEHAVIOR_TYPES.includes(alertType) ? alertType : rawType,
     alertType: rawType,
     severity: getField(src, "severity"),
-    sourceIp: firstScalar(src, ["source_ip", "src_ip", "source.ip"]),
+    sourceIp: firstScalar(src, ["original_src_ip"]) || (() => { const x = firstScalar(src, ["xff_chain"]); if (Array.isArray(x) && x.length && typeof x[0] === "string") return x[0].trim(); if (typeof x === "string" && x.trim()) return x.split(",")[0].trim(); return null; })() || firstScalar(src, ["src_ip"]) || firstScalar(src, ["observed_src_ip", "zeek_src_ip", "source_ip", "source.ip"]),
     sourcePort: firstScalar(src, ["source_port", "src_port", "source.port"]),
     destinationIp: firstScalar(src, ["destination_ip", "dst_ip", "destination.ip"]),
     destinationPort: firstScalar(src, ["destination_port", "dst_port", "destination.port"]),
@@ -601,7 +603,7 @@ export async function getTopAgents(query = {}) {
       return response?.aggregations?.by_agent?.buckets || [];
     } catch {
       // Satu index bermasalah (mis. beda mapping) tidak boleh
-      // menggagalkan seluruh endpoint — anggap kosong.
+      // menggagalkan seluruh endpoint â€” anggap kosong.
       return [];
     }
   };
@@ -625,11 +627,11 @@ export async function getTopAgents(query = {}) {
 }
 
 const PROBABILITY_RANGES = [
-  { key: "0.50–0.59", from: 0.5, to: 0.6 },
-  { key: "0.60–0.69", from: 0.6, to: 0.7 },
-  { key: "0.70–0.79", from: 0.7, to: 0.8 },
-  { key: "0.80–0.89", from: 0.8, to: 0.9 },
-  { key: "0.90–1.00", from: 0.9, to: 1.01 }
+  { key: "0.50â€“0.59", from: 0.5, to: 0.6 },
+  { key: "0.60â€“0.69", from: 0.6, to: 0.7 },
+  { key: "0.70â€“0.79", from: 0.7, to: 0.8 },
+  { key: "0.80â€“0.89", from: 0.8, to: 0.9 },
+  { key: "0.90â€“1.00", from: 0.9, to: 1.01 }
 ];
 
 export async function getProbability(query = {}) {
@@ -768,7 +770,7 @@ export async function getTraffic(query = {}) {
 };
 
 export async function getTrafficTimeline(query = {}) {
-  // Bytes over time per agent — feeds the Top VMs wave chart.
+  // Bytes over time per agent â€” feeds the Top VMs wave chart.
   if (normalizeDetector(query.detector) === "behavior") {
     return { agents: [], points: [] };
   }

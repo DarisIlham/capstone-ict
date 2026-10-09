@@ -4796,6 +4796,44 @@ aside.w-60 {
   word-break: normal !important;
 }
 
+/* Kolom Command: pakai seluruh sisa lebar kolom (batas 44vw di atas
+   dikecualikan) — terpotong hanya bila benar-benar kehabisan ruang. */
+.soc-responsive-table td.soc-command-cell > div.truncate {
+  max-width: none !important;
+  width: 100% !important;
+}
+
+/* Tabel log Host Monitoring: padding sel dilonggarkan (aturan global
+   10px !important di atas dikalahkan di sini) + jarak lega antara
+   kolom Command dan Status. */
+.soc-responsive-table.soc-logs-table :is(th, td) {
+  padding-block: 12px !important;
+  padding-inline: 12px !important;
+}
+.soc-responsive-table.soc-logs-table td.soc-command-cell {
+  padding-right: 24px !important;
+}
+@media (min-width: 768px) {
+  .soc-responsive-table.soc-logs-table :is(th, td) {
+    padding-block: 14px !important;
+    padding-inline: 16px !important;
+  }
+  .soc-responsive-table.soc-logs-table td.soc-command-cell {
+    padding-right: 40px !important;
+  }
+}
+
+/* Hover baris tabel log: kolom pertama (sticky TIME) punya background sendiri
+   sehingga menutupi highlight baris — samakan tint ungu + aksen kiri di sini,
+   dengan transisi yang sama agar satu baris menyala serentak. */
+.soc-responsive-table.soc-logs-table tbody td:first-child {
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+.soc-responsive-table.soc-logs-table tbody tr:hover td:first-child {
+  background: color-mix(in srgb, #a855f7 12%, var(--soc-card)) !important;
+  box-shadow: inset 3px 0 0 0 #a855f7 !important;
+}
+
 /* Long text anywhere: ellipsis or wrap, never silently clipped. */
 .truncate[title],
 [title].truncate {
@@ -6760,6 +6798,18 @@ aside.w-60 {
 
 .animate-fadeInUp {
   animation: fadeInUp 0.5s ease-out forwards;
+}
+
+/* Critical-alert auto-dismiss progress bar */
+@keyframes alarm-autodismiss {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+.alarm-autodismiss {
+  animation-name: alarm-autodismiss;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
 }
 
 /* Scale In Animation */

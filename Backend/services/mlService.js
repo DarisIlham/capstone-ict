@@ -60,6 +60,7 @@ function formatPrediction(hit) {
     sourceIp: getField(src, "source.ip"),
     destinationIp: getField(src, "destination.ip"),
     service: getField(src, "network.service"),
+    httpUri: firstMeaningfulField(src, ["http.uri", "url.original"]) || null,
     trafficDirection: getField(src, "webids.traffic_direction"),
     predictedLabel: getField(src, "ml.predicted_label"),
     confidence: getField(src, "ml.confidence"),

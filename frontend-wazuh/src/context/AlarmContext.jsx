@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AlertTriangle, BellRing, Bot, ShieldAlert, X } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { fetchAllEvents } from "../utils/fetchAllEvents";
@@ -18,6 +19,8 @@ const BEEP_GAP = 0.18;
 const HISTORY_LIMIT = 50;
 const POPUP_LIST_LIMIT = 5;
 const STORAGE_KEY = "alarm-history";
+const ENABLED_KEY = "alarm-enabled";
+const SOUND_KEY = "alarm-sound-enabled";
 const ES_MAX_WINDOW = 10000;
 
 const AlarmContext = createContext(null);
@@ -242,6 +245,24 @@ export const AlarmProvider = ({ children }) => {
   const [unread, setUnread] = useState(0);
   const [popup, setPopup] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  // Preferensi pengguna: master on/off notifikasi + suara.
+  // Disimpan di localStorage agar berlaku per-browser per-akun.
+  const [alarmEnabled, setAlarmEnabled] = useState(() => {
+    try {
+      const raw = localStorage.getItem(ENABLED_KEY);
+      return raw === null ? true : raw !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    try {
+      const raw = localStorage.getItem(SOUND_KEY);
+      return raw === null ? true : raw !== "0";
+    } catch {
+      return true;
+    }
+  });
   // null = baseline belum terbentuk, jadi load pertama tidak memicu alarm.
   const seenKeysRef = useRef(null);
 
@@ -259,6 +280,32 @@ export const AlarmProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
+    try {
+      localStorage.setItem(ENABLED_KEY, alarmEnabled ? "1" : "0");
+    } catch {
+      /* abaikan */
+    }
+  }, [alarmEnabled]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SOUND_KEY, soundEnabled ? "1" : "0");
+    } catch {
+      /* abaikan */
+    }
+  }, [soundEnabled]);
+
+  // Mematikan notifikasi juga menutup popup yang sedang tampil agar
+  // tidak ada bunyi/tumpukan tertinggal.
+  const toggleAlarm = useCallback(() => {
+    setAlarmEnabled((v) => {
+      if (v) setPopup(null);
+      return !v;
+    });
+  }, []);
+  const toggleSound = useCallback(() => setSoundEnabled((v) => !v), []);
+
+  useEffect(() => {
     // Tunggu AuthContext selesai memulihkan sesi. Selama itu isAuthenticated
     // masih false, dan bila history ikut dibersihkan di sini maka riwayat
     // dari localStorage akan terhapus setiap kali halaman di-reload.
@@ -269,6 +316,13 @@ export const AlarmProvider = ({ children }) => {
       setUnread(0);
       setPopup(null);
       seenKeysRef.current = null;
+      return undefined;
+    }
+
+    // Notifikasi dimatikan pengguna: jangan polling sama sekali supaya
+    // tidak ada popup, badge, history baru, maupun suara.
+    if (!alarmEnabled) {
+      setPopup(null);
       return undefined;
     }
 
@@ -327,7 +381,7 @@ export const AlarmProvider = ({ children }) => {
         });
         setUnread((n) => n + fresh.length);
         setPopup({ items: fresh.slice(0, POPUP_LIST_LIMIT), total: fresh.length });
-        void play(fresh.length);
+        if (soundEnabled) void play(fresh.length);
       } catch (err) {
         if (cancelled || err?.name === "AbortError") return;
         console.warn("Alarm check failed:", err);
@@ -341,7 +395,7 @@ export const AlarmProvider = ({ children }) => {
       controller.abort();
       clearInterval(interval);
     };
-  }, [isAuthenticated, authLoading, play, audioContextRef]);
+  }, [isAuthenticated, authLoading, alarmEnabled, soundEnabled, play, audioContextRef]);
 
   const dismissPopup = useCallback(() => setPopup(null), []);
   const closePanel = useCallback(() => setPanelOpen(false), []);
@@ -362,82 +416,131 @@ export const AlarmProvider = ({ children }) => {
       unread,
       popup,
       panelOpen,
+      alarmEnabled,
+      soundEnabled,
+      setAlarmEnabled,
+      setSoundEnabled,
+      toggleAlarm,
+      toggleSound,
       closePanel,
       togglePanel,
       clearHistory,
       dismissPopup,
     }),
-    [history, unread, popup, panelOpen, closePanel, togglePanel, clearHistory, dismissPopup]
+    [history, unread, popup, panelOpen, alarmEnabled, soundEnabled, toggleAlarm, toggleSound, closePanel, togglePanel, clearHistory, dismissPopup]
   );
 
   return (
     <AlarmContext.Provider value={value}>
       {children}
-      <AlarmPopup popup={popup} onDismiss={dismissPopup} />
+      {alarmEnabled && <AlarmPopup popup={popup} onDismiss={dismissPopup} />}
     </AlarmContext.Provider>
   );
 };
 
 // ── Popup peringatan ────────────────────────────────────────────────────────
+// Kartu memakai variabel tema (soc-card, soc-text-*) sehingga terbaca jelas
+// di tema gelap maupun terang; hilang sendiri setelah AUTO_DISMISS_MS.
+const AUTO_DISMISS_MS = 10000;
+
 const AlarmPopup = ({ popup, onDismiss }) => {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!popup) return undefined;
+    const timer = setTimeout(onDismiss, AUTO_DISMISS_MS);
+    return () => clearTimeout(timer);
+  }, [popup, onDismiss]);
+
   if (!popup) return null;
+  // key memaksa remount tiap batch baru agar animasi masuk + progress bar
+  // selalu mulai dari awal.
+  const batchKey = `${popup.items?.[0]?.key || "batch"}-${popup.total}`;
+
+  // Klik item langsung menuju halaman + data yang sesuai (link sudah
+  // dibawa tiap alert), lalu popup ditutup.
+  const openItem = (link) => {
+    onDismiss();
+    navigate(link || "/alerts");
+  };
+
   return (
-    <div className="fixed inset-x-0 top-0 z-[300] flex justify-center px-3 pt-3 pointer-events-none animate-fadeInUp">
+    <div className="fixed inset-x-0 top-0 z-[300] flex justify-center px-3 pt-3 pointer-events-none">
       <div
+        key={batchKey}
         role="alertdialog"
         aria-label="Critical alert"
-        className="pointer-events-auto w-full max-w-md rounded-xl border border-red-500/40 shadow-2xl overflow-hidden"
-        style={{ background: "linear-gradient(180deg, #2a0f18 0%, #170b14 100%)" }}
+        className="pointer-events-auto w-full max-w-md rounded-2xl border border-[var(--soc-border)] shadow-2xl overflow-hidden animate-fadeInUp"
+        style={{ background: "var(--soc-card)" }}
       >
-        <div className="flex items-start gap-2.5 px-3.5 py-3 border-b border-red-500/25 bg-red-500/10">
-          <div className="p-1.5 rounded-lg bg-red-500/20 shrink-0">
-            <BellRing className="h-4 w-4 text-red-400" />
+        <div className="h-1 bg-red-500" />
+
+        <div className="flex items-start gap-3 px-4 py-3.5">
+          <div className="p-2 rounded-xl bg-red-500/15 shrink-0">
+            <BellRing className="h-4 w-4 text-red-500" />
           </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="text-[12px] font-bold text-red-300">
-              {popup.total} Critical Alert{popup.total > 1 ? "s" : ""} incoming
-            </h3>
-            <p className="text-[9px] text-red-300/70">New detections require your attention</p>
+          <div className="flex-1 min-w-0 leading-relaxed">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-[12px] font-bold text-[var(--soc-text-primary)] leading-relaxed">
+                {popup.total} Critical Alert{popup.total > 1 ? "s" : ""} incoming
+              </h3>
+              <span className="rounded-full bg-red-500 px-2 py-0.5 text-[9px] font-bold text-white leading-none">
+                {popup.total} new
+              </span>
+            </div>
+            <p className="text-[10px] text-[var(--soc-text-muted)] leading-relaxed mt-1">
+              New detections require your attention
+            </p>
           </div>
           <button
             onClick={onDismiss}
             aria-label="Dismiss alarm"
-            className="p-1 rounded-lg hover:bg-red-500/20 transition-colors shrink-0"
+            className="p-1.5 rounded-lg text-[var(--soc-text-muted)] hover:text-[var(--soc-text-primary)] hover:bg-[var(--soc-elevated)] transition-colors shrink-0"
           >
-            <X className="h-3.5 w-3.5 text-red-300" />
+            <X className="h-3.5 w-3.5" />
           </button>
         </div>
 
-        <ul className="max-h-56 overflow-y-auto divide-y divide-red-500/10">
+        <ul className="max-h-56 overflow-y-auto divide-y divide-[var(--soc-border)]/60 border-t border-[var(--soc-border)]/60">
           {popup.items.map((item) => {
             const isBotnet = item.source === "Bot Detection";
             const Icon = isBotnet ? Bot : item.source === "FIM" ? ShieldAlert : AlertTriangle;
             return (
-              <li key={item.key} className="flex items-start gap-2.5 px-3.5 py-2.5">
-                <Icon className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10.5px] font-medium text-slate-200 break-words">{item.title}</p>
-                  <p className="text-[9px] text-slate-400 mt-0.5 truncate">
-                    {item.source} &middot; {item.asset}
-                  </p>
-                </div>
+              <li key={item.key}>
+                <button
+                  type="button"
+                  onClick={() => openItem(item.link)}
+                  title={`Buka ${item.source}`}
+                  className="flex w-full items-start gap-3 px-4 py-3 text-left leading-relaxed hover:bg-[var(--soc-elevated)]/60 transition-colors cursor-pointer"
+                >
+                  <div className="p-1.5 rounded-lg bg-red-500/10 shrink-0 mt-0.5">
+                    <Icon className="h-3.5 w-3.5 text-red-500" />
+                  </div>
+                  <div className="min-w-0 flex-1 leading-relaxed">
+                    <p className="text-[11px] font-medium text-[var(--soc-text-primary)] break-words leading-relaxed">{item.title}</p>
+                    <p className="text-[9px] text-[var(--soc-text-muted)] mt-1 truncate leading-relaxed">
+                      {item.source} &middot; {item.asset}
+                    </p>
+                  </div>
+                </button>
               </li>
             );
           })}
           {popup.total > popup.items.length && (
-            <li className="px-3.5 py-2 text-[9px] text-red-300/70">
+            <li className="px-4 py-2.5 text-[9px] text-[var(--soc-text-muted)] leading-relaxed">
               +{popup.total - popup.items.length} more alert{popup.total - popup.items.length > 1 ? "s" : ""} in the alarm history
             </li>
           )}
         </ul>
 
-        <div className="px-3.5 py-2.5 border-t border-red-500/20 bg-black/20">
-          <button
-            onClick={onDismiss}
-            className="w-full rounded-lg bg-red-500/20 border border-red-500/40 px-3 py-1.5 text-[10px] font-semibold text-red-200 hover:bg-red-500/30 transition-colors"
-          >
-            Acknowledge
-          </button>
+        <div
+          className="h-0.5 bg-[var(--soc-elevated)]"
+          title="Closes automatically"
+        >
+          <div
+            className="h-full bg-red-500 alarm-autodismiss"
+            style={{ animationDuration: `${AUTO_DISMISS_MS}ms` }}
+          />
         </div>
       </div>
     </div>

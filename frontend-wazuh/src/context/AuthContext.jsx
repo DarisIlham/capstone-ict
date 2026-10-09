@@ -1,4 +1,16 @@
-import { createContext, useState, useEffect, useCallback } from "react";
+import { createContext, useState, useEffect, useCallback, useRef } from "react";
+
+// Zona waktu acuan jam malam.
+const CURFEW_TZ_OFFSET_MINUTES = 7 * 60; // WIB = UTC+7 (tanpa DST)
+
+// Milidetik menuju 00:00 berikutnya di zona acuan.
+function msUntilMidnight() {
+  const now = new Date();
+  const zoned = new Date(now.getTime() + (CURFEW_TZ_OFFSET_MINUTES + now.getTimezoneOffset()) * 60000);
+  const nextMidnight = new Date(zoned);
+  nextMidnight.setHours(24, 0, 0, 0);
+  return Math.max(1000, nextMidnight.getTime() - zoned.getTime());
+}
 
 const AuthContext = createContext();
 
@@ -69,7 +81,7 @@ export const AuthProvider = ({ children }) => {
     setUser(userData);
   };
 
-  const logout = () => {
+  const logout = useCallback(() => {
     try {
       localStorage.removeItem("token");
       localStorage.removeItem("user");
@@ -80,7 +92,29 @@ export const AuthProvider = ({ children }) => {
     }
     setIsAuthenticated(false);
     setUser(null);
-  };
+  }, []);
+
+  // Auto-logout tepat 00:00 WIB: siapa pun yang masih login langsung keluar.
+  // Timer dihitung ulang setiap status auth berubah (mis. login 00:30 →
+  // timer berikutnya 24 jam lagi).
+  const midnightTimer = useRef(null);
+  useEffect(() => {
+    if (midnightTimer.current) {
+      clearTimeout(midnightTimer.current);
+      midnightTimer.current = null;
+    }
+    if (!isAuthenticated) return undefined;
+    midnightTimer.current = setTimeout(() => {
+      midnightTimer.current = null;
+      logout();
+    }, msUntilMidnight());
+    return () => {
+      if (midnightTimer.current) {
+        clearTimeout(midnightTimer.current);
+        midnightTimer.current = null;
+      }
+    };
+  }, [isAuthenticated, logout]);
 
   return (
     <AuthContext.Provider value={{ isAuthenticated, user, loading, login, logout }}>

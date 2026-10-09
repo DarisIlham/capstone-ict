@@ -991,14 +991,14 @@ const FileSecurityScanner = () => {
       {/* KPI Cards — kpi-modern 4 kolom */}
       <div className="grid grid-cols-2 min-[700px]:grid-cols-4 gap-3">
         <KPICard label="Total Scanned" value={new Intl.NumberFormat("en-US").format(stats?.totalEvents ?? 0)} icon={FileText} color="text-purple-400" desc="scans in range" loading={loading} index={0} />
-        <KPICard label="Suspicious" value={new Intl.NumberFormat("en-US").format(stats?.suspiciousScans ?? 0)} icon={AlertTriangle} color="text-pink-400" desc="suspicious detected" loading={loading} index={1} />
-        <KPICard label="Clean" value={new Intl.NumberFormat("en-US").format(stats?.cleanScans ?? 0)} icon={ShieldAlert} color="text-cyan-400" desc="clean scans" loading={loading} index={2} />
-        <KPICard label="Avg Risk" value={`${avgRisk}%`} icon={Activity} color="text-emerald-400" desc={`${Number(stats?.maxFindings||0)} max findings`} loading={loading} index={3} />
+        <KPICard label="Total Findings" value={new Intl.NumberFormat("en-US").format(files.reduce((s, f) => s + (Number(f.findingsCount) || 0), 0))} icon={Bug} color="text-pink-400" desc="across scanned files" loading={loading} index={1} />
+        <KPICard label="Critical Files" value={new Intl.NumberFormat("en-US").format(Number((analytics.severities || []).find((s) => String(s.label).toUpperCase() === "CRITICAL")?.value ?? 0))} icon={AlertTriangle} color="text-red-400" desc="need immediate action" loading={loading} index={2} />
+        <KPICard label="Unique Agents" value={new Intl.NumberFormat("en-US").format(analytics.uniqueAgents ?? 0)} icon={Users} color="text-amber-400" desc="reporting agents" loading={loading} index={3} />
       </div>
 
-      {/* Timeline + Top Agents — xl:grid-cols-3 */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div className="xl:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col" style={{ opacity: 0 }}>
+      {/* Timeline + Top Agents — sebaris mulai lg seperti Dashboard */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="md:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col" style={{ opacity: 0 }}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-red-500/10"><Activity className="h-3.5 w-3.5 text-red-400" /></div>
@@ -1034,8 +1034,8 @@ const FileSecurityScanner = () => {
         </div>
       </div>
 
-      {/* Severity + Top Folders — xl:grid-cols-3 (2 charts, 1 empty flex) */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      {/* Severity + Top Folders + Top Suspicious — sebaris (3 kolom) mulai md */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="chart-card animate-fadeInUp stagger-1 flex flex-col" style={{ opacity: 0 }}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -1084,15 +1084,15 @@ const FileSecurityScanner = () => {
                     const inner = (
                       <>
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color: item.color }}>{i + 1}</span>
-                            <span className="min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)] font-mono" title={item.fullLabel || item.label}>{item.label}</span>
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold shrink-0" style={{ color: item.color }}>{i + 1}</span>
+                            <span className="min-w-0 max-w-full text-[10px] font-medium text-[var(--soc-text-secondary)] font-mono break-all leading-snug line-clamp-2" title={item.fullLabel || item.label}>{item.label}</span>
                           </div>
-                          <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(item.value)}</span>
+                          <span className="min-w-[1.5rem] shrink-0 self-start text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(item.value)}</span>
                         </div>
                         {item.sub && (
-                          <div className="-mt-0.5 ml-7 leading-none">
-                            <span className="text-[9px] text-[var(--soc-text-muted)]" title={`by ${item.sub}`}>by {item.sub}</span>
+                          <div className="mt-1 ml-7 leading-relaxed">
+                            <span className="block truncate text-[9px] text-[var(--soc-text-muted)]" title={`by ${item.sub}`}>by {item.sub}</span>
                           </div>
                         )}
                         <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
@@ -1150,6 +1150,16 @@ const FileSecurityScanner = () => {
 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-[10px] md:text-[11px] text-left">
+            <colgroup>
+              <col />
+              <col style={{ minWidth: "120px" }} />
+              <col />
+              <col style={{ minWidth: "100px" }} />
+              <col />
+              <col style={{ minWidth: "130px" }} />
+              <col style={{ minWidth: "100px" }} />
+              <col style={{ minWidth: "120px" }} />
+            </colgroup>
             <thead>
               <tr className="border-b border-slate-800 bg-slate-800/70">
                 {["time","agent","file","type","file path","severity","findings","action"].map((h)=>(
@@ -1168,21 +1178,21 @@ const FileSecurityScanner = () => {
               ) : filteredFiles.map((file, idx) => {
                 const maxSeverity = file.findings.reduce((max, finding)=>(severityOrder[finding.severity] > severityOrder[max.severity] ? finding : max), file.findings[0]);
                 return (
-                  <tr key={file.id} className={`border-b border-slate-800/60 hover:bg-slate-800/40 ${idx % 2 !== 0 ? "bg-slate-900/60" : ""}`}>
+                  <tr key={file.id} className={`border-b border-slate-800/60 transition-all duration-150 hover:bg-purple-500/10 hover:shadow-[inset_3px_0_0_0_#a855f7] ${idx % 2 !== 0 ? "bg-slate-900/60" : ""}`}>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-slate-500 text-[10px] md:text-[11px] lg:text-[10px] whitespace-nowrap">{formatTime(file.timestamp)}</td>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-sky-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-[140px] sm:max-w-[180px] md:max-w-[220px] lg:max-w-[260px] overflow-hidden text-ellipsis whitespace-nowrap" title={file.agentName}>{file.agentName}</div></td>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-slate-700 rounded flex items-center justify-center text-xs font-bold text-slate-300 shrink-0">{String(file.fileType || "?").charAt(0).toUpperCase()}</div>
-                        <div className="min-w-0 max-w-[140px] sm:max-w-[180px] md:max-w-[220px] lg:max-w-[260px]">
-                          <div className="truncate max-w-[140px] sm:max-w-[180px] md:max-w-[220px] lg:max-w-[260px] overflow-hidden text-ellipsis whitespace-nowrap font-mono text-sky-300 text-[10px] md:text-[11px]" title={file.fileName}>{file.fileName}</div>
+                        <div className="min-w-0 max-w-[140px] sm:max-w-[180px] md:max-w-[260px] lg:max-w-[340px]">
+                          <div className="truncate max-w-[140px] sm:max-w-[180px] md:max-w-[260px] lg:max-w-[340px] overflow-hidden text-ellipsis whitespace-nowrap font-mono text-sky-300 text-[10px] md:text-[11px]" title={file.fileName}>{file.fileName}</div>
                           <div className="text-[9px] md:text-[10px] text-slate-500">{file.sizeLabel}</div>
                         </div>
                       </div>
                     </td>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-[10px] md:text-[11px] text-slate-400">{file.fileType}</td>
-                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 max-w-[140px] sm:max-w-[180px] md:max-w-[220px] lg:max-w-[260px]">
-                      <div className="truncate max-w-[140px] sm:max-w-[180px] md:max-w-[220px] lg:max-w-[260px] overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[10px] md:text-[11px] text-amber-300" title={file.filePath}>{file.filePath || "-"}</div>
+                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 max-w-[140px] sm:max-w-[180px] md:max-w-[380px] lg:max-w-[520px]">
+                      <div className="truncate max-w-[140px] sm:max-w-[180px] md:max-w-[380px] lg:max-w-[520px] overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[10px] md:text-[11px] text-amber-300" title={file.filePath}>{file.filePath || "-"}</div>
                     </td>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2"><RiskIndicator severity={maxSeverity?.severity || "HIGH"} /></td>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-[10px] md:text-[11px]"><span className="text-slate-300 font-mono">{file.findingsCount} found</span></td>

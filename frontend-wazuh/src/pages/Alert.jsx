@@ -81,8 +81,17 @@ export default function Alert() {
         start: currentRange.start,
         end: currentRange.end,
       });
-      const buildAlertLink = (path, params = {}) => {
-        const query = new URLSearchParams({ start, end, focus: "logs", ...params });
+      const buildAlertLink = (path, params = {}, ts) => {
+        // Persempit ke ±30 menit sekitar waktu kejadian supaya halaman tujuan
+        // langsung menampilkan data yang sesuai, bukan seluruh rentang.
+        let wStart = start;
+        let wEnd = end;
+        const ms = new Date(ts).getTime();
+        if (Number.isFinite(ms)) {
+          wStart = new Date(ms - 30 * 60000).toISOString();
+          wEnd = new Date(ms + 30 * 60000).toISOString();
+        }
+        const query = new URLSearchParams({ start: wStart, end: wEnd, focus: "logs", ...params });
         return `${path}?${query.toString()}`;
       };
       const fetchAlertSource = (url) => fetch(url, {
@@ -174,7 +183,7 @@ export default function Alert() {
           link: buildAlertLink("/attack-dashboard", {
             status: "suspicious",
             ...(pick(a.agentName, a.agent_name) ? { agent: pick(a.agentName, a.agent_name) } : {}),
-          }),
+          }, a.timestamp || a.created_at),
         })),
         ...fileData.map((f, i) => {
           const findings = Array.isArray(f.findings) ? f.findings : [];
@@ -189,10 +198,10 @@ export default function Alert() {
             agent: pick(f.agentName, f.agent_name) || "-",
             user: "-",
             reason: `Scanner: ${pick(f.scanner) || "file-scan"} | Findings: ${count || "-"}${topFinding ? ` | ${topFinding}` : ""} | SHA256: ${String(f.sha256 || f.hash || "").substring(0, 16)}${f.sha256 || f.hash ? "..." : "-"}`,
-            timestamp: f.timestamp || f.scan_time || f.created_at,
-            link: buildAlertLink("/file-security", {
-              ...(pick(f.agentName, f.agent_name) ? { agent: pick(f.agentName, f.agent_name) } : {}),
-            }),
+          timestamp: f.timestamp || f.scan_time || f.created_at,
+          link: buildAlertLink("/file-security", {
+            ...(pick(f.agentName, f.agent_name) ? { agent: pick(f.agentName, f.agent_name) } : {}),
+          }, f.timestamp || f.scan_time || f.created_at),
           };
         }),
         ...fimData.map((e, i) => {
@@ -206,19 +215,71 @@ export default function Alert() {
             agent: pick(e.agentName, e.agent_name, e.agent?.name) || "-",
             user: pick(e.username) || "-",
             reason: `Agent: ${pick(e.agentName, e.agent_name, e.agent?.name) || "unknown"} | Rule: ${pick(e.ruleDescription, e.rule_description) || "-"} (level ${Number.isNaN(ruleLevel) ? "-" : ruleLevel})`,
-            timestamp: e.timestamp || e.created_at || e.createdAt || e["@timestamp"],
-            link: buildAlertLink("/fim-events", {
-              ...(pick(e.agentName, e.agent_name, e.agent?.name) ? { agent: pick(e.agentName, e.agent_name, e.agent?.name) } : {}),
-              ...(pick(e.syscheckPath, e.file, e.path, e.filePath) ? { path: pick(e.syscheckPath, e.file, e.path, e.filePath) } : {}),
-            }),
+          timestamp: e.timestamp || e.created_at || e.createdAt || e["@timestamp"],
+          link: buildAlertLink("/fim-events", {
+            ...(pick(e.agentName, e.agent_name, e.agent?.name) ? { agent: pick(e.agentName, e.agent_name, e.agent?.name) } : {}),
+            ...(pick(e.syscheckPath, e.file, e.path, e.filePath) ? { path: pick(e.syscheckPath, e.file, e.path, e.filePath) } : {}),
+          }, e.timestamp || e.created_at || e.createdAt || e["@timestamp"]),
           };
         }),
-        ...mlData
-          .filter((p) => isMaliciousLabel(p.predictedLabel || p.label))
-          .map((p, i) => {
+        // Agregasi brute force: prediksi berlabel bruteforce_* dikelompokkan
+        // per source IP. Grup yang mencapai ambang (50 paket) menjadi SATU
+        // alert; di bawah ambang tidak masuk daftar sama sekali supaya
+        // puluhan baris satuan tidak membanjiri halaman.
+        ...(() => {
+          const BRUTEFORCE_MIN_COUNT = 50;
+          const isBruteforce = (label) => String(label || "").toLowerCase().includes("bruteforce");
+          const groups = new Map();
+          const singles = [];
+          for (const p of mlData.filter((x) => isMaliciousLabel(x.predictedLabel || x.label))) {
+            if (isBruteforce(p.predictedLabel || p.label)) {
+              const ip = pick(p.sourceIp) || "unknown";
+              if (!groups.has(ip)) groups.set(ip, []);
+              groups.get(ip).push(p);
+            } else {
+              singles.push(p);
+            }
+          }
+          const tsOf = (p) => new Date(p.timestamp || p.created_at || p.createdAt || p["@timestamp"]).getTime() || 0;
+          const out = [];
+          for (const [ip, group] of groups) {
+            if (group.length < BRUTEFORCE_MIN_COUNT) continue;
+            const ordered = [...group].sort((a, b) => tsOf(a) - tsOf(b));
+            const latest = ordered[ordered.length - 1];
+            const agents = {};
+            let maxConf = null;
+            for (const g of group) {
+              const ag = pick(g.agent) || "-";
+              agents[ag] = (agents[ag] || 0) + 1;
+              const raw = typeof g.confidence === "number" ? g.confidence : parseFloat(g.confidence);
+              if (!Number.isNaN(raw)) {
+                const pct = Math.min(Math.max(raw > 1 ? raw : raw * 100, 0), 100);
+                if (maxConf === null || pct > maxConf) maxConf = pct;
+              }
+            }
+            const topAgent = Object.entries(agents).sort((a, b) => b[1] - a[1])[0]?.[0] || "-";
+            out.push({
+              id: `ml-bruteforce-${ip}`,
+              title: `Brute force attack from ${ip} (${group.length} attempts)`,
+              severity: "critical",
+              source: "ML Predictions",
+              asset: ip,
+              agent: topAgent,
+              user: "-",
+              reason: `Brute force: ${group.length} malicious packets from ${ip} | Top agent: ${topAgent}${maxConf === null ? "" : ` | Max confidence: ${Math.round(maxConf)}%`}`,
+              timestamp: latest.timestamp || latest.created_at || latest.createdAt || latest["@timestamp"],
+              // IP dikunci, tapi rentang waktu TIDAK dipersempit (±30 mnt) —
+              // tampilkan semua data IP tersebut dalam rentang halaman.
+              link: buildAlertLink("/ml-dashboard", {
+                ...(ip !== "unknown" ? { sourceIp: ip } : {}),
+                start, end,
+              }, latest.timestamp || latest.created_at || latest.createdAt || latest["@timestamp"]),
+            });
+          }
+          for (const [i, p] of singles.entries()) {
             const rawConf = typeof p.confidence === "number" ? p.confidence : parseFloat(p.confidence);
             const conf = Number.isNaN(rawConf) ? null : Math.min(Math.max(rawConf > 1 ? rawConf : rawConf * 100, 0), 100);
-            return {
+            out.push({
               id: `ml-${p.id || i}`,
               title: `${p.predictedLabel || p.label || "Threat"} detected by ML`,
               severity: mlSeverity(conf),
@@ -230,9 +291,11 @@ export default function Alert() {
               timestamp: p.timestamp || p.created_at || p.createdAt || p["@timestamp"],
               link: buildAlertLink("/ml-dashboard", {
                 ...(p.agent ? { agent: p.agent } : {}),
-              }),
-            };
-          }),
+              }, p.timestamp || p.created_at || p.createdAt || p["@timestamp"]),
+            });
+          }
+          return out;
+        })(),
         // Deteksi botnet ML. Backend selalu mengirim severity: null untuk tipe
         // ini (botDetectionService.js), jadi dipetakan ke critical di sini.
         ...botData
@@ -250,7 +313,9 @@ export default function Alert() {
               user: "-",
               reason: `Protocol: ${String(b.protocol || "-").toUpperCase()} | ${b.sourceIp || "-"} → ${b.destinationIp || "-"}${probPct === null ? "" : ` | Probability: ${probPct}%`}`,
               timestamp: b.timestamp || b.eventTimestamp || b.created_at,
-              link: buildAlertLink("/bot-detection"),
+              link: buildAlertLink("/bot-detection", {
+                ...(((pick(b.agent) || "-") !== "-") ? { agent: pick(b.agent) } : {}),
+              }, b.timestamp || b.eventTimestamp || b.created_at),
             };
           }),
       ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
@@ -567,7 +632,7 @@ export default function Alert() {
                       navigate(alert.link);
                     }
                   }}
-                  className="cursor-pointer px-4 py-3 hover:bg-[var(--soc-elevated)]/50 transition-colors animate-fadeInUp"
+                  className="cursor-pointer px-4 py-3 transition-all duration-150 hover:bg-purple-500/10 hover:shadow-[inset_3px_0_0_0_#a855f7] animate-fadeInUp"
                   style={{ opacity: 0, animationDelay: `${idx * 0.03}s` }}
                   title="Open related log"
                 >

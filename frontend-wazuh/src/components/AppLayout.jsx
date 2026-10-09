@@ -8,6 +8,9 @@ import {
   BrainCircuit,
   Radar,
   Bell,
+  BellOff,
+  Volume2,
+  VolumeX,
   Users,
   LogOut,
   ChevronLeft,
@@ -18,6 +21,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
+import { API_BASE_URL, getAuthToken } from "../config/Api";
 import { useAlarms } from "../context/AlarmContext";
 import { useTheme } from "../hooks/useTheme";
 import ThemeToggle from "./ThemeToggle";
@@ -51,8 +55,32 @@ const NAV_GROUPS = [
   },
 ];
 
-// Panel riwayat alarm yang muncul dari ikon lonceng di topbar.
-const AlarmPanel = ({ history, onClose, onClear, onViewAll, onOpenItem }) => {
+// Baris toggle sederhana — seperti versi awal, hanya dipindah ke atas
+// agar langsung terlihat.
+const SimpleToggle = ({ icon: Icon, label, hint, checked, onToggle }) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={checked}
+    onClick={onToggle}
+    className="flex w-full items-center gap-3 px-3 py-3.5 text-left hover:bg-[var(--soc-elevated)]/60 transition-colors"
+  >
+    <Icon className={`h-4 w-4 shrink-0 ${checked ? "text-[var(--soc-text-primary)]" : "text-[var(--soc-text-muted)]"}`} />
+    <span className="min-w-0 flex-1 leading-relaxed">
+      <span className="block truncate text-[11px] font-medium text-[var(--soc-text-primary)] leading-relaxed">{label}</span>
+      {hint && <span className="block text-[9px] text-[var(--soc-text-muted)] leading-relaxed mt-1">{hint}</span>}
+    </span>
+    <span
+      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${checked ? "bg-purple-500" : "bg-slate-500/30"}`}
+    >
+      <span
+        className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${checked ? "left-[18px]" : "left-0.5"}`}
+      />
+    </span>
+  </button>
+);
+
+const AlarmPanel = ({ history, onClose, onClear, onViewAll, onOpenItem, alarmEnabled, soundEnabled, onToggleAlarm, onToggleSound }) => {
   const ref = useRef(null);
 
   // Klik di luar atau tekan Escape menutup panel.
@@ -77,55 +105,84 @@ const AlarmPanel = ({ history, onClose, onClear, onViewAll, onOpenItem }) => {
       className="absolute right-0 top-full mt-1.5 w-[340px] max-w-[calc(100vw-2rem)] rounded-xl border border-[var(--soc-border)] shadow-2xl overflow-hidden z-[80] animate-fadeInUp"
       style={{ background: "var(--soc-card)" }}
     >
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-[var(--soc-border)]">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="p-1.5 rounded-lg bg-pink-500/10 shrink-0">
-            <Bell className="h-3.5 w-3.5 text-pink-400" />
+      <div className="flex items-center justify-between px-4 py-3.5 border-b border-[var(--soc-border)]">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-1.5 rounded-lg bg-purple-500/10 shrink-0">
+            <Bell className="h-3.5 w-3.5 text-purple-400" />
           </div>
-          <div className="min-w-0">
-            <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Alarm History</h3>
-            <p className="text-[9px] text-[var(--soc-text-muted)]">
-              {history.length > 0 ? `${history.length} recorded alarm${history.length > 1 ? "s" : ""}` : "No alarm recorded"}
+          <div className="min-w-0 leading-relaxed">
+            <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)] leading-relaxed">Notifications</h3>
+            <p className="text-[9px] text-[var(--soc-text-muted)] leading-relaxed mt-0.5">
+              {alarmEnabled
+                ? history.length > 0
+                  ? `${history.length} recorded alarm${history.length > 1 ? "s" : ""}`
+                  : "You're all caught up"
+                : "Paused"}
             </p>
           </div>
         </div>
         <button
           onClick={onClose}
-          aria-label="Close alarm history"
+          aria-label="Close notification panel"
           className="p-1 rounded-lg text-[var(--soc-text-muted)] hover:text-[var(--soc-text-primary)] hover:bg-[var(--soc-elevated)] transition-colors shrink-0"
         >
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
 
-      <div className="max-h-[360px] overflow-y-auto">
+      <div className="flex border-b border-[var(--soc-border)] divide-x divide-[var(--soc-border)]/60">
+        <div className="flex-1 min-w-0">
+          <SimpleToggle
+            icon={alarmEnabled ? Bell : BellOff}
+            label="Notifications"
+            hint={alarmEnabled ? "On" : "Off"}
+            checked={alarmEnabled}
+            onToggle={onToggleAlarm}
+          />
+        </div>
+        <div className="flex-1 min-w-0">
+          <SimpleToggle
+            icon={soundEnabled ? Volume2 : VolumeX}
+            label="Sound"
+            hint={soundEnabled ? "On" : "Off"}
+            checked={soundEnabled}
+            onToggle={onToggleSound}
+          />
+        </div>
+      </div>
+
+      <div className="max-h-[320px] overflow-y-auto leading-relaxed">
         {history.length === 0 ? (
-          <div className="px-3 py-8 text-center">
-            <Bell className="h-5 w-5 text-[var(--soc-text-muted)] mx-auto mb-2 opacity-50" />
-            <p className="text-[10px] text-[var(--soc-text-muted)]">No critical alerts yet</p>
-            <p className="text-[9px] text-[var(--soc-text-muted)] mt-0.5 opacity-70">Alarms appear here when they arrive</p>
+          <div className="px-4 py-10 text-center leading-relaxed">
+            <Bell className="h-5 w-5 text-[var(--soc-text-muted)] mx-auto mb-3 opacity-50" />
+            <p className="text-[10px] text-[var(--soc-text-muted)] leading-relaxed">
+              {alarmEnabled ? "No critical alerts yet" : "Notifications are paused"}
+            </p>
+            <p className="text-[9px] text-[var(--soc-text-muted)] mt-1.5 opacity-70 leading-relaxed">
+              {alarmEnabled ? "New alerts will appear here" : "Turn on notifications above to resume"}
+            </p>
           </div>
         ) : (
-          <ul className="divide-y divide-[var(--soc-border)]">
+          <ul className="divide-y divide-[var(--soc-border)]/60">
             {history.map((item) => {
               const isBotnet = item.source === "Bot Detection";
               const Icon = isBotnet ? Radar : ShieldAlert;
               return (
-                <li key={item.id || item.key}>
+                <li key={item.id || item.key} className="leading-relaxed">
                   <button
                     type="button"
                     onClick={() => onOpenItem(item.link)}
-                    className="flex items-start gap-2 w-full text-left px-3 py-2.5 hover:bg-[var(--soc-elevated)] transition-colors"
+                    className="flex items-start gap-3 w-full text-left px-4 py-4 hover:bg-[var(--soc-elevated)]/60 transition-colors leading-relaxed"
                   >
-                    <div className="p-1 rounded-lg bg-red-500/10 shrink-0">
+                    <div className="p-1 rounded-lg bg-red-500/10 shrink-0 mt-0.5">
                       <Icon className="h-3 w-3 text-red-400" />
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[10.5px] font-medium text-[var(--soc-text-primary)] break-words">{item.title}</p>
-                      <p className="text-[9px] text-[var(--soc-text-muted)] mt-0.5 truncate">
+                    <div className="min-w-0 flex-1 leading-relaxed">
+                      <p className="text-[10.5px] font-medium text-[var(--soc-text-primary)] break-words leading-relaxed">{item.title}</p>
+                      <p className="text-[9px] text-[var(--soc-text-muted)] mt-1 truncate leading-relaxed">
                         {item.source} &middot; {item.asset}
                       </p>
-                      <p className="text-[8px] text-[var(--soc-text-muted)] mt-0.5 opacity-70">
+                      <p className="text-[8px] text-[var(--soc-text-muted)] mt-1 opacity-70 leading-relaxed">
                         {item.seenAt ? new Date(item.seenAt).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}
                       </p>
                     </div>
@@ -137,17 +194,17 @@ const AlarmPanel = ({ history, onClose, onClear, onViewAll, onOpenItem }) => {
         )}
       </div>
 
-      <div className="flex items-center gap-2 px-3 py-2 border-t border-[var(--soc-border)]">
+      <div className="flex items-center gap-3 px-4 py-3 border-t border-[var(--soc-border)]">
         <button
           onClick={onViewAll}
-          className="flex-1 rounded-lg px-3 py-1.5 text-[10px] font-semibold text-purple-300 hover:bg-purple-500/15 border border-purple-500/30 transition-colors"
+          className="flex-1 rounded-lg px-3 py-2.5 text-[10px] font-semibold text-purple-300 hover:bg-purple-500/15 border border-purple-500/30 transition-colors"
         >
           View all alerts
         </button>
         {history.length > 0 && (
           <button
             onClick={onClear}
-            className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-[var(--soc-text-muted)] hover:text-red-300 hover:bg-red-500/10 transition-colors"
+            className="rounded-lg px-3 py-2.5 text-[10px] font-medium text-[var(--soc-text-muted)] hover:text-red-300 hover:bg-red-500/10 transition-colors"
           >
             Clear
           </button>
@@ -162,7 +219,7 @@ export default function AppLayout({ children }) {
   const location = useLocation();
   const { user, logout } = useAuth();
   const { theme } = useTheme();
-  const { history, unread, panelOpen, togglePanel, closePanel, clearHistory } = useAlarms();
+  const { history, unread, panelOpen, togglePanel, closePanel, clearHistory, alarmEnabled, soundEnabled, toggleAlarm, toggleSound } = useAlarms();
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem("sidebar-collapsed") === "1"
   );
@@ -188,9 +245,42 @@ export default function AppLayout({ children }) {
 
   const confirmLogout = () => {
     setShowLogoutConfirm(false);
+    // Hapus kehadiran (best-effort) agar /online Telegram langsung update.
+    try {
+      const token = getAuthToken();
+      if (token) {
+        void fetch(`${API_BASE_URL}/api/auth/presence`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => {});
+      }
+    } catch {
+      /* abaikan */
+    }
     logout();
     navigate("/login");
   };
+
+  // Heartbeat kehadiran: selama user login, backend tahu siapa yang online
+  // (untuk perintah /online di bot Telegram). Interval 60 detik.
+  useEffect(() => {
+    if (!user) return undefined;
+    const touch = () => {
+      try {
+        const token = getAuthToken();
+        if (!token) return;
+        void fetch(`${API_BASE_URL}/api/auth/presence/touch`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => {});
+      } catch {
+        /* abaikan */
+      }
+    };
+    touch();
+    const timer = setInterval(touch, 60_000);
+    return () => clearInterval(timer);
+  }, [user]);
 
   const toggleGroup = (label) => {
     setExpandedGroups(prev => 
@@ -392,14 +482,14 @@ export default function AppLayout({ children }) {
             <div className="relative">
               <button
                 type="button"
-                aria-label={`Alarm history${unread > 0 ? `, ${unread} unread` : ""}`}
+                aria-label={alarmEnabled ? `Alarm history${unread > 0 ? `, ${unread} unread` : ""}` : "Notifications are turned off"}
                 aria-expanded={panelOpen}
-                title="Alarm history"
+                title={alarmEnabled ? "Alarm history" : "Notifications off — click to turn on"}
                 onClick={togglePanel}
                 className="p-1.5 rounded-lg text-[var(--soc-text-muted)] hover:text-[var(--soc-text-primary)] hover:bg-[var(--soc-elevated)] transition-colors relative"
               >
-                <Bell className="h-4 w-4" />
-                {unread > 0 && (
+                {alarmEnabled ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4 opacity-60" />}
+                {alarmEnabled && unread > 0 && (
                   <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-[3px] rounded-full bg-pink-500 text-white text-[8px] font-bold flex items-center justify-center">
                     {unread > 99 ? "99+" : unread}
                   </span>
@@ -412,6 +502,10 @@ export default function AppLayout({ children }) {
                   onClear={clearHistory}
                   onViewAll={() => { closePanel(); navigate("/alerts"); }}
                   onOpenItem={(href) => { closePanel(); navigate(href || "/alerts"); }}
+                  alarmEnabled={alarmEnabled}
+                  soundEnabled={soundEnabled}
+                  onToggleAlarm={toggleAlarm}
+                  onToggleSound={toggleSound}
                 />
               )}
             </div>
@@ -426,37 +520,35 @@ export default function AppLayout({ children }) {
         </main>
       </div>
 
-      {/* Logout Confirmation — same design concept as the Add User popup */}
+      {/* Logout Confirmation — simpel: ikon kecil, teks, dua tombol */}
       {showLogoutConfirm && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4">
-          <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-3xl p-6 md:p-7 max-w-md w-full min-h-[340px] flex flex-col overflow-hidden">
-            <div className="h-1 -mx-6 md:-mx-7 -mt-6 md:-mt-7 mb-6 bg-gradient-to-r from-red-500 to-pink-500" />
-            <div className="relative flex flex-1 flex-col items-center justify-center text-center pt-2 mb-6">
-              <button
-                onClick={() => setShowLogoutConfirm(false)}
-                className="absolute right-0 top-0 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[var(--soc-elevated)] transition-colors"
-                aria-label="Close"
-              >
-                <X className="h-4 w-4" />
-              </button>
-              <div className="p-6 rounded-3xl bg-gradient-to-br from-red-500 to-pink-500 mx-auto">
-                <LogOut className="h-12 w-12 text-white" />
-              </div>
-              <h2 className="text-xl font-bold text-[var(--soc-text-primary)] leading-tight mt-4">Confirm Logout</h2>
-              <p className="text-sm text-[var(--soc-text-muted)] mt-1.5">Are you sure you want to log out?</p>
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center z-[100] p-4 animate-fadeInUp"
+          onClick={() => setShowLogoutConfirm(false)}
+        >
+          <div
+            role="alertdialog"
+            aria-label="Confirm logout"
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-2xl p-7 w-full max-w-sm shadow-2xl text-center"
+          >
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-500/15">
+              <LogOut className="h-7 w-7 text-red-500" />
             </div>
-            <div className="flex gap-3 pt-2 mt-auto">
+            <h2 className="text-[18px] font-bold text-[var(--soc-text-primary)] leading-relaxed mt-3">Log out?</h2>
+            <p className="text-[13px] text-[var(--soc-text-muted)] leading-relaxed mt-1">You will need to sign in again to continue.</p>
+            <div className="flex gap-2 mt-5">
               <button
                 onClick={() => setShowLogoutConfirm(false)}
-                className="flex-1 px-4 py-2.5 bg-[var(--soc-elevated)] hover:brightness-125 border border-[var(--soc-border)] text-slate-200 rounded-2xl text-xs font-medium transition-all"
+                className="flex-1 px-3 py-2.5 rounded-xl text-[12px] font-medium text-[var(--soc-text-secondary)] border border-[var(--soc-border)] hover:bg-[var(--soc-elevated)] transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmLogout}
-                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-red-500 to-pink-500 hover:brightness-110 text-white rounded-2xl text-xs font-semibold transition-all"
+                className="flex-1 px-3 py-2.5 rounded-xl text-[12px] font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors"
               >
-                Yes, Log Out
+                Log Out
               </button>
             </div>
           </div>

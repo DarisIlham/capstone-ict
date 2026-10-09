@@ -381,7 +381,7 @@ const Legend = ({ items }) => (
   </div>
 );
 
-const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items", onPointClick = null }) => {
+const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items", onPointClick = null, activeLabel = null }) => {
   const [selected, setSelected] = useState(null);
   // Kategori yang diklik - sumber garis vertikal putus-putus. Terpisah dari
   // `selected` karena itu hanya hidup saat hover.
@@ -583,8 +583,9 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items", onP
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 justify-center px-1 mt-1 min-w-0 max-w-full overflow-hidden">
         {points.map((p) => {
           const isLegendSelected = selected?.index === p.index;
+          const isActive = activeLabel != null && String(p.label) === String(activeLabel);
           return (
-          <div key={`${p.label}-${p.index}`} onMouseEnter={() => setSelected(p)} onMouseLeave={() => setSelected(null)} onFocus={() => setSelected(p)} onBlur={() => setSelected(null)} onClick={() => { setSelected(p); onPointClick?.(p); }} className={`flex items-center gap-1.5 text-[11px] min-w-0 max-w-full ${isLegendSelected ? "font-bold text-slate-200" : "text-slate-400"} ${onPointClick ? "cursor-pointer" : ""}`} title={onPointClick ? `Filter logs for session ${p.label}` : undefined}>
+          <div key={`${p.label}-${p.index}`} onMouseEnter={() => setSelected(p)} onMouseLeave={() => setSelected(null)} onFocus={() => setSelected(p)} onBlur={() => setSelected(null)} onClick={() => { setSelected(p); onPointClick?.(p); }} className={`flex items-center gap-1.5 text-[11px] min-w-0 max-w-full rounded px-1 py-0.5 transition-all ${isActive ? "font-bold text-slate-200 ring-1 ring-orange-500/40 bg-orange-500/10" : isLegendSelected ? "font-bold text-slate-200" : "text-slate-400 hover:text-slate-200"} ${onPointClick ? "cursor-pointer" : ""}`} title={onPointClick ? `Filter logs for session ${p.label}` : undefined}>
             <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color }} />
             <span className="truncate min-w-0 max-w-[140px]">{p.label}</span>
             <span className="text-slate-500 font-mono shrink-0">{p.value}</span>
@@ -875,7 +876,7 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
   const toWeight = (fs) => (fs > 26 ? "800" : fs > 18 ? "700" : "500");
   const SAFE_X = 18;
   const SAFE_Y = 14;
-  const fontSize = (count) => Math.round(30 + ((count - minCount) / range) * 60);
+  const fontSize = (count) => Math.round(16 + ((count - minCount) / range) * 32);
   const placed = [];
   const rects = [];
   const overlaps = (nx, ny, nw, nh) => {
@@ -1955,9 +1956,9 @@ const HostMonitoring = () => {
           </div>
         </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {/* Command Timeline — disamakan dengan Risk Distribution (Dashboard) */}
-            <div className="xl:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col" style={{ opacity: 0 }}>
+            <div className="md:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col" style={{ opacity: 0 }}>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 rounded-lg bg-orange-500/10">
@@ -2007,8 +2008,8 @@ const HostMonitoring = () => {
           </div>
 
           {/* Top Sessions + Top 5 Dangerous — disamakan dengan Command Timeline + Top 5 Agents (Dashboard: Risk + Top Users) */}
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 min-w-0 max-w-full">
-            <div className="xl:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col min-w-0 max-w-full overflow-hidden" style={{ opacity: 0 }}>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 min-w-0 max-w-full">
+            <div className="md:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col min-w-0 max-w-full overflow-hidden" style={{ opacity: 0 }}>
               <div className="flex items-center justify-between mb-3 min-w-0">
                 <div className="flex items-center gap-2 min-w-0">
                   <div className="p-1.5 rounded-lg bg-orange-500/10 shrink-0">
@@ -2026,6 +2027,7 @@ const HostMonitoring = () => {
                   color="#f97316"
                   totalLabel="sessions"
                   onPointClick={handleSessionSummaryClick}
+                  activeLabel={sessionFilter !== "all" ? sessionFilter : selectedSession}
                 />
               </div>
             </div>
@@ -2079,8 +2081,8 @@ const HostMonitoring = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-            <div className="xl:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col overflow-hidden" style={{ opacity: 0 }}>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="md:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col overflow-hidden" style={{ opacity: 0 }}>
               <div className="flex items-center justify-between mb-3 shrink-0">
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 rounded-lg bg-cyan-500/10">
@@ -2194,12 +2196,12 @@ const HostMonitoring = () => {
           )}
 
           <div className="overflow-x-auto soc-table-scroll">
-            <table className="w-full min-w-[720px] text-[10px] md:text-[11px] text-left soc-responsive-table">
+            <table className="soc-logs-table w-full min-w-[720px] text-[11px] md:text-[12px] text-left soc-responsive-table">
               <colgroup>
                 <col style={{ width: "14%" }} />
                 <col style={{ width: "10%" }} />
                 <col style={{ width: "14%" }} />
-                <col style={{ width: "12%" }} />
+                <col style={{ width: "8%" }} />
                 <col />
                 <col style={{ width: "10%" }} />
               </colgroup>
@@ -2208,7 +2210,7 @@ const HostMonitoring = () => {
                   {["time", "user", "agent", "session id", "command", "status"].map((header) => (
                     <th
                       key={header}
-                      className="px-2 md:px-4 py-2 md:py-3 text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase"
+                      className="px-3 md:px-4 py-2.5 md:py-3 text-[11px] md:text-[12px] font-semibold text-slate-400 uppercase tracking-wide"
                     >
                       {header}
                     </th>
@@ -2220,10 +2222,10 @@ const HostMonitoring = () => {
                   (keywordFilterActive ? crossFilteredLogs || [] : filteredLogs).map((log, idx) => (
                     <tr
                       key={log.id}
-                      className={`border-b border-slate-800/60 hover:bg-slate-800/40 ${idx % 2 !== 0 ? "bg-slate-900/60" : ""
+                      className={`border-b border-slate-800/60 transition-all duration-150 hover:bg-purple-500/10 hover:shadow-[inset_3px_0_0_0_#a855f7] ${idx % 2 !== 0 ? "bg-slate-900/60" : ""
                         }`}
                     >
-                      <td className="px-2 md:px-4 py-1.5 md:py-3 text-slate-500 text-[10px] md:text-[11px]">
+                      <td className="px-3 md:px-4 py-3 md:py-3.5 leading-relaxed text-slate-500 text-[11px] md:text-[12px]">
                         {new Date(log.timestamp).toLocaleString("en-US", {
                           month: "short",
                           day: "2-digit",
@@ -2233,32 +2235,32 @@ const HostMonitoring = () => {
                           second: "2-digit",
                         })}
                       </td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-3">
-                        <span className="text-[10px] md:text-[11px] font-bold text-sky-300">{log.user}</span>
+                      <td className="px-3 md:px-4 py-3 md:py-3.5 leading-relaxed">
+                        <span className="text-[11px] md:text-[12px] font-bold text-sky-300">{log.user}</span>
                       </td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-3 text-[10px] md:text-[11px] text-slate-400">{log.agentName}</td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-3">
+                      <td className="px-3 md:px-4 py-3 md:py-3.5 leading-relaxed text-[11px] md:text-[12px] text-slate-400">{log.agentName}</td>
+                      <td className="px-3 md:px-4 py-3 md:py-3.5 leading-relaxed">
                         <button
                           onClick={() =>
                             setSelectedSession(selectedSession === log.sessionId ? null : log.sessionId)
                           }
-                          className="text-[10px] md:text-[11px] font-mono text-purple-300 hover:text-purple-200 transition-colors"
+                          className="text-[11px] md:text-[12px] font-mono text-purple-300 hover:text-purple-200 transition-colors"
                         >
                           {log.sessionId}
                         </button>
                       </td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-3 align-top max-w-[200px] sm:max-w-[260px] md:max-w-[360px] lg:max-w-[420px]">
-                        <div className="truncate max-w-[200px] sm:max-w-[260px] md:max-w-[360px] lg:max-w-[420px] overflow-hidden text-ellipsis whitespace-nowrap" title={log.command.cmd}>
+                      <td className="soc-command-cell px-3 md:px-4 py-3 md:py-3.5 leading-relaxed align-top">
+                        <div className="truncate overflow-hidden text-ellipsis whitespace-nowrap" title={log.command.cmd}>
                           <CommandHighlighter command={log.command.cmd} />
                         </div>
                       </td>
-                      <td className="px-2 md:px-4 py-1.5 md:py-3">
+                      <td className="px-3 md:px-4 py-3 md:py-3.5 leading-relaxed">
                         {log.command.risk === "suspicious" ? (
-                          <span className="px-2 py-1 rounded-full text-[10px] md:text-[11px] font-bold bg-red-500/20 text-red-300">
+                          <span className="px-2 py-1 rounded-full text-[11px] md:text-[12px] font-bold bg-red-500/20 text-red-300">
                             Suspicious
                           </span>
                         ) : (
-                          <span className="px-2 py-1 rounded-full text-[10px] md:text-[11px] font-bold bg-emerald-500/20 text-emerald-300">
+                          <span className="px-2 py-1 rounded-full text-[11px] md:text-[12px] font-bold bg-emerald-500/20 text-emerald-300">
                             Normal
                           </span>
                         )}
