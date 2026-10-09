@@ -570,13 +570,14 @@ export const verifyLoginOtp = async (req, res) => {
     // Di luar jam kerja: OTP valid belum cukup — admin harus menyetujui
     // via tombol Telegram sebelum JWT diterbitkan.
     if (shouldRequireLoginApproval()) {
+      const fwdIp = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
       const approval = createLoginApproval({
         userId: row.id,
         email: row.email,
         name: row.name || null,
         role: row.role || "user",
         rememberMe: rememberMe === true,
-        ip: req.ip || req.headers["x-forwarded-for"] || "-",
+        ip: fwdIp || req.ip || "-",
         userAgent: req.headers["user-agent"] || "-",
       });
       try {
@@ -622,11 +623,13 @@ function issueLoginSuccess(res, row, rememberMe, extra = {}, { notifyLogin = tru
   }
 
   if (notifyLogin) {
+    // Di balik reverse proxy (Nginx), IP asli ada di X-Forwarded-For.
+    const fwd = String(res.req?.headers?.["x-forwarded-for"] || "").split(",")[0].trim();
     void sendLoginInfoMessage({
       name: row.name || null,
       email: row.email,
       role: row.role || "user",
-      ip: res.req?.ip || res.req?.headers?.["x-forwarded-for"] || "-",
+      ip: fwd || res.req?.ip || "-",
       userAgent: res.req?.headers?.["user-agent"] || "-",
     });
   }
