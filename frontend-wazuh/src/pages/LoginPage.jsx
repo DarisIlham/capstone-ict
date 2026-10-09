@@ -744,7 +744,7 @@ const LoginPage = () => {
             </div>
             <h2 className="text-[clamp(15px,4.4vw,17px)] font-bold text-[var(--soc-text-primary)] mt-3">Menunggu persetujuan admin</h2>
             <p className="text-[clamp(11px,3.4vw,13px)] text-[var(--soc-text-muted)] mt-1">
-              Di luar jam kerja (19:00–05:00 WIB), login membutuhkan persetujuan admin via Telegram.
+              Di luar jam kerja (19:00–05:00 WIB) atau akhir pekan, login membutuhkan persetujuan admin via Telegram.
             </p>
           </div>
 

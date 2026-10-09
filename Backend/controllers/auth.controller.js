@@ -11,7 +11,7 @@ import {
   sendLoginApprovalMessage,
   sendLoginInfoMessage,
   isTelegramLoginConfigured,
-  isOutsideWorkingHours,
+  approvalReason,
 } from "../services/telegramLoginService.js";
 import { touchPresence, removePresence } from "../services/presenceService.js";
 import {
@@ -380,13 +380,14 @@ function publicUser(row) {
 }
 
 /**
- * Login di luar jam kerja (default 19:00–05:00 WIB) wajib disetujui admin
- * via bot Telegram, kecuali bot belum dikonfigurasi (fail-open + warning).
+ * Login di luar jam kerja (default 19:00–05:00 WIB) atau di akhir pekan
+ * (Sabtu–Minggu) wajib disetujui admin via bot Telegram, kecuali bot
+ * belum dikonfigurasi (fail-open + warning).
  */
 function shouldRequireLoginApproval() {
   if (process.env.LOGIN_APPROVAL_ENABLED === "0") return false;
   if (!isTelegramLoginConfigured()) return false;
-  return isOutsideWorkingHours(new Date());
+  return approvalReason(new Date()) !== null;
 }
 /**
  * Langkah 1 login OTP: validasi kredensial lalu kirim kode OTP ke email.
@@ -567,9 +568,10 @@ export const verifyLoginOtp = async (req, res) => {
     }
     const row = result.rows[0];
 
-    // Di luar jam kerja: OTP valid belum cukup — admin harus menyetujui
-    // via tombol Telegram sebelum JWT diterbitkan.
+    // Di luar jam kerja / akhir pekan: OTP valid belum cukup — admin harus
+    // menyetujui via tombol Telegram sebelum JWT diterbitkan.
     if (shouldRequireLoginApproval()) {
+      const reason = approvalReason(new Date()) || "night";
       const fwdIp = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
       const approval = createLoginApproval({
         userId: row.id,
@@ -579,10 +581,11 @@ export const verifyLoginOtp = async (req, res) => {
         rememberMe: rememberMe === true,
         ip: fwdIp || req.ip || "-",
         userAgent: req.headers["user-agent"] || "-",
+        reason,
       });
       try {
         await sendLoginApprovalMessage(approval);
-        console.log(`[otp] approval login dibuat id=${approval.id} email=${row.email}`);
+        console.log(`[otp] approval login dibuat id=${approval.id} email=${row.email} reason=${reason}`);
       } catch (tgErr) {
         // Telegram down tidak boleh mengunci user: login jalan normal.
         console.error("[otp] kirim approval Telegram gagal, login dilanjutkan:", tgErr.message);
@@ -591,7 +594,10 @@ export const verifyLoginOtp = async (req, res) => {
       return res.status(202).json({
         success: true,
         approvalRequired: true,
-        message: "Di luar jam kerja: menunggu persetujuan admin via Telegram",
+        message:
+          reason === "weekend"
+            ? "Akhir pekan: menunggu persetujuan admin via Telegram"
+            : "Di luar jam kerja: menunggu persetujuan admin via Telegram",
         approvalId: approval.id,
         expiresIn: Math.max(1, Math.round((approval.expiresAt - Date.now()) / 1000)),
       });

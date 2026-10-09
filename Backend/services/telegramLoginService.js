@@ -61,6 +61,30 @@ export function isOutsideWorkingHours(date = new Date()) {
   return hour < startHour || hour >= endHour;
 }
 
+// Sabtu–Minggu (zona acuan) selalu butuh approval, jam berapa pun.
+export function isWeekend(date = new Date()) {
+  const { tz } = readConfig();
+  if (process.env.LOGIN_APPROVAL_WEEKENDS === "0") return false;
+  try {
+    const day = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(date);
+    return day === "Sat" || day === "Sun";
+  } catch {
+    const d = new Date(date).getDay();
+    return d === 0 || d === 6;
+  }
+}
+
+// Alasan approval: "weekend" | "night" | null (jam kerja biasa).
+export function approvalReason(date = new Date()) {
+  if (isWeekend(date)) return "weekend";
+  if (isOutsideWorkingHours(date)) return "night";
+  return null;
+}
+
+export function requiresLoginApproval(date = new Date()) {
+  return approvalReason(date) !== null;
+}
+
 // ── Penyimpanan request approval (memori + kedaluwarsa) ────────────
 const pending = new Map(); // id -> record
 
@@ -74,7 +98,7 @@ function sweepExpired() {
 
 setInterval(sweepExpired, 60 * 1000).unref?.();
 
-export function createLoginApproval({ userId, email, name, role, rememberMe, ip, userAgent }) {
+export function createLoginApproval({ userId, email, name, role, rememberMe, ip, userAgent, reason }) {
   const { expiresMinutes } = readConfig();
   const id = randomUUID();
   const now = Date.now();
@@ -87,6 +111,7 @@ export function createLoginApproval({ userId, email, name, role, rememberMe, ip,
     rememberMe: rememberMe === true,
     ip: ip || "-",
     userAgent: userAgent || "-",
+    reason: reason || "night",
     status: "pending", // pending | approved | denied
     createdAt: now,
     expiresAt: now + Math.max(1, expiresMinutes) * 60 * 1000,
@@ -162,8 +187,12 @@ export async function sendLoginApprovalMessage(rec) {
   if (!token || !adminChatId) {
     throw new Error("TELEGRAM_LOGIN_TOKEN / TELEGRAM_LOGIN_CHAT_ID belum dikonfigurasi");
   }
+  const title =
+    rec.reason === "weekend"
+      ? `🔐 <b>Permintaan Login (Akhir Pekan)</b>`
+      : `🔐 <b>Permintaan Login di Luar Jam Kerja</b>`;
   const text =
-    `🔐 <b>Permintaan Login di Luar Jam Kerja</b>\n` +
+    `${title}\n` +
     `Nama: <b>${esc(rec.name || rec.email)}</b>\n` +
     `Email: <code>${esc(rec.email)}</code>\n` +
     `Role: <code>${esc(rec.role)}</code>\n` +
