@@ -141,6 +141,10 @@ function buildFilter(query = {}, { forMl }) {
     if (Number.isFinite(minProb)) {
       filter.push({ range: { botnet_probability: { gte: minProb } } });
     }
+    const minPackets = Number(query.minPackets ?? query.min_packets);
+    if (Number.isFinite(minPackets)) {
+      filter.push({ range: { rule_packets: { gte: minPackets } } });
+    }
   } else {
     const behaviorType = normalizeBehaviorType(query.behaviorType || query.behavior_type);
     if (behaviorType !== "all") {

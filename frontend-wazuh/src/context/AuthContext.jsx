@@ -5,11 +5,34 @@ const CURFEW_TZ_OFFSET_MINUTES = 7 * 60; // WIB = UTC+7 (tanpa DST)
 
 // Milidetik menuju 00:00 berikutnya di zona acuan.
 function msUntilMidnight() {
-  const now = new Date();
-  const zoned = new Date(now.getTime() + (CURFEW_TZ_OFFSET_MINUTES + now.getTimezoneOffset()) * 60000);
+  const now = Date.now();
+  const zoned = new Date(now + (CURFEW_TZ_OFFSET_MINUTES + new Date().getTimezoneOffset()) * 60000);
   const nextMidnight = new Date(zoned);
   nextMidnight.setHours(24, 0, 0, 0);
   return Math.max(1000, nextMidnight.getTime() - zoned.getTime());
+}
+
+// Awal hari WIB (00:00) yang sedang berjalan, dalam ms epoch.
+function wibDayStart(nowMs) {
+  const WIB = 7 * 3600 * 1000;
+  const DAY = 24 * 3600 * 1000;
+  return Math.floor((nowMs + WIB) / DAY) * DAY - WIB;
+}
+
+// Token dianggap hidup hanya bila diterbitkan setelah 00:00 WIB hari ini.
+// Memakai klaim loginAt (baru) atau iat bawaan JWT (token lama). Gagal baca
+// → serahkan ke backend (tidak diputus sepihak di sini).
+function tokenIssuedToday(token) {
+  try {
+    let b64 = String(token).split(".")[1] || "";
+    b64 = b64.replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4) b64 += "=";
+    const payload = JSON.parse(atob(b64));
+    const at = Number(payload.loginAt || (payload.iat ? payload.iat * 1000 : NaN));
+    return Number.isFinite(at) && at >= wibDayStart(Date.now());
+  } catch {
+    return true;
+  }
 }
 
 const AuthContext = createContext();
@@ -31,6 +54,13 @@ export const AuthProvider = ({ children }) => {
         const token = storage.getItem("token");
         const userData = storage.getItem("user");
         if (token && userData) {
+          // Sesi kemarin (sebelum 00:00 WIB hari ini) langsung hangus saat
+          // web dibuka — tidak bisa "langsung login" lagi.
+          if (!tokenIssuedToday(token)) {
+            storage.removeItem("token");
+            storage.removeItem("user");
+            continue;
+          }
           setIsAuthenticated(true);
           setUser(JSON.parse(userData));
           restored = true;

@@ -78,15 +78,34 @@ async function collectSuspiciousCommands(startIso, endIso, watermark) {
     }));
 }
 
+const isSqliXssLabel = (label) => {
+  const s = String(label || "").toLowerCase();
+  return s.includes("sql_injection") || s.includes("xss");
+};
+
+// Confidence dinormalisasi ke skala 0–100 (dokumen ada yang 0–1).
+const confidencePct = (p) => {
+  const raw = typeof p.confidence === "number" ? p.confidence : parseFloat(p.confidence);
+  if (!Number.isFinite(raw)) return null;
+  return Math.min(Math.max(raw > 1 ? raw : raw * 100, 0), 100);
+};
+
 async function collectMlMalicious(startIso, endIso, watermark) {
   const res = await listPredictions({ start: startIso, end: endIso, limit: 100 });
-  return (res?.data || [])
+  const out = [];
+  for (const p of res?.data || []) {
     // bruteforce_http ditangani sumber khusus berambangnya sendiri.
-    .filter((p) => isMaliciousLabel(p.predictedLabel) && !isBruteforceLabel(p.predictedLabel) && tsOf(p.timestamp) > watermark)
-    .map((p) => ({
+    if (!isMaliciousLabel(p.predictedLabel) || isBruteforceLabel(p.predictedLabel)) continue;
+    if (!(tsOf(p.timestamp) > watermark)) continue;
+    const conf = confidencePct(p);
+    // SQL injection & XSS hanya bila confidence >= 65 (inklusif).
+    if (isSqliXssLabel(p.predictedLabel) && (conf === null || conf < 65)) continue;
+    out.push({
       ts: tsOf(p.timestamp),
-      line: `${p.predictedLabel} | ${p.agent || "?"} | ${p.sourceIp || "?"} → ${p.destinationIp || "?"}`,
-    }));
+      line: `${p.predictedLabel} | ${p.agent || "?"} | ${p.sourceIp || "?"} → ${p.destinationIp || "?"}${conf === null ? "" : ` (${Math.round(conf)}%)`}`,
+    });
+  }
+  return out;
 }
 
 async function collectBruteforceHttp(startIso, endIso, watermark) {
@@ -131,10 +150,13 @@ async function collectBruteforceHttp(startIso, endIso, watermark) {
 }
 
 async function collectBotnetMl(startIso, endIso, watermark) {
+  // Hanya botnet dengan paket >= ambang (default 100) yang masuk Telegram —
+  // sama dengan ambang halaman Alerts web.
+  const minPackets = Number(process.env.SUSPICIOUS_BOTNET_MIN_PACKETS || 100);
   const res = await listBotAlerts({ detector: "ml", start: startIso, end: endIso, limit: 50 });
   const rows = Array.isArray(res?.data) ? res.data : [];
   return rows
-    .filter((b) => tsOf(b.timestamp || b.eventTimestamp) > watermark)
+    .filter((b) => tsOf(b.timestamp || b.eventTimestamp) > watermark && Number(b.rulePackets ?? 0) >= minPackets)
     .map((b) => ({
       ts: tsOf(b.timestamp || b.eventTimestamp),
       line: `botnet | ${b.agent || "?"} | ${b.sourceIp || "?"} → ${b.destinationIp || "?"}`,

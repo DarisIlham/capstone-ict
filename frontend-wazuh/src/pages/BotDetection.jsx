@@ -565,6 +565,7 @@ const BotCombinedFilter = ({
   behaviorType, onBehaviorTypeChange,
   protocol, onProtocolChange,
   minProbability, onMinProbabilityChange,
+  minPackets, onMinPacketsChange,
   agentFilter, onAgentChange, agentOptions = [],
   srcIpFilter, onSrcIpChange, srcIpOptions = [],
   dstIpFilter, onDstIpChange, dstIpOptions = [],
@@ -611,12 +612,13 @@ const BotCombinedFilter = ({
     onBehaviorTypeChange("all");
     onProtocolChange("all");
     onMinProbabilityChange("all");
+    onMinPacketsChange("all");
     onAgentChange("all");
     onSrcIpChange("all");
     onDstIpChange("all");
     if (onClearTimelineFilter) onClearTimelineFilter();
   };
-  const activeCount = [behaviorType !== "all", protocol !== "all", minProbability !== "all", agentFilter !== "all", srcIpFilter !== "all", dstIpFilter !== "all", Boolean(timelineFilterLabel)].filter(Boolean).length;
+  const activeCount = [behaviorType !== "all", protocol !== "all", minProbability !== "all", minPackets !== "all", agentFilter !== "all", srcIpFilter !== "all", dstIpFilter !== "all", Boolean(timelineFilterLabel)].filter(Boolean).length;
   const Section = ({ label, value, allLabel, options, onChange }) => (
     <div className="px-3 py-2">
       <div className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">{label}</div>
@@ -667,6 +669,7 @@ const BotCombinedFilter = ({
             <Section label="Destination IP" value={dstIpFilter} allLabel="All destination IPs" options={dstIpOptions} onChange={onDstIpChange} />
             <Section label="Protocol" value={protocol} allLabel="All protocols" options={[{ value: "tcp", label: "TCP" }, { value: "udp", label: "UDP" }, { value: "icmp", label: "ICMP" }]} onChange={onProtocolChange} />
             <Section label="Min Probability" value={minProbability} allLabel="Any probability" options={[{ value: "0.5", label: "≥ 0.50" }, { value: "0.6", label: "≥ 0.60" }, { value: "0.7", label: "≥ 0.70" }, { value: "0.8", label: "≥ 0.80" }, { value: "0.9", label: "≥ 0.90" }]} onChange={onMinProbabilityChange} />
+            <Section label="Min Packets" value={minPackets} allLabel="Any packets" options={[{ value: "100", label: "≥ 100" }, { value: "500", label: "≥ 500" }, { value: "1000", label: "≥ 1K" }, { value: "5000", label: "≥ 5K" }, { value: "10000", label: "≥ 10K" }]} onChange={onMinPacketsChange} />
           </div>
         </div>
       )}
@@ -706,6 +709,7 @@ export default function BotDetection() {
   const [dstIpFilter, setDstIpFilter] = useState("all");
   const [protocol, setProtocol] = useState("all");
   const [minProbability, setMinProbability] = useState("all");
+  const [minPackets, setMinPackets] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [timeRange, setTimeRange] = useState(DEFAULT_TIME_RANGE);
   const [filterMode, setFilterMode] = useState("range");
@@ -816,9 +820,10 @@ export default function BotDetection() {
     if (behaviorType !== "all") params.behaviorType = behaviorType;
     if (protocol !== "all") params.protocol = protocol;
     if (minProbability !== "all") params.minProbability = minProbability;
+    if (minPackets !== "all") params.minPackets = minPackets;
     if (searchQuery.trim()) params.search = searchQuery.trim();
     return params;
-  }, [filterMode, customDateRange, timeRange, detectorTab, behaviorType, protocol, minProbability, searchQuery]);
+  }, [filterMode, customDateRange, timeRange, detectorTab, behaviorType, protocol, minProbability, minPackets, searchQuery]);
 
   const loadAll = useCallback(async (isRefresh = false, signal = null) => {
     if (signal?.aborted) return;
@@ -1394,6 +1399,7 @@ export default function BotDetection() {
               behaviorType={behaviorType} onBehaviorTypeChange={(v) => { setPage(1); setBehaviorType(v); }}
               protocol={protocol} onProtocolChange={(v) => { setPage(1); setProtocol(v); }}
               minProbability={minProbability} onMinProbabilityChange={(v) => { setPage(1); setMinProbability(v); }}
+              minPackets={minPackets} onMinPacketsChange={(v) => { setPage(1); setMinPackets(v); }}
               agentFilter={agentFilter} onAgentChange={(v) => { setPage(1); setAgentFilter(v); }} agentOptions={agentFilterOptions}
               srcIpFilter={srcIpFilter} onSrcIpChange={(v) => { setPage(1); setSrcIpFilter(v); }} srcIpOptions={srcIpFilterOptions}
               dstIpFilter={dstIpFilter} onDstIpChange={(v) => { setPage(1); setDstIpFilter(v); }} dstIpOptions={dstIpFilterOptions}

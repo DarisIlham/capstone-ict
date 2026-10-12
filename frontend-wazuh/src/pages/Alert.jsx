@@ -279,6 +279,9 @@ export default function Alert() {
           for (const [i, p] of singles.entries()) {
             const rawConf = typeof p.confidence === "number" ? p.confidence : parseFloat(p.confidence);
             const conf = Number.isNaN(rawConf) ? null : Math.min(Math.max(rawConf > 1 ? rawConf : rawConf * 100, 0), 100);
+            // SQL injection & XSS hanya bila confidence >= 65 (inklusif).
+            const lbl = String(p.predictedLabel || p.label || "").toLowerCase();
+            if ((lbl.includes("sql_injection") || lbl.includes("xss")) && (conf === null || conf < 65)) continue;
             out.push({
               id: `ml-${p.id || i}`,
               title: `${p.predictedLabel || p.label || "Threat"} detected by ML`,
@@ -298,8 +301,9 @@ export default function Alert() {
         })(),
         // Deteksi botnet ML. Backend selalu mengirim severity: null untuk tipe
         // ini (botDetectionService.js), jadi dipetakan ke critical di sini.
+        // Hanya yang paketnya >= 100 (sama seperti ambang Telegram).
         ...botData
-          .filter((b) => b?.detectorType === "ml")
+          .filter((b) => b?.detectorType === "ml" && Number(b.rulePackets ?? 0) >= 100)
           .map((b, i) => {
             const rawProb = typeof b.probability === "number" ? b.probability : parseFloat(b.probability);
             const probPct = Number.isNaN(rawProb) ? null : Math.round((rawProb > 1 ? rawProb : rawProb * 100) * 10) / 10;

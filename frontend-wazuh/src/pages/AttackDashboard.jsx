@@ -2200,7 +2200,7 @@ const HostMonitoring = () => {
               <colgroup>
                 <col style={{ width: "14%" }} />
                 <col style={{ width: "10%" }} />
-                <col style={{ width: "14%" }} />
+                <col style={{ width: "9%" }} />
                 <col style={{ width: "8%" }} />
                 <col />
                 <col style={{ width: "10%" }} />

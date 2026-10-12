@@ -4796,11 +4796,31 @@ aside.w-60 {
   word-break: normal !important;
 }
 
-/* Kolom Command: pakai seluruh sisa lebar kolom (batas 44vw di atas
-   dikecualikan) — terpotong hanya bila benar-benar kehabisan ruang. */
+/* Kolom Command: batas lebar responsif mengikuti layar — terpotong
+   hanya bila benar-benar kehabisan ruang. */
 .soc-responsive-table td.soc-command-cell > div.truncate {
-  max-width: none !important;
+  max-width: 320px !important;
   width: 100% !important;
+}
+@media (min-width: 640px) {
+  .soc-responsive-table td.soc-command-cell > div.truncate {
+    max-width: 420px !important;
+  }
+}
+@media (min-width: 768px) {
+  .soc-responsive-table td.soc-command-cell > div.truncate {
+    max-width: 520px !important;
+  }
+}
+@media (min-width: 1024px) {
+  .soc-responsive-table td.soc-command-cell > div.truncate {
+    max-width: 640px !important;
+  }
+}
+@media (min-width: 1280px) {
+  .soc-responsive-table td.soc-command-cell > div.truncate {
+    max-width: 760px !important;
+  }
 }
 
 /* Tabel log Host Monitoring: padding sel dilonggarkan (aturan global
