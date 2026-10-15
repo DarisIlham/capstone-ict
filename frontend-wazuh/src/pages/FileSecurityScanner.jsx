@@ -402,12 +402,20 @@ const WaveChart = ({ data, color = "#ef4444", rangeKey = "24h", height = 80, com
           return (<g key={`tick-${d.t}`}><line x1={x} y1={padding.t + innerH} x2={x} y2={padding.t + innerH + 3} stroke="var(--soc-border)" /><text x={x} y={padding.t + innerH + 14} textAnchor={i === 0 ? "start" : i >= data.length - tickEvery ? "end" : "middle"} fontSize="10" fill="#64748b" fontWeight="500">{formatBucketLabel(d.t, rangeKey)}</text></g>);
         })}
       </svg>
-      {selectedPoint && (
-        <div className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-lg" style={{ left: `${Math.min(Math.max((selectedPoint.x / width) * 100, 10), 82)}%`, top: `${Math.max(((selectedPoint.y - 40) / height) * 100, 6)}%`, transform: "translate(-50%, -100%)" }}>
-          <div className="font-semibold text-[var(--soc-text-primary)]">{selectedPoint.value} detections</div>
-          <div className="mt-1 text-[var(--soc-text-secondary)]">{formatDetailedTimestamp(selectedPoint.start || selectedPoint.time)}</div>
-        </div>
-      )}
+      {selectedPoint && (() => {
+        // Tooltip anti-terpotong: dekat tepi atas tampil di bawah titik,
+        // dekat tepi kiri/kanan posisi dan geserannya menyesuaikan.
+        const xPct = (selectedPoint.x / width) * 100;
+        const flipBelow = selectedPoint.y < height * 0.32;
+        const anchorX = xPct < 18 ? 6 : xPct > 82 ? 94 : xPct;
+        const tx = xPct < 18 ? "-6%" : xPct > 82 ? "-94%" : "-50%";
+        return (
+          <div className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-lg" style={{ left: `${anchorX}%`, top: flipBelow ? `${((selectedPoint.y + 18) / height) * 100}%` : `${Math.max(((selectedPoint.y - 40) / height) * 100, 6)}%`, transform: `translate(${tx}, ${flipBelow ? "0" : "-100%"})` }}>
+            <div className="font-semibold text-[var(--soc-text-primary)]">{selectedPoint.value} detections</div>
+            <div className="mt-1 text-[var(--soc-text-secondary)]">{formatDetailedTimestamp(selectedPoint.start || selectedPoint.time)}</div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
@@ -541,12 +549,16 @@ const FileSecCombinedFilter = ({ agentFilter, onAgentChange, agentOptions = [], 
 // ── Bar list (severity / folders / etc) seperti FimEvents ──────────────────
 const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue = null }) => {
   if (!items || items.length === 0) {
-    return <InlineEmptyState title={emptyLabel} />;
+    return (
+      <div className="top5-fixed w-full min-w-0 max-w-full flex items-center justify-center">
+        <InlineEmptyState title={emptyLabel} />
+      </div>
+    );
   }
   const maxValue = Math.max(...items.map((d) => d.value), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
   return (
-    <div className="w-full min-w-0 max-w-full space-y-1.5">
+    <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
       {items.map((item, i) => {
         const color = item.color || CHART_COLORS[i % CHART_COLORS.length];
         const label = item.label;
@@ -581,12 +593,16 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
 
 const TopAgentsCard = ({ agents, onItemClick = null, activeName = null }) => {
   if (!agents || agents.length === 0) {
-    return <InlineEmptyState title="No agent data" description="No agent activity available." />;
+    return (
+      <div className="top5-fixed w-full min-w-0 max-w-full flex items-center justify-center">
+        <InlineEmptyState title="No agent data" description="No agent activity available." />
+      </div>
+    );
   }
   const maxCount = Math.max(...agents.map((a) => Number(a.count) || 0), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
   return (
-    <div className="w-full min-w-0 max-w-full space-y-1.5">
+    <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
       {agents.map((item, i) => {
         const color = CHART_COLORS[i % CHART_COLORS.length];
         const label = item.name || "Unknown agent";
@@ -655,7 +671,7 @@ const PaginationControls = ({ pagination, page, pageSize, loading, onPageChange 
         <div className="flex flex-wrap items-center gap-2">
           <button disabled={page === 1 || loading} onClick={() => onPageChange(1)} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"><span className="hidden md:inline">FIRST</span><span className="md:hidden">«</span></button>
           <button disabled={page === 1 || loading} onClick={() => onPageChange(Math.max(page - 1, 1))} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"><span className="hidden md:inline">← PREV</span><span className="md:hidden">‹</span></button>
-          <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400"><span className="hidden md:inline">PAGE </span><span className="text-white">{page}</span> / {totalPages}</span>
+          <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400"><span className="hidden md:inline">PAGE </span><span className="text-[var(--soc-text-primary)]">{page}</span> / {totalPages}</span>
           <button disabled={page >= totalPages || loading} onClick={() => onPageChange(Math.min(page + 1, totalPages))} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"><span className="hidden md:inline">NEXT →</span><span className="md:hidden">›</span></button>
           <button disabled={page >= totalPages || loading} onClick={() => onPageChange(totalPages)} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"><span className="hidden md:inline">LAST</span><span className="md:hidden">»</span></button>
         </div>
@@ -741,7 +757,16 @@ const FileSecurityScanner = () => {
       const normalizedSuspicious = (suspiciousResponse.data || []).map(normalizeFileScan);
       setFiles(normalizedSuspicious);
       setStats(statsResponse.data || null);
-      const bucketMs = getBucketMsForRange(rangeKey);
+      const DAY = 86400000;
+      const rangeMs = Math.max(new Date(filterDateRange.end).getTime() - new Date(filterDateRange.start).getTime(), 1);
+      // Tangga bucket selaras grafik lain (1 tahun → 7 harian).
+      const bucketMs =
+        rangeMs <= 3600000 ? 300000
+        : rangeMs <= DAY ? 3600000
+        : rangeMs <= 7 * DAY ? 21600000
+        : rangeMs <= 90 * DAY ? DAY
+        : rangeMs <= 366 * DAY ? 7 * DAY
+        : 30 * DAY;
       const mappedTimeline = (timelineResponse.data || []).map((item) => { const ts = new Date(item.timestamp).getTime(); return { t: ts, v: Number(item.suspicious || item.errors || item.total || 0), bucketMs }; }).filter((item) => Number.isFinite(item.t));
       const denseTimeline = (() => {
         const startMs = new Date(filterDateRange.start).getTime();
@@ -962,6 +987,17 @@ const FileSecurityScanner = () => {
           <DateRangeFilter
             value={customDateRange}
             onChange={(range) => { setPage(1); setSelectedTimelinePoint(null); setCustomDateRange(range); setFilterMode("custom"); }}
+            onClear={() => {
+              const nextParams = new URLSearchParams(searchParams);
+              nextParams.delete("start");
+              nextParams.delete("end");
+              setSearchParams(nextParams);
+              setPage(1);
+              setSelectedTimelinePoint(null);
+              setFilterMode("range");
+              setRangeKey("24h");
+              setCustomDateRange(createDefaultDateRange(1));
+            }}
           />
           <div className="relative flex items-center bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)]">
             <select
@@ -1008,7 +1044,7 @@ const FileSecurityScanner = () => {
               </div>
             </div>
             <div className="text-right min-w-0">
-              <div className="text-[9px] text-[var(--soc-text-muted)]">Last {rangeKey}</div>
+              <div className="text-[11px] text-[var(--soc-text-muted)]">{filterMode === "custom" ? `${new Date(customDateRange.start).toLocaleDateString("en-US", { month: "short", day: "2-digit" })} – ${new Date(customDateRange.end).toLocaleDateString("en-US", { month: "short", day: "2-digit" })}` : `Last ${rangeKey}`}</div>
               <div className="text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatLiveTimestamp(lastUpdated)}</div>
             </div>
           </div>
@@ -1054,7 +1090,7 @@ const FileSecurityScanner = () => {
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-violet-500/10"><FolderSearch className="h-3.5 w-3.5 text-violet-400" /></div>
               <div>
-                <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Top Scanned Folders</h3>
+                <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Top 5 Scanned Folders</h3>
                 <p className="text-[9px] text-[var(--soc-text-muted)]">Folders with the most files scanned</p>
               </div>
             </div>
@@ -1075,7 +1111,11 @@ const FileSecurityScanner = () => {
           </div>
           {(() => {
             const items = analytics.topSuspiciousFiles || [];
-            if (!items.length) return <InlineEmptyState title="No suspicious file data" description="No suspicious file activity for the selected time range." />;
+            if (!items.length) return (
+              <div className="top5-fixed-wrap w-full min-w-0 max-w-full flex items-center justify-center">
+                <InlineEmptyState title="No suspicious file data" description="No suspicious file activity for the selected time range." />
+              </div>
+            );
             const maxV = Math.max(...items.map((d) => d.value), 1);
             return (
               <div className="w-full min-w-0 max-w-full space-y-1.5">
@@ -1178,7 +1218,7 @@ const FileSecurityScanner = () => {
               ) : filteredFiles.map((file, idx) => {
                 const maxSeverity = file.findings.reduce((max, finding)=>(severityOrder[finding.severity] > severityOrder[max.severity] ? finding : max), file.findings[0]);
                 return (
-                  <tr key={file.id} className={`border-b border-slate-800/60 transition-all duration-150 hover:bg-purple-500/10 hover:shadow-[inset_3px_0_0_0_#a855f7] ${idx % 2 !== 0 ? "bg-slate-900/60" : ""}`}>
+                  <tr key={file.id} className={`border-b border-slate-800/60 transition-all duration-150 hover:bg-purple-500/10 hover:shadow-[inset_3px_0_0_0_#a855f7] ${idx % 2 !== 0 ? "bg-[var(--soc-zebra)]" : ""}`}>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-slate-500 text-[10px] md:text-[11px] lg:text-[10px] whitespace-nowrap">{formatTime(file.timestamp)}</td>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-sky-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-[140px] sm:max-w-[180px] md:max-w-[220px] lg:max-w-[260px] overflow-hidden text-ellipsis whitespace-nowrap" title={file.agentName}>{file.agentName}</div></td>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2">

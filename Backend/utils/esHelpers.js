@@ -5,7 +5,9 @@ const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 
 // Menentukan interval histogram yang adaptif terhadap rentang waktu (dalam menit)
-// agar jumlah bucket tetap ramping (~12-30 titik): 24 jam → per 1 jam, dst.
+// agar jumlah bucket tetap ramping (~12-90 titik): 24 jam → per 1 jam,
+// 1 tahun → per 7 hari. Hanya memakai unit fixed_interval yang valid
+// di Elasticsearch (ms/s/m/h/d).
 export function getHistogramInterval(minutes) {
   const durationMs = Math.max(Number(minutes) || 1, 1) * MINUTE_MS;
 
@@ -13,10 +15,9 @@ export function getHistogramInterval(minutes) {
   if (durationMs <= 6 * HOUR_MS) return "30m";
   if (durationMs <= DAY_MS) return "1h";
   if (durationMs <= 7 * DAY_MS) return "6h";
-  if (durationMs <= 30 * DAY_MS) return "1d";
-  if (durationMs <= 90 * DAY_MS) return "3d";
-  if (durationMs <= 366 * DAY_MS) return "2w";
-  return "1M";
+  if (durationMs <= 90 * DAY_MS) return "1d";
+  if (durationMs <= 366 * DAY_MS) return "7d";
+  return "30d";
 }
 
 export function unwrapEsResponse(response) {

@@ -157,13 +157,17 @@ const KPICard = ({ label, value, icon: Icon, color, desc, loading, index = 0, ti
 // ── BarList (seperti MlDashboard) ────────────────────────────────────────────
 const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue = null, formatValue = null }) => {
   if (!items || items.length === 0) {
-    return <InlineEmptyState title={emptyLabel} />;
+    return (
+      <div className="top5-fixed w-full min-w-0 max-w-full flex items-center justify-center">
+        <InlineEmptyState title={emptyLabel} />
+      </div>
+    );
   }
   const fmt = typeof formatValue === "function" ? formatValue : formatNumber;
   const maxValue = Math.max(...items.map((d) => d.value), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
   return (
-    <div className="w-full min-w-0 max-w-full space-y-1.5">
+    <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
       {items.map((item, i) => {
         const color = item.color || CHART_COLORS[i % CHART_COLORS.length];
         const label = item.label;
@@ -728,7 +732,7 @@ export default function BotDetection() {
   // Deep-link dari halaman Alerts: ?start=&end=&agent=&focus=logs.
   // Diterapkan sekali saat mount agar tabel langsung menampilkan data log
   // yang sesuai dengan alert yang diklik.
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const urlAppliedRef = useRef(false);
   useEffect(() => {
     if (urlAppliedRef.current) return;
@@ -1123,6 +1127,27 @@ export default function BotDetection() {
   // Legend mengikuti apa yang digambar, tapi saat isolation aktif semua seri tetap
   // ditampilkan supaya user bisa pindah pilihan atau balik ke "show all".
   const trendLegendSeries = isolatedTrend ? visibleSeries : visibleSeries.filter(hasTrendSignal);
+  // Klik legend: kunci grafik + filter tabel ke seri tersebut (sama
+  // seperti klik titik, tanpa filter waktu).
+  const handleTrendLegendClick = (s) => {
+    const isActive = isolatedTrend === s.key;
+    setPage(1);
+    if (isActive) {
+      setIsolatedTrend(null);
+      setBehaviorType("all");
+      return;
+    }
+    setIsolatedTrend(s.key);
+    if (s.key === "mlBotnet") {
+      setBehaviorType("all");
+      setAgentFilter("all");
+      setSrcIpFilter("all");
+      setDstIpFilter("all");
+    } else {
+      const meta = behaviorMeta(s.key);
+      if (meta) setBehaviorType(meta.value);
+    }
+  };
   // Warna garis putus-putus mengikuti warna legend seri yang diklik.
   const activeTrendColor = useMemo(() => {
     const key = selectedPoint?.source === "trend" ? selectedPoint.seriesKey : null;
@@ -1164,9 +1189,12 @@ export default function BotDetection() {
     );
   }
 
-  const rangeLabel = filterMode === "custom"
-    ? `${formatDetailedTimestamp(getIsoDateRange(normalizeDateRange(customDateRange)).start)}`
-    : `Last ${timeRange}`;
+  const rangeLabel = (() => {
+    if (filterMode !== "custom") return `Last ${timeRange}`;
+    const { start, end } = getIsoDateRange(normalizeDateRange(customDateRange));
+    const fmt = (v) => new Date(v).toLocaleDateString("en-US", { month: "short", day: "2-digit" });
+    return `${fmt(start)} – ${fmt(end)}`;
+  })();
 
   const trendRangeKey = filterMode === "custom"
     ? minutesToRangeKey(getDateRangeMinutes(getIsoDateRange(normalizeDateRange(customDateRange))))
@@ -1190,6 +1218,17 @@ export default function BotDetection() {
           <DateRangeFilter
             value={customDateRange}
             onChange={(range) => { setPage(1); setSelectedPoint(null); setCustomDateRange(range); setFilterMode("custom"); }}
+            onClear={() => {
+              const nextParams = new URLSearchParams(searchParams);
+              nextParams.delete("start");
+              nextParams.delete("end");
+              setSearchParams(nextParams);
+              setPage(1);
+              setSelectedPoint(null);
+              setFilterMode("range");
+              setTimeRange(DEFAULT_TIME_RANGE);
+              setCustomDateRange(createDefaultDateRange(1));
+            }}
           />
           <div className="relative flex items-center bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)]" title="Rows per page">
             <select
@@ -1243,7 +1282,7 @@ export default function BotDetection() {
               </div>
             </div>
             <div className="text-right min-w-0">
-              <div className="text-[9px] text-[var(--soc-text-muted)]">{rangeLabel}</div>
+              <div className="text-[11px] text-[var(--soc-text-muted)]">{rangeLabel}</div>
               <div className="text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatLiveTimestamp(lastUpdated)}</div>
             </div>
           </div>
@@ -1266,7 +1305,7 @@ export default function BotDetection() {
                 <button
                   key={s.key}
                   type="button"
-                  onClick={() => setIsolatedTrend(isActive ? null : s.key)}
+                  onClick={() => handleTrendLegendClick(s)}
                   title={isActive ? "Show all series" : `Show only ${s.label}`}
                   className={`flex items-center gap-1.5 text-[11px] rounded px-1 py-0.5 transition-all ${isActive ? "font-bold text-slate-200 ring-1 ring-sky-500/40 bg-sky-500/10" : dimmed ? "text-slate-500 opacity-50 hover:opacity-80" : "text-slate-400 hover:text-slate-200"}`}
                 >
@@ -1308,7 +1347,7 @@ export default function BotDetection() {
               </div>
             </div>
             <div className="text-right min-w-0">
-              <div className="text-[9px] text-[var(--soc-text-muted)]">{rangeLabel}</div>
+              <div className="text-[11px] text-[var(--soc-text-muted)]">{rangeLabel}</div>
               <div className="text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatLiveTimestamp(lastUpdated)}</div>
             </div>
           </div>
@@ -1463,11 +1502,11 @@ export default function BotDetection() {
                 }
                 return (
                   <tr key={a.id || idx}
-                    className={`border-b border-slate-800/60 transition-all duration-150 hover:bg-purple-500/10 hover:shadow-[inset_3px_0_0_0_#a855f7] ${idx % 2 !== 0 ? 'bg-slate-900/60' : ''}`}>
+                    className={`border-b border-slate-800/60 transition-all duration-150 hover:bg-purple-500/10 hover:shadow-[inset_3px_0_0_0_#a855f7] ${idx % 2 !== 0 ? 'bg-[var(--soc-zebra)]' : ''}`}>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-slate-500 whitespace-nowrap" title={formatDetailedTimestamp(a.timestamp)}>{formatDetailedTimestamp(a.timestamp)}</td>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-sky-400 font-medium" title={a.agent || "-"}><div className="truncate max-w-[140px] md:max-w-[200px]">{a.agent || "-"}</div></td>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 whitespace-nowrap"><DetectionBadge alert={a} /></td>
-                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-emerald-400 font-mono" title={source}><div className="truncate max-w-[150px] md:max-w-[200px]">{source}</div></td>
+                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-emerald-400 font-mono" title={source}><div className="truncate max-w-[120px] md:max-w-[140px]">{source}</div></td>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 whitespace-nowrap"><CountryFlag ip={a.sourceIp} entry={ipGeo.get(a.sourceIp)} /></td>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-violet-400 font-mono" title={destination}><div className="truncate max-w-[150px] md:max-w-[200px]">{destination}</div></td>
                     <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-slate-300 whitespace-nowrap">{protoMethod}</td>
@@ -1502,7 +1541,7 @@ export default function BotDetection() {
               <div className="flex flex-wrap items-center gap-2">
                 <button disabled={activePage === 1 || loading} onClick={() => { setPage(1); scrollTableIntoView(); }} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">FIRST</button>
                 <button disabled={activePage === 1 || loading} onClick={() => { setPage(Math.max(1, activePage - 1)); scrollTableIntoView(); }} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">PREV</button>
-                <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400"><span className="hidden md:inline">PAGE </span><span className="text-white">{activePage}</span> / {totalPages}</span>
+                <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400"><span className="hidden md:inline">PAGE </span><span className="text-[var(--soc-text-primary)]">{activePage}</span> / {totalPages}</span>
                 <button disabled={activePage >= totalPages || loading} onClick={() => { setPage(Math.min(totalPages, activePage + 1)); scrollTableIntoView(); }} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">NEXT</button>
                 <button disabled={activePage >= totalPages || loading} onClick={() => { setPage(totalPages); scrollTableIntoView(); }} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">LAST</button>
               </div>

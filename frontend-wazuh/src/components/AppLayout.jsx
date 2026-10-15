@@ -9,12 +9,14 @@ import {
   Radar,
   Bell,
   BellOff,
+  FlaskConical,
   Volume2,
   VolumeX,
   Users,
   LogOut,
   ChevronLeft,
   ChevronRight,
+  RotateCw,
   Menu,
   X,
   Settings,
@@ -22,6 +24,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { API_BASE_URL, getAuthToken } from "../config/Api";
+import { isDemoMode, setDemoMode } from "../utils/demoMode";
 import { useAlarms } from "../context/AlarmContext";
 import { useTheme } from "../hooks/useTheme";
 import ThemeToggle from "./ThemeToggle";
@@ -327,13 +330,15 @@ export default function AppLayout({ children }) {
           if (visibleItems.length === 0) return null;
 
           const isExpanded = expandedGroups.includes(group.label);
+          // Grup ikut ter-highlight bila salah satu isinya sedang dibuka.
+          const isGroupActive = visibleItems.some((item) => location.pathname === item.href);
 
           return (
             <div key={group.label} className="mb-1.5">
               {(!collapsed || isMobile) ? (
                 <button
                   onClick={() => toggleGroup(group.label)}
-                  className="w-full flex items-center justify-between px-2 py-1.5 text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider hover:text-[var(--soc-text-secondary)] rounded-lg transition-all"
+                  className={`w-full flex items-center justify-between px-2 py-1.5 text-[9px] font-semibold uppercase tracking-wider rounded-lg transition-all ${isGroupActive ? "text-purple-400" : "text-[var(--soc-text-muted)] hover:text-[var(--soc-text-secondary)]"}`}
                 >
                   <span>{group.label}</span>
                   <ChevronDown className={`h-2.5 w-2.5 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
@@ -454,7 +459,7 @@ export default function AppLayout({ children }) {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Bar */}
         <header className="soc-topbar flex items-center justify-between h-[52px] px-4 bg-[var(--soc-sidebar-bg)] shrink-0 z-[60]">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
             <button
               onClick={() => {
                 if (window.innerWidth < 1024) {
@@ -473,9 +478,30 @@ export default function AppLayout({ children }) {
                 <ChevronLeft className="h-4 w-4" />
               )}
             </button>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              title="Refresh page"
+              aria-label="Refresh page"
+              className="p-1.5 rounded-lg text-[var(--soc-text-muted)] hover:text-[var(--soc-text-primary)] hover:bg-[var(--soc-elevated)] transition-colors"
+            >
+              <RotateCw className="h-2.5 w-2.5" />
+            </button>
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Toggle mode demo (data dummy untuk laporan). Selalu transparan
+                sampai di-hover agar tak terlihat di screenshot; reload otomatis. */}
+            <button
+              type="button"
+              onClick={() => setDemoMode(!isDemoMode())}
+              title={isDemoMode() ? "Matikan mode demo (kembali ke data asli)" : "Nyalakan mode demo (data dummy untuk laporan)"}
+              aria-pressed={isDemoMode()}
+              className="flex items-center gap-1.5 rounded-lg border border-transparent px-2 py-1.5 text-[10px] font-semibold text-[var(--soc-text-muted)] opacity-0 transition-all hover:bg-[var(--soc-elevated)] hover:text-[var(--soc-text-primary)] hover:opacity-100 focus-visible:opacity-100"
+            >
+              <FlaskConical className="h-4 w-4" />
+              <span className="hidden sm:inline">Demo</span>
+            </button>
             <ThemeToggle compact />
             {/* Ikon lonceng membuka daftar riwayat alarm, bukan navigasi ke
                 halaman /alerts. Halaman penuh tetap tersedia lewat "View all". */}

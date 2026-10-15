@@ -455,6 +455,12 @@ export default function Alert() {
           <DateRangeFilter
             value={customDateRange}
             onChange={handleCustomRangeChange}
+            onClear={() => {
+              setPage(1);
+              setFilterMode("range");
+              setRangeKey("24h");
+              setCustomDateRange(createDefaultDateRange(1));
+            }}
           />
           <div className="relative flex items-center shrink-0 bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)] h-8">
             <select
@@ -672,23 +678,23 @@ export default function Alert() {
           </div>
         )}
         {filteredAlerts.length > 0 && (
-          <div className="border-t border-[var(--soc-border)] bg-[var(--soc-elevated)]/50 px-2 md:px-4 py-2.5">
-            <div className="flex flex-col items-center justify-between gap-2 md:flex-row md:gap-0">
-              <div className="text-[9px] md:text-[11px] font-mono text-[var(--soc-text-muted)] text-center">
+          <div className="border-t border-slate-800 bg-slate-900/50 px-2 md:px-4 py-1.5">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-1 md:gap-0">
+              <div className="text-[10px] md:text-[11px] font-mono text-slate-500">
                 <span className="hidden md:inline">SHOWING </span>
-                <span className="font-bold text-[var(--soc-text-primary)]">{(activePage - 1) * pageSize + 1}</span>
+                <span className="font-bold text-sky-400">{(activePage - 1) * pageSize + 1}</span>
                 <span className="hidden md:inline"> - </span><span className="md:hidden">-</span>
-                <span className="font-bold text-[var(--soc-text-primary)]">{Math.min(activePage * pageSize, filteredAlerts.length)}</span>
+                <span className="font-bold text-sky-400">{Math.min(activePage * pageSize, filteredAlerts.length)}</span>
                 <span className="hidden md:inline"> OF </span><span className="md:hidden"> / </span>
-                <span className="font-bold text-[var(--soc-text-primary)]">{filteredAlerts.length}</span>
+                <span className="font-bold text-sky-400">{filteredAlerts.length}</span>
                 <span className="hidden md:inline"> ALERTS</span>
               </div>
-              <div className="flex items-center justify-center gap-1 min-[420px]:gap-1.5">
-                <button disabled={activePage === 1 || loading} onClick={() => setPage(1)} className="rounded border border-[var(--soc-border)] bg-[var(--soc-card)] px-2 py-1 text-[9px] md:text-[11px] md:px-3 md:py-1.5 font-bold text-[var(--soc-text-secondary)] transition-all hover:border-purple-500/50 hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-20 inline-flex items-center justify-center min-w-[44px] min-[420px]:min-w-[54px]">FIRST</button>
-                <button disabled={activePage === 1 || loading} onClick={() => setPage(Math.max(1, activePage - 1))} className="rounded border border-[var(--soc-border)] bg-[var(--soc-card)] px-2 py-1 text-[9px] md:text-[11px] md:px-3 md:py-1.5 font-bold text-[var(--soc-text-secondary)] transition-all hover:border-purple-500/50 hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-20 inline-flex items-center justify-center min-w-[44px] min-[420px]:min-w-[54px]">PREV</button>
-                <span className="px-1 text-[9px] md:text-[11px] font-black text-[var(--soc-text-muted)] whitespace-nowrap"><span className="hidden md:inline">PAGE </span><span className="text-[var(--soc-text-primary)]">{activePage}</span> / {totalPages}</span>
-                <button disabled={activePage >= totalPages || loading} onClick={() => setPage(Math.min(totalPages, activePage + 1))} className="rounded border border-[var(--soc-border)] bg-[var(--soc-card)] px-2 py-1 text-[9px] md:text-[11px] md:px-3 md:py-1.5 font-bold text-[var(--soc-text-secondary)] transition-all hover:border-purple-500/50 hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-20 inline-flex items-center justify-center min-w-[44px] min-[420px]:min-w-[54px]">NEXT</button>
-                <button disabled={activePage >= totalPages || loading} onClick={() => setPage(totalPages)} className="rounded border border-[var(--soc-border)] bg-[var(--soc-card)] px-2 py-1 text-[9px] md:text-[11px] md:px-3 md:py-1.5 font-bold text-[var(--soc-text-secondary)] transition-all hover:border-purple-500/50 hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-20 inline-flex items-center justify-center min-w-[44px] min-[420px]:min-w-[54px]">LAST</button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button disabled={activePage === 1 || loading} onClick={() => setPage(1)} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">FIRST</button>
+                <button disabled={activePage === 1 || loading} onClick={() => setPage(Math.max(1, activePage - 1))} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">PREV</button>
+                <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400 whitespace-nowrap"><span className="hidden md:inline">PAGE </span><span className="text-[var(--soc-text-primary)]">{activePage}</span> / {totalPages}</span>
+                <button disabled={activePage >= totalPages || loading} onClick={() => setPage(Math.min(totalPages, activePage + 1))} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">NEXT</button>
+                <button disabled={activePage >= totalPages || loading} onClick={() => setPage(totalPages)} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">LAST</button>
               </div>
             </div>
           </div>

@@ -310,19 +310,25 @@ const WaveChart = ({ data, color = "#f97316", rangeKey = "24h", height = 80, com
           );
         })}
       </svg>
-      {hoveredPoint && (
-        <div
-          className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-lg"
-          style={{
-            left: `${Math.min(Math.max((hoveredPoint.x / width) * 100, 10), 82)}%`,
-            top: `${Math.max(((hoveredPoint.y - 40) / height) * 100, 6)}%`,
-            transform: "translate(-50%, -100%)",
-          }}
-        >
-          <div className="font-semibold text-[var(--soc-text-primary)]">{hoveredPoint.value} commands</div>
-          <div className="mt-1 text-[var(--soc-text-secondary)]">{formatDetailedTimestamp(hoveredPoint.start || hoveredPoint.time)}</div>
-        </div>
-      )}
+      {hoveredPoint && (() => {
+        const xPct = (hoveredPoint.x / width) * 100;
+        const flipBelow = hoveredPoint.y < height * 0.32;
+        const anchorX = xPct < 18 ? 6 : xPct > 82 ? 94 : xPct;
+        const tx = xPct < 18 ? "-6%" : xPct > 82 ? "-94%" : "-50%";
+        return (
+          <div
+            className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-lg"
+            style={{
+              left: `${anchorX}%`,
+              top: flipBelow ? `${((hoveredPoint.y + 18) / height) * 100}%` : `${Math.max(((hoveredPoint.y - 40) / height) * 100, 6)}%`,
+              transform: `translate(${tx}, ${flipBelow ? "0" : "-100%"})`,
+            }}
+          >
+            <div className="font-semibold text-[var(--soc-text-primary)]">{hoveredPoint.value} commands</div>
+            <div className="mt-1 text-[var(--soc-text-secondary)]">{formatDetailedTimestamp(hoveredPoint.start || hoveredPoint.time)}</div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
@@ -599,14 +605,18 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items", onP
 
 const CompactBarChart = ({ items, emptyLabel = "No data available", onItemClick = null, activeValue = null }) => {
   if (!items || items.length === 0) {
-    return <InlineEmptyState title={emptyLabel} />;
+    return (
+      <div className="top5-fixed w-full min-w-0 max-w-full flex items-center justify-center">
+        <InlineEmptyState title={emptyLabel} />
+      </div>
+    );
   }
 
   const maxValue = Math.max(...items.map((d) => d.value), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
 
   return (
-    <div className="w-full min-w-0 max-w-full space-y-1.5">
+    <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
       {items.map((item, i) => {
         const color = item.color || CHART_COLORS[i % CHART_COLORS.length];
         const label = item.label;
@@ -646,12 +656,16 @@ const CompactBarChart = ({ items, emptyLabel = "No data available", onItemClick 
 
 const TopAgentsCard = ({ agents, onItemClick = null, activeName = null }) => {
   if (!agents || agents.length === 0) {
-    return <InlineEmptyState title="No agent data" description="No agent activity available for the selected time range." />;
+    return (
+      <div className="top5-fixed w-full min-w-0 max-w-full flex items-center justify-center">
+        <InlineEmptyState title="No agent data" description="No agent activity available for the selected time range." />
+      </div>
+    );
   }
   const maxValue = Math.max(...agents.map((a) => a.value), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
   return (
-    <div className="w-full min-w-0 max-w-full space-y-1.5">
+    <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
       {agents.map((item, i) => {
         const color = CHART_COLORS[i % CHART_COLORS.length];
         const value = item.value;
@@ -758,7 +772,7 @@ const PaginationControls = ({
           </button>
           <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400">
             <span className="hidden md:inline">PAGE </span>
-            <span className="text-white">{page}</span> / {totalPages}
+            <span className="text-[var(--soc-text-primary)]">{page}</span> / {totalPages}
           </span>
           <button
             disabled={page === totalPages || loading}
@@ -876,56 +890,102 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
   const toWeight = (fs) => (fs > 26 ? "800" : fs > 18 ? "700" : "500");
   const SAFE_X = 18;
   const SAFE_Y = 14;
-  const fontSize = (count) => Math.round(16 + ((count - minCount) / range) * 32);
-  const placed = [];
-  const rects = [];
-  const overlaps = (nx, ny, nw, nh) => {
-    const pad = 3;
-    return rects.some((r) =>
-      nx - nw / 2 - pad < r.x + r.w / 2 &&
-      nx + nw / 2 + pad > r.x - r.w / 2 &&
-      ny - nh / 2 - pad < r.y + r.h / 2 &&
-      ny + nh / 2 + pad > r.y - r.h / 2
-    );
-  };
+  const prominence = (count) => (
+    maxCount === minCount ? 0.62 : (count - minCount) / range
+  );
 
-  for (let i = 0; i < words.length; i++) {
-    const { text, count } = words[i];
-    const fs = fontSize(count);
-    const weight = toWeight(fs);
-    const tw = measureTextWidth(text, fs, weight);
-    const th = Math.ceil(fs * 1.4);
-    if (tw > W - 2 * SAFE_X || th > H - 2 * SAFE_Y) continue;
-
-    // Start inside a moderate central zone. The local spiral fills this area
-    // first, then expands only as needed instead of spanning the full card.
-    const zoneW = (W - 2 * SAFE_X) * 0.55;
-    const zoneH = (H - 2 * SAFE_Y) * 0.6;
+  // Try a complete layout at a given scale. The same layout is calculated
+  // repeatedly below, allowing the cloud to select the largest scale that
+  // still fits every keyword in the measured payload area.
+  const layoutAtScale = (scale) => {
+    const placed = [];
+    const rects = [];
+    const overlaps = (nx, ny, nw, nh) => {
+      const pad = 3;
+      return rects.some((r) =>
+        nx - nw / 2 - pad < r.x + r.w / 2 &&
+        nx + nw / 2 + pad > r.x - r.w / 2 &&
+        ny - nh / 2 - pad < r.y + r.h / 2 &&
+        ny + nh / 2 + pad > r.y - r.h / 2
+      );
+    };
+    const zoneW = (W - 2 * SAFE_X) * 0.94;
+    const zoneH = (H - 2 * SAFE_Y) * 0.94;
     const zoneX = (W - zoneW) / 2;
     const zoneY = (H - zoneH) / 2;
-    const targetX = zoneX + (((i * 0.61803398875 + 0.17) % 1) * zoneW);
-    const targetY = zoneY + (((i * 0.41421356237 + 0.23) % 1) * zoneH);
-    let placedX = targetX;
-    let placedY = targetY;
-    let found = false;
-    for (let step = 0; step < 800; step++) {
-      const angle = step * 0.35;
-      const radius = step * 0.45;
-      const cx = targetX + radius * Math.cos(angle);
-      const cy = targetY + radius * Math.sin(angle) * 0.6;
-      if (cx - tw / 2 >= SAFE_X && cx + tw / 2 <= W - SAFE_X && cy - th / 2 >= SAFE_Y && cy + th / 2 <= H - SAFE_Y && !overlaps(cx, cy, tw, th)) {
-        placedX = cx;
-        placedY = cy;
-        found = true;
-        break;
+
+    for (let i = 0; i < words.length; i++) {
+      const { text, count } = words[i];
+      // Ranking changes the relative font size; `scale` is the shared
+      // auto-fit multiplier found below.
+      let fs = Math.max(10, Math.round((13 + prominence(count) * 21) * scale));
+      let weight = toWeight(fs);
+      let tw = measureTextWidth(text, fs, weight);
+      let th = Math.ceil(fs * 1.4);
+
+      // A single long path/token may be reduced just enough to stay within
+      // the canvas, while the other words retain the shared auto-fit scale.
+      while (fs > 10 && (tw > W - 2 * SAFE_X || th > H - 2 * SAFE_Y)) {
+        fs -= 1;
+        weight = toWeight(fs);
+        tw = measureTextWidth(text, fs, weight);
+        th = Math.ceil(fs * 1.4);
+      }
+      if (tw > W - 2 * SAFE_X || th > H - 2 * SAFE_Y) return { placed, complete: false };
+
+      const targetX = zoneX + (((i * 0.61803398875 + 0.17) % 1) * zoneW);
+      const targetY = zoneY + (((i * 0.41421356237 + 0.23) % 1) * zoneH);
+      let found = false;
+      for (let step = 0; step < 1200; step++) {
+        const angle = step * 0.35;
+        const radius = step * 0.45;
+        const x = targetX + radius * Math.cos(angle);
+        const y = targetY + radius * Math.sin(angle) * 0.6;
+        if (x - tw / 2 >= SAFE_X && x + tw / 2 <= W - SAFE_X && y - th / 2 >= SAFE_Y && y + th / 2 <= H - SAFE_Y && !overlaps(x, y, tw, th)) {
+          rects.push({ x, y, w: tw, h: th });
+          placed.push({ text, fs, weight, color: palette[i % palette.length], opacity: 0.65 + prominence(count) * 0.35, x, y, count });
+          found = true;
+          break;
+        }
+      }
+      if (!found) return { placed, complete: false };
+    }
+    return { placed, complete: true };
+  };
+
+  // Binary-search the maximum usable scale. This removes fixed "10/16 word"
+  // thresholds: sparse clouds grow until their words nearly fill the box,
+  // while dense clouds shrink only as much as needed to fit all words.
+  let bestLayout = layoutAtScale(0.25);
+  let bestScale = 0.25;
+  if (bestLayout.complete) {
+    let low = 0.25;
+    let high = 1;
+    while (high < 8) {
+      const candidate = layoutAtScale(high);
+      if (!candidate.complete) break;
+      bestLayout = candidate;
+      low = high;
+      bestScale = low;
+      high *= 2;
+    }
+    for (let attempt = 0; attempt < 9; attempt++) {
+      const middle = (low + high) / 2;
+      const candidate = layoutAtScale(middle);
+      if (candidate.complete) {
+        bestLayout = candidate;
+        low = middle;
+        bestScale = low;
+      } else {
+        high = middle;
       }
     }
-
-    if (found) {
-      rects.push({ x: placedX, y: placedY, w: tw, h: th });
-      placed.push({ text, fs, weight, color: palette[i % palette.length], opacity: 0.65 + ((count - minCount) / range) * 0.35, x: placedX, y: placedY, count });
-    }
   }
+  // Leave a little breathing room rather than using the absolute largest
+  // possible glyphs; the cloud remains adaptive but reads more comfortably.
+  const placed = bestLayout.complete
+    ? layoutAtScale(Math.max(0.25, bestScale * 0.70)).placed
+    : bestLayout.placed;
 
   // Uniform scaling only: with "meet" the text can never be stretched
   // non-uniformly (gepeng) even if the measured box lags the real box —
@@ -1358,22 +1418,29 @@ const HostMonitoring = () => {
       endMs = nowMs;
     }
 
+    const DAY = 86400000;
     let stepMs =
       filterMode === "custom"
         ? rangeMs <= 3600000
           ? 300000
-          : rangeMs <= 86400000
+          : rangeMs <= DAY
             ? 3600000
-            : rangeMs <= 604800000
+            : rangeMs <= 7 * DAY
               ? 21600000
-              : 86400000
+              : rangeMs <= 90 * DAY
+                ? DAY
+                : rangeMs <= 366 * DAY
+                  ? 7 * DAY
+                  : 30 * DAY
         : rangeKey === "1h"
           ? 300000
           : rangeKey === "24h"
             ? 3600000
             : rangeKey === "7d"
               ? 21600000
-              : 86400000;
+              : rangeKey === "30d"
+                ? DAY
+                : 7 * DAY;
 
     const bucketStart = (ms) => Math.floor(ms / stepMs) * stepMs;
     const buckets = new Map();
@@ -1866,11 +1933,23 @@ const HostMonitoring = () => {
             />
             <DateRangeFilter
               value={customDateRange}
+              closeOnChange
               onChange={(range) => {
                 setPage(1);
                 setSelectedTimelinePoint(null);
                 setCustomDateRange(range);
                 setFilterMode("custom");
+              }}
+              onClear={() => {
+                const nextParams = new URLSearchParams(searchParams);
+                nextParams.delete("start");
+                nextParams.delete("end");
+                setSearchParams(nextParams);
+                setPage(1);
+                setSelectedTimelinePoint(null);
+                setFilterMode("range");
+                setRangeKey("24h");
+                setCustomDateRange(createDefaultDateRange(1));
               }}
             />
             <div className="relative flex items-center bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)]">
@@ -1970,7 +2049,7 @@ const HostMonitoring = () => {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-[9px] text-[var(--soc-text-muted)]">Last {rangeKey}</div>
+                  <div className="text-[11px] text-[var(--soc-text-muted)]">{filterMode === "custom" ? `${new Date(customDateRange.start).toLocaleDateString("en-US", { month: "short", day: "2-digit" })} – ${new Date(customDateRange.end).toLocaleDateString("en-US", { month: "short", day: "2-digit" })}` : `Last ${rangeKey}`}</div>
                   <div className="text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatLiveTimestamp(lastUpdated)}</div>
                 </div>
               </div>
@@ -2016,7 +2095,7 @@ const HostMonitoring = () => {
                     <MonitorPlay className="h-3.5 w-3.5 text-orange-400" />
                   </div>
                   <div className="min-w-0">
-                    <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)] truncate">Top Sessions</h3>
+                    <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)] truncate">Top 5 Sessions</h3>
                     <p className="text-[9px] text-[var(--soc-text-muted)] truncate">Most active sessions by command activity</p>
                   </div>
                 </div>
@@ -2050,11 +2129,15 @@ const HostMonitoring = () => {
               </div>
               {(() => {
                 const items = analytics.topUsers || [];
-                if (!items.length) return <InlineEmptyState title="No active user data" description="No user activity for the selected time range." />;
+                if (!items.length) return (
+                  <div className="top5-fixed w-full min-w-0 max-w-full flex items-center justify-center">
+                    <InlineEmptyState title="No active user data" description="No user activity for the selected time range." />
+                  </div>
+                );
                 const maxValue = Math.max(...items.map(d=>d.value), 1);
                 const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
                 return (
-                  <div className="w-full min-w-0 max-w-full space-y-1.5">
+                  <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
                     {items.slice(0,5).map((item, i) => {
                       const color = item.color || CHART_COLORS[i % CHART_COLORS.length];
                       const label = item.label;
@@ -2094,7 +2177,7 @@ const HostMonitoring = () => {
                   </div>
                 </div>
               </div>
-              <div className="w-full h-[280px] shrink-0 overflow-hidden rounded-xl" style={{ background: "transparent" }}>
+              <div className="w-full h-[206px] shrink-0 overflow-hidden rounded-xl" style={{ background: "transparent" }}>
                 <div className="w-full h-full rounded-xl overflow-hidden" style={{ background: "transparent" }}>
                   <PayloadWordCloud words={commandPayloadWords} activeWord={selectedKeyword} onWordClick={handleSelectKeyword} />
                 </div>
@@ -2200,7 +2283,7 @@ const HostMonitoring = () => {
               <colgroup>
                 <col style={{ width: "14%" }} />
                 <col style={{ width: "10%" }} />
-                <col style={{ width: "9%" }} />
+                <col style={{ width: "13%" }} />
                 <col style={{ width: "8%" }} />
                 <col />
                 <col style={{ width: "10%" }} />
@@ -2222,7 +2305,7 @@ const HostMonitoring = () => {
                   (keywordFilterActive ? crossFilteredLogs || [] : filteredLogs).map((log, idx) => (
                     <tr
                       key={log.id}
-                      className={`border-b border-slate-800/60 transition-all duration-150 hover:bg-purple-500/10 hover:shadow-[inset_3px_0_0_0_#a855f7] ${idx % 2 !== 0 ? "bg-slate-900/60" : ""
+                      className={`border-b border-slate-800/60 transition-all duration-150 hover:bg-purple-500/10 hover:shadow-[inset_3px_0_0_0_#a855f7] ${idx % 2 !== 0 ? "bg-[var(--soc-zebra)]" : ""
                         }`}
                     >
                       <td className="px-3 md:px-4 py-3 md:py-3.5 leading-relaxed text-slate-500 text-[11px] md:text-[12px]">

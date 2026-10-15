@@ -59,6 +59,14 @@ const formatTimeFull = (isoString) => {
   if (!date) return '-';
   return date.toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }).replace(',', '').replace('AM', '').replace('PM', '').trim();
 };
+// Label rentang pendek untuk header grafik ("Oct 01 – Oct 08").
+const formatShortRange = (start, end) => {
+  const s = getValidDate(start);
+  const e = getValidDate(end);
+  if (!s || !e) return 'custom';
+  const fmt = (d) => d.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
+  return `${fmt(s)} – ${fmt(e)}`;
+};
 const formatLiveTimestamp = (isoString) => {
   const date = getValidDate(isoString);
   if (!date) return '-';
@@ -91,8 +99,9 @@ const getTimelineBucketMs = (minutes) => {
   if (minutes <= 60) return 5 * 60 * 1000;
   if (minutes <= 1440) return 60 * 60 * 1000;
   if (minutes <= 10080) return 6 * 60 * 60 * 1000;
-  if (minutes <= 525600) return 24 * 60 * 60 * 1000;
-  return 7 * 24 * 60 * 60 * 1000;
+  if (minutes <= 129600) return 24 * 60 * 60 * 1000;
+  if (minutes <= 525600) return 7 * 24 * 60 * 60 * 1000;
+  return 30 * 24 * 60 * 60 * 1000;
 };
 const createTimelineBucketPoint = (bucketStartMs, value, bucketMs) => {
   const startDate = new Date(bucketStartMs);
@@ -154,12 +163,16 @@ const KPICard = ({ label, value, icon: Icon, color, desc, loading, index = 0 }) 
 // ── BarList (seperti FileSecurityScanner) ────────────────────────────────────
 const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue = null }) => {
   if (!items || items.length === 0) {
-    return <InlineEmptyState title={emptyLabel} />;
+    return (
+      <div className="top5-fixed w-full min-w-0 max-w-full flex items-center justify-center">
+        <InlineEmptyState title={emptyLabel} />
+      </div>
+    );
   }
   const maxValue = Math.max(...items.map((d) => d.value), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
   return (
-    <div className="w-full min-w-0 max-w-full space-y-1.5">
+    <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
       {items.map((item, i) => {
         const color = item.color || CHART_COLORS[i % CHART_COLORS.length];
         const label = item.label;
@@ -194,12 +207,16 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
 
 const TopAgentsCard = ({ agents, onItemClick = null, activeName = null }) => {
   if (!agents || agents.length === 0) {
-    return <InlineEmptyState title="No agent data" description="No agent activity available." />;
+    return (
+      <div className="top5-fixed w-full min-w-0 max-w-full flex items-center justify-center">
+        <InlineEmptyState title="No agent data" description="No agent activity available." />
+      </div>
+    );
   }
   const maxCount = Math.max(...agents.map((a) => Number(a.count) || 0), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
   return (
-    <div className="w-full min-w-0 max-w-full space-y-1.5">
+    <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
       {agents.map((item, i) => {
         const color = CHART_COLORS[i % CHART_COLORS.length];
         const label = item.name || "Unknown agent";
@@ -389,13 +406,23 @@ const CategoryLineChart = ({ items, color = "#a78bfa", totalLabel = "items", onP
           <line x1={padding.l} y1={padding.t} x2={padding.l} y2={padding.t + innerH} stroke="var(--soc-border)" strokeWidth="1.5" />
           <line x1={padding.l} y1={padding.t + innerH} x2={padding.l + innerW} y2={padding.t + innerH} stroke="var(--soc-border)" strokeWidth="1.5" />
           {segments.map((seg) => (<path key={seg.key} d={seg.d} stroke={seg.color} strokeWidth="2.5" fill="none" opacity="0.85" />))}
+          {(() => {
+            // Garis putus-putus seperti WaveChart, mengikuti warna titik yang
+            // ditekan (activeLabel) — sinkron otomatis dengan filter/legend.
+            const pinned = activeLabel != null ? points.find((p) => String(p.label) === String(activeLabel)) : null;
+            if (!pinned) return null;
+            return (
+              <line x1={pinned.x} y1={padding.t} x2={pinned.x} y2={padding.t + innerH}
+                stroke={pinned.color} strokeWidth="1.5" strokeDasharray="3,3" opacity="0.85" className="pointer-events-none" />
+            );
+          })()}
           {points.map((p) => {
             const isSel = selected?.index === p.index;
             const isActive = activeLabel != null && String(p.label) === String(activeLabel);
             return (
               <g key={`${p.label}-${p.index}`}>
                 <circle cx={p.x} cy={p.y} r={isSel ? "6" : "9"} fill="transparent" className="cursor-pointer" onMouseEnter={() => setSelected(p)} onMouseLeave={() => setSelected(null)} onFocus={() => setSelected(p)} onBlur={() => setSelected(null)} onClick={() => { setSelected(p); if (onPointClick) onPointClick(p); }} />
-                <circle cx={p.x} cy={p.y} r={isSel || isActive ? "5" : "3.5"} fill={p.color} stroke={isActive ? "#0f172a" : "var(--soc-bg)"} strokeWidth={isActive ? "2" : "1.5"} opacity="0.95" className="pointer-events-none" />
+                <circle cx={p.x} cy={p.y} r={isSel || isActive ? "5" : "3.5"} fill={p.color} stroke="none" opacity="0.95" className="pointer-events-none" />
                 <text x={p.x} y={padding.t + innerH + 18} textAnchor="middle" fontSize="9" fill={isActive ? "var(--soc-text-primary)" : "var(--soc-text-muted)"} fontWeight={isActive ? "700" : "400"}>{p.label}</text>
               </g>
             );
@@ -424,12 +451,18 @@ const CategoryLineChart = ({ items, color = "#a78bfa", totalLabel = "items", onP
           );
         })}
       </div>
-      {selected && (
-        <div className="pointer-events-none absolute z-10 min-w-[110px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-xl" style={{ left: `${Math.min(Math.max((selected.x / width) * 100, 10), 84)}%`, top: `${Math.max(((selected.y - 46) / height) * 100, 2)}%`, transform: "translate(-50%, -100%)" }}>
-          <div className="font-semibold text-[var(--soc-text-primary)]">{selected.label}</div>
-          <div className="mt-1 text-[var(--soc-text-muted)]">{selected.value} {totalLabel}</div>
-        </div>
-      )}
+      {selected && (() => {
+        const xPct = (selected.x / width) * 100;
+        const flipBelow = selected.y < height * 0.32;
+        const anchorX = xPct < 18 ? 6 : xPct > 82 ? 94 : xPct;
+        const tx = xPct < 18 ? "-6%" : xPct > 82 ? "-94%" : "-50%";
+        return (
+          <div className="pointer-events-none absolute z-10 min-w-[110px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-xl" style={{ left: `${anchorX}%`, top: flipBelow ? `${((selected.y + 18) / height) * 100}%` : `${Math.max(((selected.y - 46) / height) * 100, 2)}%`, transform: `translate(${tx}, ${flipBelow ? "0" : "-100%"})` }}>
+            <div className="font-semibold text-[var(--soc-text-primary)]">{selected.label}</div>
+            <div className="mt-1 text-[var(--soc-text-muted)]">{selected.value} {totalLabel}</div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
@@ -550,12 +583,18 @@ const WaveChart = ({ data, color = "#a78bfa", rangeKey = "24h", height = 220, co
           return (<g key={`tick-${d.t}`}><line x1={x} y1={padding.t + innerH} x2={x} y2={padding.t + innerH + 3} stroke="var(--soc-border)" /><text x={x} y={padding.t + innerH + 14} textAnchor={i === 0 ? "start" : i >= data.length - tickEvery ? "end" : "middle"} fontSize="10" fill="#64748b" fontWeight="500">{formatBucketLabel(d.t, rangeKey)}</text></g>);
         })}
       </svg>
-      {selectedPoint && (
-        <div className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-lg" style={{ left: `${Math.min(Math.max((selectedPoint.x / width) * 100, 10), 82)}%`, top: `${Math.max(((selectedPoint.y - 40) / height) * 100, 6)}%`, transform: "translate(-50%, -100%)" }}>
-          <div className="font-semibold text-[var(--soc-text-primary)]">{selectedPoint.value} predictions</div>
-          <div className="mt-1 text-[var(--soc-text-secondary)]">{formatDetailedTimestamp(selectedPoint.start || selectedPoint.time)}</div>
-        </div>
-      )}
+      {selectedPoint && (() => {
+        const xPct = (selectedPoint.x / width) * 100;
+        const flipBelow = selectedPoint.y < height * 0.32;
+        const anchorX = xPct < 18 ? 6 : xPct > 82 ? 94 : xPct;
+        const tx = xPct < 18 ? "-6%" : xPct > 82 ? "-94%" : "-50%";
+        return (
+          <div className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-lg" style={{ left: `${anchorX}%`, top: flipBelow ? `${((selectedPoint.y + 18) / height) * 100}%` : `${Math.max(((selectedPoint.y - 40) / height) * 100, 6)}%`, transform: `translate(${tx}, ${flipBelow ? "0" : "-100%"})` }}>
+            <div className="font-semibold text-[var(--soc-text-primary)]">{selectedPoint.value} predictions</div>
+            <div className="mt-1 text-[var(--soc-text-secondary)]">{formatDetailedTimestamp(selectedPoint.start || selectedPoint.time)}</div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
@@ -866,9 +905,9 @@ export default function MlDashboard() {
       const conf = getConfidenceScore(p);
       const geo = ipGeo.get(p.sourceIp);
       const country = geo?.private ? "UNDIP" : (geo?.name || geo?.code || "-");
-      return [formatTime(p.timestamp), p.agent || "-", p.predictedLabel || "-", p.sourceIp || "-", country, p.destinationIp || "-", p.service || "-", conf == null ? "-" : `${conf}%`, p.httpUri || "-"];
+      return [formatTime(p.timestamp), p.agent || "-", p.predictedLabel || "-", p.sourceIp || "-", country, p.destinationIp || "-", p.service || "-", conf == null ? "-" : `${conf}%`, p.httpUri || "-", p.httpPostBody || "-"];
     });
-    exportCsv({ filename: `ml-predictions-${new Date().toISOString().slice(0, 10)}.csv`, header: ["Timestamp", "Agent", "Label", "Source IP", "Country (source)", "Destination IP", "Service", "Confidence (%)", "HTTP URI"], rows });
+    exportCsv({ filename: `ml-predictions-${new Date().toISOString().slice(0, 10)}.csv`, header: ["Timestamp", "Agent", "Label", "Source IP", "Country (source)", "Destination IP", "Service", "Confidence (%)", "HTTP URI", "HTTP Post Body"], rows });
   };
 
   const distribution = useMemo(() => {
@@ -1005,8 +1044,8 @@ export default function MlDashboard() {
 
   if (error && predictions.length === 0 && !loading) {
     return (
-      <div className="flex items-center justify-center h-full px-4">
-        <div className="max-w-md rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-[11px] text-red-300">{error?.message || String(error)}</div>
+      <div className="flex items-center justify-center min-h-[60vh] px-4">
+        <div className="max-w-md rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-[11px] text-red-300 text-center">{error?.message || String(error)}</div>
       </div>
     );
   }
@@ -1033,6 +1072,17 @@ export default function MlDashboard() {
           <DateRangeFilter
             value={customDateRange}
             onChange={(range) => { setPage(1); setSelectedTimelinePoint(null); setCustomDateRange(range); setFilterMode("custom"); }}
+            onClear={() => {
+              const nextParams = new URLSearchParams(searchParams);
+              nextParams.delete("start");
+              nextParams.delete("end");
+              setSearchParams(nextParams);
+              setPage(1);
+              setSelectedTimelinePoint(null);
+              setFilterMode("range");
+              setTimeRange(DEFAULT_TIME_RANGE);
+              setCustomDateRange(createDefaultDateRange(1));
+            }}
           />
           <div className="relative flex items-center bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)]">
             <select
@@ -1078,7 +1128,7 @@ export default function MlDashboard() {
               </div>
             </div>
             <div className="text-right min-w-0">
-              <div className="text-[9px] text-[var(--soc-text-muted)]">Last {timeRange}</div>
+              <div className="text-[11px] text-[var(--soc-text-muted)]" title={filterMode === "custom" ? `${customDateRange.start} – ${customDateRange.end}` : undefined}>{filterMode === "custom" ? formatShortRange(customDateRange.start, customDateRange.end) : `Last ${timeRange}`}</div>
               <div className="text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatLiveTimestamp(lastUpdated)}</div>
             </div>
           </div>
@@ -1121,7 +1171,7 @@ export default function MlDashboard() {
             <CategoryLineChart items={distribution} totalLabel="predictions" onPointClick={handleLabelSummaryClick} activeLabel={filters.label && filters.label !== "all" ? filters.label : null} />
           </div>
         </div>
-        <div ref={topIpsCardRef} className="chart-card animate-fadeInUp stagger-2 flex flex-col self-start w-full lg:h-[320px]" style={{ opacity: 0 }}>
+        <div ref={topIpsCardRef} className="chart-card animate-fadeInUp stagger-2 flex flex-col self-start w-full lg:min-h-[320px]" style={{ opacity: 0 }}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-emerald-500/10"><Globe className={`h-3.5 w-3.5 ${ipTab === "source" ? "text-emerald-400" : "text-sky-400"}`} /></div>
@@ -1193,37 +1243,38 @@ export default function MlDashboard() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[880px] table-fixed text-[10px] md:text-[11px] text-left">
+          <table className="w-full min-w-[1000px] table-fixed text-[10px] md:text-[11px] text-left">
             <colgroup>
               <col style={{ width: "10%" }} />
-              <col style={{ width: "11%" }} />
-              <col style={{ width: "11%" }} />
-              <col style={{ width: "11%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "10%" }} />
               <col style={{ width: "8%" }} />
-              <col style={{ width: "11%" }} />
+              <col style={{ width: "10%" }} />
               <col style={{ width: "7%" }} />
               <col style={{ width: "7%" }} />
+              <col style={{ width: "12%" }} />
               <col />
             </colgroup>
             <thead>
               <tr className="border-b border-slate-800 bg-slate-800/70">
-                {["time", "agent", "label", "source ip", "country", "destination ip", "service", "confidence", "http uri"].map((h) => (
-                  <th key={h} className="px-1.5 md:px-2 py-2 md:py-3 lg:py-2 text-[9px] md:text-[11px] lg:text-[10px] font-semibold text-slate-400 uppercase">{h}</th>
+                {["time", "agent", "label", "source ip", "country", "destination ip", "service", "confidence", "http uri", "http post body"].map((h) => (
+                  <th key={h} className={`py-2 md:py-3 lg:py-2 text-[9px] md:text-[11px] lg:text-[10px] font-semibold text-slate-400 uppercase ${(h === "http uri" || h === "http post body") ? "px-7 md:px-7" : "px-1.5 md:px-2"}`}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={9} className="px-4 py-8 text-center text-xs text-slate-500">Loading predictions...</td></tr>
+                <tr><td colSpan={10} className="px-4 py-8 text-center text-xs text-slate-500">Loading predictions...</td></tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center">
+                  <td colSpan={10} className="px-4 py-8 text-center">
                     <p className="text-[10px] font-semibold text-[var(--soc-text-secondary)]">No predictions match current filters</p>
                     <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">Try adjusting the selected filters or time range.</p>
                   </td>
                 </tr>
               ) : pageItems.map((p, idx) => (
-                <tr key={p.id || p.zeekUid || idx} className={`border-b border-slate-800/60 transition-all duration-150 hover:bg-purple-500/10 hover:shadow-[inset_3px_0_0_0_#a855f7] ${idx % 2 !== 0 ? 'bg-slate-900/60' : ''}`}>
+                <tr key={p.id || p.zeekUid || idx} className={`border-b border-slate-800/60 transition-all duration-150 hover:bg-purple-500/10 hover:shadow-[inset_3px_0_0_0_#a855f7] ${idx % 2 !== 0 ? 'bg-[var(--soc-zebra)]' : ''}`}>
                   <td className="px-1.5 md:px-2 py-1.5 md:py-3 lg:py-2 text-slate-500 text-[10px] md:text-[11px] lg:text-[10px] whitespace-nowrap overflow-hidden text-ellipsis" title={formatTimeFull(p.timestamp)}>{formatTime(p.timestamp)}</td>
                   <td className="px-1.5 md:px-2 py-1.5 md:py-3 lg:py-2 text-sky-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-full overflow-hidden text-ellipsis whitespace-nowrap" title={p.agent || "-"}>{p.agent || '-'}</div></td>
                   <td className="px-1.5 md:px-2 py-1.5 md:py-3 lg:py-2 whitespace-nowrap"><PredictionBadge label={p.predictedLabel} /></td>
@@ -1232,7 +1283,8 @@ export default function MlDashboard() {
                   <td className="px-1.5 md:px-2 py-1.5 md:py-3 lg:py-2 text-violet-400 font-mono text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-full overflow-hidden text-ellipsis whitespace-nowrap" title={p.destinationIp || "-"}>{p.destinationIp || '-'}</div></td>
                   <td className="px-1.5 md:px-2 py-1.5 md:py-3 lg:py-2 text-slate-300 text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-full overflow-hidden text-ellipsis whitespace-nowrap" title={p.service || "-"}>{p.service || '-'}</div></td>
                   <td className="px-1.5 md:px-2 py-1.5 md:py-3 lg:py-2 whitespace-nowrap"><ConfidenceBadge score={p.confidence} label={p.predictedLabel} /></td>
-                  <td className="px-1.5 md:px-2 py-1.5 md:py-3 lg:py-2 text-slate-400 font-mono text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-[330px] overflow-hidden text-ellipsis whitespace-nowrap" title={p.httpUri || "-"}>{p.httpUri || '-'}</div></td>
+                  <td className="px-7 md:px-7 py-1.5 md:py-3 lg:py-2 text-slate-400 font-mono text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-[330px] overflow-hidden text-ellipsis whitespace-nowrap" title={p.httpUri || "-"}>{p.httpUri || '-'}</div></td>
+                  <td className="px-7 md:px-7 py-1.5 md:py-3 lg:py-2 text-amber-300/90 font-mono text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-[330px] overflow-hidden text-ellipsis whitespace-nowrap" title={p.httpPostBody || "-"}>{p.httpPostBody || '-'}</div></td>
                 </tr>
               ))}
             </tbody>
@@ -1254,7 +1306,7 @@ export default function MlDashboard() {
               <div className="flex flex-wrap items-center gap-2">
                 <button disabled={activePage === 1 || loading} onClick={() => { setPage(1); scrollPredictionsTableIntoView(); }} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">FIRST</button>
                 <button disabled={activePage === 1 || loading} onClick={() => { setPage(Math.max(1, activePage - 1)); scrollPredictionsTableIntoView(); }} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">PREV</button>
-                <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400"><span className="hidden md:inline">PAGE </span><span className="text-white">{activePage}</span> / {totalPages}</span>
+                <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400"><span className="hidden md:inline">PAGE </span><span className="text-[var(--soc-text-primary)]">{activePage}</span> / {totalPages}</span>
                 <button disabled={activePage >= totalPages || loading} onClick={() => { setPage(Math.min(totalPages, activePage + 1)); scrollPredictionsTableIntoView(); }} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">NEXT</button>
                 <button disabled={activePage >= totalPages || loading} onClick={() => { setPage(totalPages); scrollPredictionsTableIntoView(); }} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">LAST</button>
               </div>

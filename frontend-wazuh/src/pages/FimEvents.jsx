@@ -163,13 +163,19 @@ const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey, compact = f
           );
         })}
       </svg>
-      {selectedPoint && (
-        <div className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-lg"
-          style={{ left: `${Math.min(Math.max((selectedPoint.x / width) * 100, 10), 82)}%`, top: `${Math.max(((selectedPoint.y - 40) / height) * 100, 6)}%`, transform: "translate(-50%, -100%)" }}>
-          <div className="font-semibold text-[var(--soc-text-primary)]">{selectedPoint.value} events</div>
-          <div className="mt-1 text-[var(--soc-text-secondary)]">{formatDetailedTimestamp(selectedPoint.time)}</div>
-        </div>
-      )}
+      {selectedPoint && (() => {
+        const xPct = (selectedPoint.x / width) * 100;
+        const flipBelow = selectedPoint.y < height * 0.32;
+        const anchorX = xPct < 18 ? 6 : xPct > 82 ? 94 : xPct;
+        const tx = xPct < 18 ? "-6%" : xPct > 82 ? "-94%" : "-50%";
+        return (
+          <div className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-lg"
+            style={{ left: `${anchorX}%`, top: flipBelow ? `${((selectedPoint.y + 18) / height) * 100}%` : `${Math.max(((selectedPoint.y - 40) / height) * 100, 6)}%`, transform: `translate(${tx}, ${flipBelow ? "0" : "-100%"})` }}>
+            <div className="font-semibold text-[var(--soc-text-primary)]">{selectedPoint.value} events</div>
+            <div className="mt-1 text-[var(--soc-text-secondary)]">{formatDetailedTimestamp(selectedPoint.time)}</div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
@@ -271,12 +277,16 @@ const Legend = ({ items, activeLabel = null, onSelect = null, compact = false })
 
 const TopAgentsCard = ({ agents, onItemClick = null, activeName = null }) => {
   if (!agents || agents.length === 0) {
-    return <InlineEmptyState title="No agent data" description="No agent activity available." />;
+    return (
+      <div className="top5-fixed w-full min-w-0 max-w-full flex items-center justify-center">
+        <InlineEmptyState title="No agent data" description="No agent activity available." />
+      </div>
+    );
   }
   const maxCount = Math.max(...agents.map((a) => a.count), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
   return (
-    <div className="w-full min-w-0 max-w-full space-y-1.5">
+    <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
       {agents.map((item, i) => {
         const color = CHART_COLORS[i % CHART_COLORS.length];
         const isActive = activeName != null && String(item.name) === String(activeName);
@@ -759,7 +769,7 @@ const FimEvents = ({ agentId = "all" }) => {
     updateTimelineHeight();
   }, [isMobile, viewportWidth]);
 
-  React.useEffect(() => { setClientPage(1); }, [searchQuery, eventFilter, agentFilter, userFilter, severityFilter]);
+  React.useEffect(() => { setClientPage(1); }, [searchQuery, eventFilter, agentFilter, userFilter, severityFilter, selectedPayloadPattern]);
 
   React.useEffect(() => {
     if (!pathFilter && !urlAgent && urlFocus !== "logs") return;
@@ -878,8 +888,16 @@ const FimEvents = ({ agentId = "all" }) => {
       .filter((e) => Number.isFinite(e._ms) && e._ms >= startMs && e._ms <= endMs)
       .sort((a, b) => b._ms - a._ms);
 
-    // Timeline buckets from filtered (real)
-    const stepMs = rangeKey === "1h" ? 300000 : rangeKey === "24h" ? 3600000 : rangeKey === "7d" ? 21600000 : 86400000;
+    // Timeline buckets from filtered (real). Lebar bucket mengikuti DURNASI
+    // rentang (selaras backend & ML): 1 tahun → 7 harian.
+    const DAY = 86400000;
+    const stepMs =
+      rangeMs <= 3600000 ? 300000
+      : rangeMs <= DAY ? 3600000
+      : rangeMs <= 7 * DAY ? 21600000
+      : rangeMs <= 90 * DAY ? DAY
+      : rangeMs <= 366 * DAY ? 7 * DAY
+      : 30 * DAY;
     const bucketStart = (ms) => Math.floor(ms / stepMs) * stepMs;
     const buckets = new Map();
     for (const e of filtered) {
@@ -1085,8 +1103,15 @@ const FimEvents = ({ agentId = "all" }) => {
         return [e.agentName, e.username, e.syscheckPath, e.syscheckEvent, e.ruleDescription].filter(Boolean).some((f) => String(f).toLowerCase().includes(q));
       })
       .filter((e) => matchesGridFilters(e, agentFilter, userFilter, eventFilter, severityFilter))
+      // Keyword dari Payload Pattern Cloud: hanya event yang payload-nya
+      // mengandung keyword tersebut.
+      .filter((e) => {
+        if (!selectedPayloadPattern) return true;
+        const hay = [e.fileDiff, e.ruleDescription, e.syscheckPath].filter(Boolean).join("\n").toLowerCase();
+        return hay.includes(String(selectedPayloadPattern).toLowerCase());
+      })
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  }, [events, searchQuery, agentFilter, userFilter, eventFilter, severityFilter, pathFilter, selectedTimelinePoint]);
+  }, [events, searchQuery, agentFilter, userFilter, eventFilter, severityFilter, pathFilter, selectedTimelinePoint, selectedPayloadPattern]);
 
   const visibleEvents = useMemo(() => {
     return tableEvents.slice((clientPage - 1) * pageSize, clientPage * pageSize);
@@ -1161,6 +1186,17 @@ const FimEvents = ({ agentId = "all" }) => {
               setSelectedTimelinePoint(null);
               setCustomDateRange(range);
               setFilterMode("custom");
+            }}
+            onClear={() => {
+              const nextParams = new URLSearchParams(searchParams);
+              nextParams.delete("start");
+              nextParams.delete("end");
+              setSearchParams(nextParams);
+              setClientPage(1);
+              setSelectedTimelinePoint(null);
+              setFilterMode("range");
+              setRangeKey("24h");
+              setCustomDateRange(createDefaultDateRange(1));
             }}
           />
           <div className="relative flex items-center bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)]">
@@ -1249,7 +1285,7 @@ const FimEvents = ({ agentId = "all" }) => {
               </div>
             </div>
             <div className="text-right min-w-0">
-              <div className="text-[9px] text-[var(--soc-text-muted)]">Last {rangeKey}</div>
+              <div className="text-[11px] text-[var(--soc-text-muted)]">{filterMode === "custom" ? `${new Date(customDateRange.start).toLocaleDateString("en-US", { month: "short", day: "2-digit" })} – ${new Date(customDateRange.end).toLocaleDateString("en-US", { month: "short", day: "2-digit" })}` : `Last ${rangeKey}`}</div>
               <div className="text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatTime(lastUpdated)}</div>
             </div>
           </div>
@@ -1294,10 +1330,14 @@ const FimEvents = ({ agentId = "all" }) => {
           </div>
           {(() => {
             const items = derived.eventItems || [];
-            if (!items.length) return <InlineEmptyState title="No event data" description="No file integrity events for the selected time range." />;
+            if (!items.length) return (
+              <div className="top5-fixed w-full min-w-0 max-w-full flex items-center justify-center">
+                <InlineEmptyState title="No event data" description="No file integrity events for the selected time range." />
+              </div>
+            );
             const maxV = Math.max(...items.map((d) => d.value), 1);
             return (
-              <div className="w-full min-w-0 max-w-full space-y-1.5">
+              <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
                 {items.map((item, i) => {
                   const isActive = eventFilter !== "all" && String(eventFilter).toLowerCase() === String(item.label).toLowerCase();
                   return (
@@ -1335,10 +1375,14 @@ const FimEvents = ({ agentId = "all" }) => {
           </div>
           {(() => {
             const items = derived.severityItems || [];
-            if (!items.length) return <InlineEmptyState title="No severity data" description="No severity data for the selected time range." />;
+            if (!items.length) return (
+              <div className="top5-fixed w-full min-w-0 max-w-full flex items-center justify-center">
+                <InlineEmptyState title="No severity data" description="No severity data for the selected time range." />
+              </div>
+            );
             const maxV = Math.max(...items.map((d) => d.value), 1);
             return (
-              <div className="w-full min-w-0 max-w-full space-y-1.5">
+              <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
                 {items.map((item, i) => {
                   const isActive = severityFilter !== "all" && String(severityFilter) === String(item.label);
                   return (
@@ -1375,10 +1419,14 @@ const FimEvents = ({ agentId = "all" }) => {
           </div>
           {(() => {
             const items = derived.topUsers || [];
-            if (!items.length) return <InlineEmptyState title="No user data" description="No user activity for the selected time range." />;
+            if (!items.length) return (
+              <div className="top5-fixed w-full min-w-0 max-w-full flex items-center justify-center">
+                <InlineEmptyState title="No user data" description="No user activity for the selected time range." />
+              </div>
+            );
             const maxV = Math.max(...items.map((d) => d.value), 1);
             return (
-              <div className="w-full min-w-0 max-w-full space-y-1.5">
+              <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
                 {items.map((item, i) => {
                   const isActive = userFilter !== "all" && String(userFilter) === String(item.label);
                   return (
@@ -1421,7 +1469,7 @@ const FimEvents = ({ agentId = "all" }) => {
               isinya tanpa space kosong. */}
           <div className="w-full min-w-0 max-w-full shrink-0 overflow-hidden rounded-xl box-border" style={{ background: "transparent", maxWidth: "100%", height: payloadCloudH }}>
             <div className="w-full h-full min-w-0 max-w-full rounded-xl overflow-hidden box-border" style={{ background: "transparent", maxWidth: "100%" }}>
-              <PayloadWordCloud words={derived.payloadWords} activeWord={selectedPayloadPattern} onWordClick={(w) => setSelectedPayloadPattern((p) => p === w ? null : w)} />
+              <PayloadWordCloud words={derived.payloadWords} activeWord={selectedPayloadPattern} onWordClick={(w) => { const next = selectedPayloadPattern === w ? null : w; setSelectedPayloadPattern(next); if (next) setTimeout(focusLogs, 100); }} />
             </div>
           </div>
         </div>
@@ -1441,10 +1489,14 @@ const FimEvents = ({ agentId = "all" }) => {
           </div>
           {(() => {
             const items = derived.topFiles || [];
-            if (!items.length) return <InlineEmptyState title="No file data" description="No file activity for the selected time range." />;
+            if (!items.length) return (
+              <div className="top5-fixed-sub w-full min-w-0 max-w-full flex items-center justify-center">
+                <InlineEmptyState title="No file data" description="No file activity for the selected time range." />
+              </div>
+            );
             const maxV = Math.max(...items.map((d) => d.value), 1);
             return (
-              <div className="w-full min-w-0 max-w-full space-y-1.5">
+              <div className="top5-fixed-sub w-full min-w-0 max-w-full space-y-1.5">
                 {items.map((item, i) => (
                   <div key={item.label} onClick={() => handleFileSummaryClick(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg cursor-pointer ${pathFilter && String(pathFilter) === String(item.label) ? "bg-emerald-500/10 ring-1 ring-emerald-500/30" : ""}`} title={`Filter events for ${item.label}`}>
                     <div className="flex items-center justify-between gap-2 min-w-0">
@@ -1526,7 +1578,7 @@ const FimEvents = ({ agentId = "all" }) => {
                   </td>
                 </tr>
               ) : visibleEvents.map((evt, idx) => (
-                <tr key={evt.id} className={`border-b border-slate-800/60 transition-all duration-150 hover:bg-purple-500/10 hover:shadow-[inset_3px_0_0_0_#a855f7] ${idx % 2 !== 0 ? "bg-slate-900/60" : ""}`}>
+                <tr key={evt.id} className={`border-b border-slate-800/60 transition-all duration-150 hover:bg-purple-500/10 hover:shadow-[inset_3px_0_0_0_#a855f7] ${idx % 2 !== 0 ? "bg-[var(--soc-zebra)]" : ""}`}>
                   <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 whitespace-nowrap 2xl:w-[190px] 2xl:min-w-[190px] 2xl:max-w-[190px] text-slate-500 text-[10px] md:text-[11px] lg:text-[10px]">{formatTime(evt.timestamp)}</td>
                   <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 whitespace-nowrap 2xl:w-[190px] 2xl:min-w-[190px] 2xl:max-w-[190px] text-sky-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]">{evt.agentName}</td>
                   <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 whitespace-nowrap 2xl:w-[140px] 2xl:min-w-[140px] 2xl:max-w-[140px] text-violet-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]">{evt.username}</td>
@@ -1582,7 +1634,7 @@ ${evt.syscheckEvent}${evt.fileDiff ? `\n${String(evt.fileDiff).replace(/\\n/g, "
               </button>
               <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400">
                 <span className="hidden md:inline">PAGE </span>
-                <span className="text-white">{clientPage}</span> / {totalPages}
+                <span className="text-[var(--soc-text-primary)]">{clientPage}</span> / {totalPages}
               </span>
               <button disabled={clientPage === totalPages} onClick={() => setClientPage(Math.min(clientPage + 1, totalPages))} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 hover:border-sky-500/50 hover:bg-sky-900/20 disabled:opacity-20">
                 <span className="hidden md:inline">NEXT →</span><span className="md:hidden">›</span>

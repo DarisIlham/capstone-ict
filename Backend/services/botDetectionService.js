@@ -293,7 +293,7 @@ function normalizeAlert(hit) {
       probability: Number.isFinite(probability) ? probability : null,
       threshold: getField(src, "threshold") ?? 0.5,
       hits: numOrNull(getField(src, "rule_hits")),
-      rulePackets: numOrNull(getField(src, "rule_packets")),
+      rulePackets: numOrNull(getField(src, "botnet_packets")) ?? numOrNull(getField(src, "rule_packets")),
       origBytes: Number.isFinite(origBytes) ? origBytes : null,
       respBytes: Number.isFinite(respBytes) ? respBytes : null,
       totalBytes: Number.isFinite(origBytes) || Number.isFinite(respBytes)

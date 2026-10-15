@@ -379,7 +379,11 @@ const WaveChart = ({ data, color = "#A855F7", height: _height = 140, rangeKey = 
 
 const CompactBarChart = ({ items, collapsedCount = 5, onItemClick = null }) => {
   if (!items || items.length === 0) {
-    return <InlineEmptyState title="No active agent data" description="No agent activity for the selected time range." />;
+    return (
+      <div className="h-[216px] shrink-0 overflow-hidden flex items-center justify-center">
+        <InlineEmptyState title="No active agent data" description="No agent activity for the selected time range." />
+      </div>
+    );
   }
 
   const visibleItems = items.slice(0, collapsedCount);
@@ -614,19 +618,27 @@ const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items", onP
           </div>
         ))}
       </div>
-      {selected && (
-        <div
-          className="pointer-events-none absolute z-10 min-w-[90px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-elevated)] px-2 py-1.5 text-[10px] shadow-xl"
-          style={{
-            left: `${Math.min(Math.max((selected.x / width) * 100, 10), 84)}%`,
-            top: `${Math.max(((selected.y - 36) / height) * 100, 2)}%`,
-            transform: "translate(-50%, -100%)",
-          }}
-        >
-          <div className="font-semibold text-[var(--soc-text-primary)]">{selected.label}</div>
-          <div className="mt-0.5 text-[var(--soc-text-muted)]">{selected.value} {totalLabel}</div>
-        </div>
-      )}
+      {selected && (() => {
+        // Tooltip anti-terpotong: dekat tepi atas tampil DI BAWAH titik,
+        // dekat tepi kiri/kanan jangkar + geseran X disesuaikan.
+        const xPct = (selected.x / width) * 100;
+        const flipBelow = selected.y < height * 0.32;
+        const anchorX = xPct < 18 ? 6 : xPct > 82 ? 94 : xPct;
+        const tx = xPct < 18 ? "-6%" : xPct > 82 ? "-94%" : "-50%";
+        return (
+          <div
+            className="pointer-events-none absolute z-10 min-w-[90px] max-w-[220px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-elevated)] px-2 py-1.5 text-[10px] shadow-xl"
+            style={{
+              left: `${anchorX}%`,
+              top: flipBelow ? `${((selected.y + 18) / height) * 100}%` : `${Math.max(((selected.y - 36) / height) * 100, 2)}%`,
+              transform: `translate(${tx}, ${flipBelow ? "0" : "-100%"})`,
+            }}
+          >
+            <div className="font-semibold text-[var(--soc-text-primary)]">{selected.label}</div>
+            <div className="mt-0.5 text-[var(--soc-text-muted)]">{selected.value} {totalLabel}</div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
@@ -741,6 +753,7 @@ export default function MainDashboard() {
   const [loadError, setLoadError] = useState("");
   const [botSummary, setBotSummary] = useState(null);
   const [botTrend, setBotTrend] = useState([]);
+  const [botTopAgents, setBotTopAgents] = useState([]);
   const [botLoaded, setBotLoaded] = useState(false);
   const [topUsersSource, setTopUsersSource] = useState("host");
   const [showWarningToast, setShowWarningToast] = useState(false);
@@ -756,57 +769,10 @@ export default function MainDashboard() {
             ? normalizeDateRange(customDateRange)
             : rangeKeyToDateRange(rangeKey);
         const nextData = await getMainDashboardData(dateRange);
-        
-        // Add dummy data for Most Changed Files if empty
-        if (!nextData.mostChangedFiles || nextData.mostChangedFiles.length === 0) {
-          nextData.mostChangedFiles = [
-            { label: "/etc/passwd", value: 45, sub: "user1" },
-            { label: "/var/log/auth.log", value: 38, sub: "system" },
-            { label: "/etc/ssh/sshd_config", value: 32, sub: "user2" },
-            { label: "/home/user/documents/data.csv", value: 28, sub: "user1" },
-            { label: "/tmp/suspicious_script.sh", value: 22, sub: "unknown" },
-          ];
-        }
 
-        // Add dummy data for Top Agent Rankings if empty
+        // Data kosong = tampilkan empty state (tanpa data dummy).
         if (!nextData.topRankings) {
           nextData.topRankings = {};
-        }
-        if (!nextData.topRankings.host || nextData.topRankings.host.length === 0) {
-          nextData.topRankings.host = [
-            { label: "agent-server-01", value: 156 },
-            { label: "agent-web-server", value: 128 },
-            { label: "agent-prod-02", value: 95 },
-            { label: "agent-dev-workstation", value: 72 },
-            { label: "agent-storage-01", value: 54 },
-          ];
-        }
-        if (!nextData.topRankings.fimAgents || nextData.topRankings.fimAgents.length === 0) {
-          nextData.topRankings.fimAgents = [
-            { label: "agent-prod-01", value: 89 },
-            { label: "agent-web-02", value: 76 },
-            { label: "agent-db-01", value: 63 },
-            { label: "agent-dev-01", value: 48 },
-            { label: "agent-staging-01", value: 35 },
-          ];
-        }
-        if (!nextData.topRankings.file || nextData.topRankings.file.length === 0) {
-          nextData.topRankings.file = [
-            { label: "agent-prod-01", value: 42 },
-            { label: "agent-web-02", value: 35 },
-            { label: "agent-db-01", value: 28 },
-            { label: "agent-dev-01", value: 21 },
-            { label: "agent-storage-01", value: 15 },
-          ];
-        }
-        if (!nextData.topRankings.ml || nextData.topRankings.ml.length === 0) {
-          nextData.topRankings.ml = [
-            { label: "agent-prod-01", value: 67 },
-            { label: "agent-web-02", value: 54 },
-            { label: "agent-db-01", value: 43 },
-            { label: "agent-dev-01", value: 31 },
-            { label: "agent-staging-01", value: 24 },
-          ];
         }
 
         setDashboardData(nextData);
@@ -846,11 +812,13 @@ export default function MainDashboard() {
             : rangeKeyToDateRange(rangeKey);
         const { start, end } = getIsoDateRange(dateRange);
         const opts = { signal: controller.signal };
-        // Summary dan trend paralel: trend untuk grafik timeline, summary untuk
-        // KPI. Salah satu gagal tidak boleh menghilangkan yang lain.
-        const [summaryRes, trendRes] = await Promise.allSettled([
+        // Summary, trend & top agents paralel: trend untuk grafik timeline,
+        // summary untuk KPI, top agents untuk tab Botnet. Salah satu gagal
+        // tidak boleh menghilangkan yang lain.
+        const [summaryRes, trendRes, agentsRes] = await Promise.allSettled([
           botDetectionApi.getSummary({ start, end }, opts),
           botDetectionApi.getTrend({ start, end }, opts),
+          botDetectionApi.getTopAgents({ start, end }, opts),
         ]);
         if (cancelled) return;
         if (summaryRes.status === "fulfilled" && summaryRes.value?.success) {
@@ -858,6 +826,10 @@ export default function MainDashboard() {
         }
         if (trendRes.status === "fulfilled" && trendRes.value?.success) {
           setBotTrend(normalizeBotTrend(trendRes.value.data, dateRange));
+        }
+        if (agentsRes.status === "fulfilled" && agentsRes.value?.success) {
+          const list = Array.isArray(agentsRes.value?.data?.agents) ? agentsRes.value.data.agents : [];
+          setBotTopAgents(list.map((a) => ({ label: String(a.name), value: Number(a.count) || 0 })));
         }
       } catch {
         if (!cancelled) setBotSummary(null);
@@ -942,6 +914,11 @@ export default function MainDashboard() {
           <DateRangeFilter
             value={customDateRange}
             onChange={handleCustomRangeChange}
+            onClear={() => {
+              setFilterMode("range");
+              setRangeKey("30d");
+              setCustomDateRange(createDefaultDateRange(30));
+            }}
           />
         </div>
       </div>
@@ -1021,7 +998,10 @@ export default function MainDashboard() {
                 Most Changed Files isi 5 data */}
             <div className="h-[256px] shrink-0 overflow-hidden">
               <CategoryLineChart
-                items={dashboardData.threatTypes}
+                items={[
+                  ...dashboardData.threatTypes,
+                  { label: "Botnet Activity", value: Number(botSummary?.totalAlerts) || 0, color: "#E879F9" },
+                ]}
                 color="#EF4444"
                 totalLabel="threats"
                 onPointClick={(p) => {
@@ -1031,6 +1011,7 @@ export default function MainDashboard() {
                     "Malicious Files": "/file-security",
                     "FIM Changes": "/fim-events",
                     "ML Threats": "/ml-dashboard",
+                    "Botnet Activity": "/bot-detection",
                   }[p.label] ?? "/attack-dashboard";
                   const categoryParams = new URLSearchParams({ start, end });
                   if (p.label === "Suspicious Commands") categoryParams.set("status", "suspicious");
@@ -1101,7 +1082,7 @@ export default function MainDashboard() {
                   <Activity className="h-3.5 w-3.5 text-purple-400" />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Top Active Agents</h3>
+                  <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Top 5 Active Agents</h3>
                   <p className="text-[9px] text-[var(--soc-text-muted)]">Most active agents in the selected source</p>
                 </div>
               </div>
@@ -1111,6 +1092,7 @@ export default function MainDashboard() {
                   fimAgents: "/fim-events",
                   file: "/file-security",
                   ml: "/ml-dashboard",
+                  botnet: "/bot-detection",
                 }[topUsersSource] ?? "/attack-dashboard")}
                 className="text-[10px] text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-0.5 whitespace-nowrap shrink-0"
               >
@@ -1123,6 +1105,7 @@ export default function MainDashboard() {
                 { key: "fimAgents", label: "FIM" },
                 { key: "file", label: "File Security" },
                 { key: "ml", label: "ML" },
+                { key: "botnet", label: "Botnet" },
               ].map((option) => (
                 <button
                   key={option.key}
@@ -1139,7 +1122,7 @@ export default function MainDashboard() {
             </div>
             <CompactBarChart
               key={topUsersSource}
-              items={dashboardData.topRankings?.[topUsersSource] ?? dashboardData.userRanking}
+              items={topUsersSource === "botnet" ? botTopAgents : (dashboardData.topRankings?.[topUsersSource] ?? dashboardData.userRanking)}
               onItemClick={(item) => {
                 const { start, end } = getIsoDateRange(effectiveDateRange);
                 const target = {
@@ -1147,6 +1130,7 @@ export default function MainDashboard() {
                   fimAgents: "/fim-events",
                   file: "/file-security",
                   ml: "/ml-dashboard",
+                  botnet: "/bot-detection",
                 }[topUsersSource] ?? "/attack-dashboard";
                 navigate(`${target}?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&agent=${encodeURIComponent(item.label)}`);
               }}
@@ -1261,7 +1245,7 @@ export default function MainDashboard() {
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 items-start">
             <div className="lg:col-span-2 rounded-lg p-3 flex flex-col" style={{ background: "transparent" }}>
-              <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center justify-between mb-4">
                 <span className="text-[11px] text-[var(--soc-text-muted)]">{section.title} Timeline ({selectedRangeLabel})</span>
               </div>
                 <div className="w-full h-[180px] rounded-lg overflow-hidden" style={{ background: "transparent" }}>

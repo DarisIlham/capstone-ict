@@ -6,7 +6,7 @@ const shortDate = (dt) =>
     ? new Date(dt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
     : "--";
 
-export default function DateRangeFilter({ value, onChange, disabled = false, className = "" }) {
+export default function DateRangeFilter({ value, onChange, onClear = null, closeOnChange = true, disabled = false, className = "" }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -47,6 +47,7 @@ export default function DateRangeFilter({ value, onChange, disabled = false, cla
                   const next = { start: e.target.value, end: value?.end || "" };
                   if (new Date(next.start) > new Date(next.end)) next.end = next.start;
                   onChange(next);
+                  if (closeOnChange) setOpen(false);
                 }}
                 className="soc-date-time-input soc-date-time-input--from flex-1 text-[10px] rounded-md border border-[var(--soc-border)] px-2 py-1.5 bg-[var(--soc-card)] text-[var(--soc-text-primary)] focus:border-purple-500/50 focus:outline-none"
               />
@@ -62,16 +63,33 @@ export default function DateRangeFilter({ value, onChange, disabled = false, cla
                   const next = { start: value?.start || "", end: e.target.value };
                   if (new Date(next.start) > new Date(next.end)) next.start = next.end;
                   onChange(next);
+                  if (closeOnChange) setOpen(false);
                 }}
                 className="soc-date-time-input soc-date-time-input--to flex-1 text-[10px] rounded-md border border-[var(--soc-border)] px-2 py-1.5 bg-[var(--soc-card)] text-[var(--soc-text-primary)] focus:border-purple-500/50 focus:outline-none"
               />
             </div>
-            <button
-              onClick={() => setOpen(false)}
-              className="w-full py-1.5 text-[10px] font-medium rounded-lg text-purple-400 hover:bg-purple-500/20 transition-colors" style={{ backgroundColor: "rgba(139, 92, 246, 0.15)" }}
-            >
-              Apply
-            </button>
+            <div className="flex items-center gap-2">
+              {typeof onClear === "function" && (
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => {
+                    onClear();
+                    setOpen(false);
+                  }}
+                  className="flex-1 py-1.5 text-[10px] font-medium rounded-lg border border-[var(--soc-border)] text-[var(--soc-text-secondary)] hover:border-red-400/50 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                >
+                  Reset
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="flex-1 py-1.5 text-[10px] font-medium rounded-lg text-purple-400 hover:bg-purple-500/20 transition-colors" style={{ backgroundColor: "rgba(139, 92, 246, 0.15)" }}
+              >
+                Apply
+              </button>
+            </div>
           </div>
         </div>
       )}

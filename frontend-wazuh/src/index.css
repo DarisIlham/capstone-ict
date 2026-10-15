@@ -21,6 +21,9 @@
   --soc-card: #121836;
   /* card / panel - slightly lighter */
   --soc-elevated: #1A2245;
+  /* baris zebra tabel (ganjil) */
+  --soc-zebra: rgba(15, 23, 42, 0.6);
+  --soc-zebra-solid: #10172f;
   /* elevated panel / hover */
   --soc-border: #1E2A4A;
   /* visible border - subtle */
@@ -114,6 +117,8 @@
   --soc-surface: #FFFFFF;
   --soc-card: #FFFFFF;
   --soc-elevated: #F1F5F9;
+  --soc-zebra: rgba(226, 232, 240, 0.7);
+  --soc-zebra-solid: #ebeff5;
   --soc-border: #E2E8F0;
   --soc-border-strong: #CBD5E1;
 
@@ -190,6 +195,10 @@
   --color-green-900: #dcfce7;
   --color-green-400: #16a34a;
   --color-green-300: #15803d;
+
+  --color-lime-900: #ecfccb;
+  --color-lime-400: #4d7c0f;
+  --color-lime-300: #3f6212;
 
   --color-amber-950: #fffbeb;
   --color-amber-900: #fef3c7;
@@ -4779,10 +4788,10 @@ aside.w-60 {
    cell instead of stopping at the next column (e.g. Agent). Matches
    the translucent Tailwind row backgrounds against the card color. */
 .soc-responsive-table tbody tr:nth-child(even) td:first-child {
-  background: color-mix(in srgb, var(--color-slate-900) 60%, var(--soc-card)) !important;
+  background-color: var(--soc-zebra-solid) !important;
 }
 .soc-responsive-table tbody tr:hover td:first-child {
-  background: color-mix(in srgb, var(--color-slate-800) 40%, var(--soc-card)) !important;
+  background-color: color-mix(in srgb, #a855f7 10%, var(--soc-card)) !important;
 }
 .soc-responsive-table td .truncate,
 .soc-responsive-table td > div[class*="truncate"],
@@ -4843,16 +4852,20 @@ aside.w-60 {
   }
 }
 
-/* Hover baris tabel log: kolom pertama (sticky TIME) punya background sendiri
-   sehingga menutupi highlight baris — samakan tint ungu + aksen kiri di sini,
-   dengan transisi yang sama agar satu baris menyala serentak. */
+/* Kolom pertama (sticky TIME): warisi background barisnya persis — zebra,
+   hover, dan normal selalu identik dengan kolom lain di semua tema. */
 .soc-responsive-table.soc-logs-table tbody td:first-child {
   transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
 .soc-responsive-table.soc-logs-table tbody tr:hover td:first-child {
-  background: color-mix(in srgb, #a855f7 12%, var(--soc-card)) !important;
   box-shadow: inset 3px 0 0 0 #a855f7 !important;
 }
+
+/* Daftar Top-5: kunci tinggi setara 5 baris agar kartu tidak melar/menyusut
+   mengikuti jumlah data (1 baris tetap setinggi 5 baris). */
+.top5-fixed { height: 206px; overflow: hidden; }
+.top5-fixed-sub { height: 280px; overflow: hidden; }
+.top5-fixed-wrap { height: 326px; overflow: hidden; }
 
 /* Long text anywhere: ellipsis or wrap, never silently clipped. */
 .truncate[title],
