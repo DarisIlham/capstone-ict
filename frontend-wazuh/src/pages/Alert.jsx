@@ -315,7 +315,7 @@ export default function Alert() {
               asset: pick(b.agent, b.hostname) || "Unknown",
               agent: pick(b.agent) || "-",
               user: "-",
-              reason: `Protocol: ${String(b.protocol || "-").toUpperCase()} | ${b.sourceIp || "-"} → ${b.destinationIp || "-"}${probPct === null ? "" : ` | Probability: ${probPct}%`}`,
+              reason: `Protocol: ${String(b.protocol || "-").toUpperCase()} | ${b.sourceIp || "-"} → ${b.destinationIp || "-"}${probPct === null ? "" : ` | Probability: ${probPct}%`} | Packets: ${Number(b.rulePackets ?? 0)}`,
               timestamp: b.timestamp || b.eventTimestamp || b.created_at,
               link: buildAlertLink("/bot-detection", {
                 ...(((pick(b.agent) || "-") !== "-") ? { agent: pick(b.agent) } : {}),

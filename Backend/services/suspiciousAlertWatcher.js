@@ -159,7 +159,7 @@ async function collectBotnetMl(startIso, endIso, watermark) {
     .filter((b) => tsOf(b.timestamp || b.eventTimestamp) > watermark && Number(b.rulePackets ?? 0) >= minPackets)
     .map((b) => ({
       ts: tsOf(b.timestamp || b.eventTimestamp),
-      line: `botnet | ${b.agent || "?"} | ${b.sourceIp || "?"} → ${b.destinationIp || "?"}`,
+      line: `botnet | ${b.agent || "?"} | ${b.sourceIp || "?"} → ${b.destinationIp || "?"} | ${Number(b.rulePackets ?? 0)} packets`,
     }));
 }
 

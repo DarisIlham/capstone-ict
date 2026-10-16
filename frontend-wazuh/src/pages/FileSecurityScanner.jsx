@@ -550,7 +550,7 @@ const FileSecCombinedFilter = ({ agentFilter, onAgentChange, agentOptions = [], 
 const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue = null }) => {
   if (!items || items.length === 0) {
     return (
-      <div className="top5-fixed w-full min-w-0 max-w-full flex items-center justify-center">
+      <div className="flex-1 w-full min-w-0 max-w-full flex items-center justify-center">
         <InlineEmptyState title={emptyLabel} />
       </div>
     );

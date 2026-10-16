@@ -350,21 +350,25 @@ const WaveChart = ({ data, color = "#A855F7", height: _height = 140, rangeKey = 
       </svg>
 
       {selectedPoint && (() => {
-          const tooltipH = 46;
-          const anchor = 36;
+          const tooltipH = 52;
           const gap = 12;
-          const fitsAbove = selectedPoint.y - anchor - tooltipH >= 0;
-          const fitsBelow = selectedPoint.y + gap + tooltipH <= height;
-          const showBelow = !fitsAbove && fitsBelow;
+          // Pusatkan tooltip secara vertikal di dalam plot: tampil di atas titik,
+          // pindah ke bawah bila akan terpotong tepi atas, lalu dijepit penuh
+          // agar tidak pernah keluar dari kotak grafik (anti-terpotong).
+          let topPx = selectedPoint.y - gap - tooltipH;
+          if (topPx < 4) topPx = selectedPoint.y + gap;
+          topPx = clamp(topPx, 4, Math.max(4, height - tooltipH - 4));
+          // Geser horizontal menyesuaikan tepi agar tooltip lebar tetap utuh.
+          const xPct = (selectedPoint.x / width) * 100;
+          const anchorX = xPct < 18 ? 6 : xPct > 82 ? 94 : xPct;
+          const tx = xPct < 18 ? "-6%" : xPct > 82 ? "-94%" : "-50%";
           return (
             <div
-              className="pointer-events-none absolute z-10 min-w-[100px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-elevated)] px-2 py-1.5 text-[10px] shadow-xl"
+              className="pointer-events-none absolute z-10 min-w-[100px] whitespace-nowrap rounded-lg border border-[var(--soc-border)] bg-[var(--soc-elevated)] px-2 py-1.5 text-[10px] shadow-xl"
               style={{
-                left: `${Math.min(Math.max((selectedPoint.x / width) * 100, 10), 82)}%`,
-                top: showBelow
-                  ? `${Math.min(((selectedPoint.y + gap) / height) * 100, 90)}%`
-                  : `${Math.max(((selectedPoint.y - anchor - tooltipH) / height) * 100, 4)}%`,
-                transform: showBelow ? "translate(-50%, 0)" : "translate(-50%, -100%)",
+                left: `${anchorX}%`,
+                top: `${topPx}px`,
+                transform: `translate(${tx}, 0)`,
               }}
             >
               <div className="font-semibold text-[var(--soc-text-primary)]">{selectedPoint.value} events</div>
