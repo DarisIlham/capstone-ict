@@ -149,18 +149,34 @@ async function collectBruteforceHttp(startIso, endIso, watermark) {
   return out;
 }
 
+// Probability botnet dinormalisasi ke skala 0–100 (dokumen biasanya 0–1).
+const probabilityPct = (b) => {
+  const raw = typeof b.probability === "number" ? b.probability : parseFloat(b.probability);
+  if (!Number.isFinite(raw)) return null;
+  return Math.min(Math.max(raw > 1 ? raw : raw * 100, 0), 100);
+};
+
 async function collectBotnetMl(startIso, endIso, watermark) {
-  // Hanya botnet dengan paket >= ambang (default 100) yang masuk Telegram —
-  // sama dengan ambang halaman Alerts web.
-  const minPackets = Number(process.env.SUSPICIOUS_BOTNET_MIN_PACKETS || 100);
+  // Hanya botnet ML dengan confidence >= 65% DAN paket >= 500 yang masuk
+  // Telegram. Ambang bisa dioverride lewat env.
+  const minPackets = Number(process.env.SUSPICIOUS_BOTNET_MIN_PACKETS || 500);
+  const minConfidence = Number(process.env.SUSPICIOUS_BOTNET_MIN_CONFIDENCE || 65);
   const res = await listBotAlerts({ detector: "ml", start: startIso, end: endIso, limit: 50 });
   const rows = Array.isArray(res?.data) ? res.data : [];
   return rows
-    .filter((b) => tsOf(b.timestamp || b.eventTimestamp) > watermark && Number(b.rulePackets ?? 0) >= minPackets)
-    .map((b) => ({
-      ts: tsOf(b.timestamp || b.eventTimestamp),
-      line: `botnet | ${b.agent || "?"} | ${b.sourceIp || "?"} → ${b.destinationIp || "?"} | ${Number(b.rulePackets ?? 0)} packets`,
-    }));
+    .filter((b) => {
+      if (!(tsOf(b.timestamp || b.eventTimestamp) > watermark)) return false;
+      if (Number(b.rulePackets ?? 0) < minPackets) return false;
+      const conf = probabilityPct(b);
+      return conf !== null && conf >= minConfidence;
+    })
+    .map((b) => {
+      const conf = probabilityPct(b);
+      return {
+        ts: tsOf(b.timestamp || b.eventTimestamp),
+        line: `botnet | ${b.agent || "?"} | ${b.sourceIp || "?"} → ${b.destinationIp || "?"} | ${Number(b.rulePackets ?? 0)} packets${conf === null ? "" : ` (${Math.round(conf)}%)`}`,
+      };
+    });
 }
 
 async function collectFimCritical(startIso, endIso, watermark) {

@@ -218,14 +218,21 @@ const fetchCriticalFeed = async ({ base, token, start, end, signal }) => {
   });
 
   // Botnet ML: backend selalu mengirim severity null untuk tipe ini, jadi
-  // seluruhnya diperlakukan sebagai critical.
+  // seluruhnya diperlakukan sebagai critical. Hanya yang confidence >= 65%
+  // DAN paket >= 500 yang memicu notifikasi (sama dengan ambang Telegram).
+  const BOTNET_MIN_CONFIDENCE = 65;
+  const BOTNET_MIN_PACKETS = 500;
   value(botRes).forEach((b, i) => {
     if (b?.detectorType !== "ml") return;
     const rawProb = typeof b.probability === "number" ? b.probability : parseFloat(b.probability);
-    const probPct = Number.isNaN(rawProb) ? null : Math.round((rawProb > 1 ? rawProb : rawProb * 100) * 10) / 10;
+    if (Number.isNaN(rawProb)) return;
+    const prob = Math.min(Math.max(rawProb > 1 ? rawProb : rawProb * 100, 0), 100);
+    if (prob < BOTNET_MIN_CONFIDENCE) return;
+    if (Number(b.rulePackets ?? 0) < BOTNET_MIN_PACKETS) return;
+    const probPct = Math.round(prob * 10) / 10;
     alerts.push({
       key: `botnet-${b.id || i}`,
-      title: `Botnet activity detected by ML detector${probPct === null ? "" : ` (probability ${probPct}%)`}`,
+      title: `Botnet activity detected by ML detector (probability ${probPct}%)`,
       source: "Bot Detection",
       asset: pick(b.agent, b.hostname) || "Unknown",
       timestamp: b.timestamp || b.eventTimestamp,
