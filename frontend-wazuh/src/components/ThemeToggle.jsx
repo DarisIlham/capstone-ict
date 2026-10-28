@@ -10,7 +10,7 @@ const ThemeToggle = ({ className = "", compact = false }) => {
     <button
       type="button"
       onClick={toggleTheme}
-      className={`inline-flex items-center justify-center gap-1.5 border border-slate-700/60 bg-slate-800/50 font-semibold text-slate-300 transition-colors hover:bg-slate-700/50 hover:text-white ${
+      className={`inline-flex items-center justify-center gap-1.5 border border-[var(--soc-border)] bg-[var(--soc-card)] font-semibold text-[var(--soc-text-muted)] transition-colors hover:border-[var(--soc-border-strong)] hover:bg-[var(--soc-elevated)] hover:text-[var(--soc-text-primary)] ${
         compact
           ? "rounded-md px-2.5 py-1.5 text-[11px]"
           : "rounded-lg px-3 py-2 text-xs"

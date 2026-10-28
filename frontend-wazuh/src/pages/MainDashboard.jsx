@@ -165,7 +165,7 @@ const normalizeBotTrend = (rows, dateRange) => {
   return points.map((p) => ({ ...p, bucketMs }));
 };
 
-const WaveChart = ({ data, color = "#A855F7", height: _height = 140, rangeKey = "24h", onPointSelect, activePointKey = null }) => {
+const WaveChart = ({ data, color = "#A855F7", height: _height = 140, rangeKey = "24h", onPointSelect, activePointKey = null, compact = false }) => {
   const [selectedPoint, setSelectedPoint] = useState(null);
   // Bucket yang diklik, bertahan setelah kursor pergi - inilah yang memunculkan
   // garis vertikal putus-putus. selectedPoint hanya hidup saat hover, jadi
@@ -191,7 +191,9 @@ const WaveChart = ({ data, color = "#A855F7", height: _height = 140, rangeKey = 
 
   const width = size.width;
   const height = size.height;
-  const baseP = width < 420 ? { l: 28, r: 8, t: 6, b: 20 } : { l: 40, r: 8, t: 6, b: 20 };
+  const baseP = compact && width < 360
+    ? { l: 18, r: 4, t: 4, b: 16 }
+    : width < 420 ? { l: 28, r: 8, t: 6, b: 20 } : { l: 40, r: 8, t: 6, b: 20 };
 
   if (!data || data.length === 0) {
     return (
@@ -217,8 +219,8 @@ const WaveChart = ({ data, color = "#A855F7", height: _height = 140, rangeKey = 
 
   const maxV = Math.max(1, ...data.map((d) => d.v));
   const narrow = width < 420;
-  const yAxisFontSize = narrow ? 9 : 11;
-  const xAxisFontSize = narrow ? 8.5 : 10;
+  const yAxisFontSize = compact && width < 360 ? 7 : narrow ? 9 : 11;
+  const xAxisFontSize = compact && width < 360 ? 7 : narrow ? 8.5 : 10;
   const padding = { ...baseP, l: adaptiveLeftGutter([Math.round(maxV)], baseP.l, 12, `500 ${yAxisFontSize}px sans-serif`) };
   const innerW = width - padding.l - padding.r;
   const innerH = height - padding.t - padding.b;
@@ -409,11 +411,11 @@ const CompactBarChart = ({ items, collapsedCount = 5, onItemClick = null }) => {
                 <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold text-purple-400 shrink-0">
                   {i + 1}
                 </span>
-                <span className="text-[9px] min-[700px]:text-[10px] font-medium text-[var(--soc-text-secondary)] truncate" title={item.label}>
+                <span className="dashboard-ranking-label text-[9px] min-[700px]:text-[10px] font-medium text-[var(--soc-text-secondary)] truncate" title={item.label}>
                   {item.label}
                 </span>
               </div>
-              <span className="text-[9px] min-[700px]:text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-2 shrink-0">
+              <span className="dashboard-ranking-value text-[9px] min-[700px]:text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-2 shrink-0">
                 {new Intl.NumberFormat("en-US").format(item.value)}
               </span>
             </div>
@@ -433,7 +435,7 @@ const CompactBarChart = ({ items, collapsedCount = 5, onItemClick = null }) => {
 // ========================================
 // Category Line Chart (distribution)
 // ========================================
-const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items", onPointClick = null }) => {
+const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items", onPointClick = null, compactXAxis = false }) => {
   const [selected, setSelected] = useState(null);
   // Kategori yang diklik - sumber garis vertikal putus-putus.
   const [pinnedIndex, setPinnedIndex] = useState(-1);
@@ -459,14 +461,14 @@ const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items", onP
   const width = size.width;
   const height = size.height;
   const basePadding = width < 500
-    ? { l: 16, r: 12, t: 6, b: 22 }
+    ? { l: width < 360 ? 18 : 28, r: 12, t: 6, b: 22 }
     : width < 768
-      ? { l: 24, r: 18, t: 8, b: 26 }
+      ? { l: 40, r: 18, t: 8, b: 26 }
       : width < 1000
-        ? { l: 32, r: 24, t: 8, b: 28 }
+        ? { l: 40, r: 24, t: 8, b: 28 }
         : { l: 40, r: 40, t: 10, b: 32 };
-  const axisFontSize = width < 500 ? 7 : width < 1000 ? 8 : 9;
-  const xLabelFontSize = width < 500 ? 7 : width < 1000 ? 8 : 9;
+  const axisFontSize = width < 500 ? 8 : width < 1000 ? 9 : 10;
+  const xLabelFontSize = width < 500 ? 8 : width < 1000 ? 9 : 10;
   const xLabelOffset = width < 500 ? 12 : width < 1000 ? 14 : 16;
   if (!items || items.length === 0) {
     return <InlineEmptyState title="No data available" />;
@@ -514,8 +516,14 @@ const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items", onP
     });
   }
 
-  const maxXLabels = width < 360 ? (points.length > 3 ? 2 : points.length) : width < 500 ? 4 : points.length;
+  const maxXLabels = width < 360 ? (points.length > 3 ? 3 : points.length) : width < 500 ? 4 : points.length;
   const xLabelEvery = Math.max(1, Math.ceil(points.length / Math.max(1, maxXLabels)));
+  const compactXLabelIndices = compactXAxis && width < 360
+    ? Array.from(
+        { length: Math.min(3, points.length) },
+        (_, index) => Math.round((index / Math.max(Math.min(3, points.length) - 1, 1)) * (points.length - 1)),
+      )
+    : null;
 
   // Warna garis mengikuti kategori yang diklik; `selected` hanya hidup saat
   // hover jadi tidak bisa dipakai sebagai penanda.
@@ -525,17 +533,32 @@ const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items", onP
   return (
     <div className="relative w-full flex flex-col h-full min-w-0" onMouseLeave={() => setSelected(null)}>
       <div className="flex items-center justify-between mb-1 px-1">
-        <span className="text-[8px] min-[600px]:text-[9px] min-[900px]:text-[10px] text-[var(--soc-text-muted)] uppercase font-semibold">Total</span>
-        <span className="text-[11px] min-[600px]:text-xs min-[900px]:text-sm font-bold text-[var(--soc-text-primary)]">
-          {total} <span className="text-[8px] min-[600px]:text-[9px] min-[900px]:text-[10px] font-normal text-[var(--soc-text-muted)]">{totalLabel}</span>
+        <span className="dashboard-chart-total-label text-[8px] min-[600px]:text-[9px] min-[900px]:text-[10px] text-[var(--soc-text-muted)] uppercase font-semibold">Total</span>
+        <span className="dashboard-chart-total-value text-[11px] min-[600px]:text-xs min-[900px]:text-sm font-bold text-[var(--soc-text-primary)]">
+          {total} <span className="dashboard-chart-total-unit text-[8px] min-[600px]:text-[9px] min-[900px]:text-[10px] font-normal text-[var(--soc-text-muted)]">{totalLabel}</span>
         </span>
       </div>
       <div ref={rootRef} className="flex-1 min-h-0 w-full">
-        <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block">
+        <svg
+          width={width}
+          height={height}
+          viewBox={`0 0 ${width} ${height}`}
+          preserveAspectRatio="xMidYMid meet"
+          className="block"
+          role="img"
+        >
           {gridLines.map((grid, idx) => (
             <g key={`grid-${idx}`}>
               <line x1={padding.l} y1={grid.y} x2={padding.l + innerW} y2={grid.y} stroke="var(--soc-border)" strokeWidth="1.5" opacity={grid.y === padding.t || grid.y === padding.t + innerH ? "1" : "0.5"} />
-              <text x={padding.l - 4} y={grid.y + 3} textAnchor="end" fontSize={axisFontSize} fill="var(--soc-text-muted)" fontWeight="500">
+              <text
+                x={padding.l - 4}
+                y={grid.y + 3}
+                textAnchor="end"
+                dominantBaseline="middle"
+                fontSize={axisFontSize}
+                fill="var(--soc-text-muted)"
+                fontWeight="500"
+              >
                 {grid.value}
               </text>
             </g>
@@ -553,7 +576,9 @@ const CategoryLineChart = ({ items, color = "#A855F7", totalLabel = "items", onP
             const isSel = selected?.index === p.index;
             const isFirst = p.index === 0;
             const isLast = p.index === points.length - 1;
-            const showXLabel = xLabelEvery === 1 || p.index % xLabelEvery === 0 || isLast;
+            const showXLabel = compactXLabelIndices
+              ? compactXLabelIndices.includes(p.index)
+              : xLabelEvery === 1 || p.index % xLabelEvery === 0 || isLast;
             const handlePointClick = () => {
               setPinnedIndex((prev) => (prev === p.index ? -1 : p.index));
               return onPointClick ? onPointClick(p) : setSelected(isSel ? null : p);
@@ -916,6 +941,7 @@ export default function MainDashboard() {
             onRangeChange={handleRangeChange}
           />
           <DateRangeFilter
+            className="dashboard-date-range-filter"
             value={customDateRange}
             onChange={handleCustomRangeChange}
             onClear={() => {
@@ -1008,6 +1034,7 @@ export default function MainDashboard() {
                 ]}
                 color="#EF4444"
                 totalLabel="threats"
+                compactXAxis
                 onPointClick={(p) => {
                   const { start, end } = getIsoDateRange(effectiveDateRange);
                   const target = {
@@ -1026,7 +1053,10 @@ export default function MainDashboard() {
           </div>
 
           {/* Risk Distribution */}
-          <div className="chart-card animate-fadeInUp stagger-2 xl:col-span-2 xl:row-start-2 xl:col-start-1 flex flex-col w-full min-w-0" style={{ opacity: 0 }}>
+          <div
+            className="dashboard-risk-distribution-card chart-card animate-fadeInUp stagger-2 xl:col-span-2 xl:row-start-2 xl:col-start-1 flex flex-col w-full min-w-0"
+            style={{ opacity: 0 }}
+          >
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 rounded-lg bg-orange-500/10">
@@ -1038,9 +1068,7 @@ export default function MainDashboard() {
                 </div>
               </div>
             </div>
-            {/* Tinggi dikunci 248px (= 216px list + 32px baris tab kanan)
-                agar card kiri sama tinggi dengan Top Active Agents isi 5 data */}
-            <div className="h-[248px] shrink-0 overflow-hidden">
+            <div className="dashboard-risk-distribution-chart min-h-0 flex-1 overflow-hidden">
               <CategoryLineChart items={dashboardData.riskDistribution} color="#F97316" totalLabel="incidents" />
             </div>
           </div>
@@ -1077,9 +1105,8 @@ export default function MainDashboard() {
             </div>
           </div>
 
-          {/* Top Agents Card — self-start agar tingginya pas mengikuti isi 5 data,
-              tidak ikut melar setinggi Risk Distribution di sebelahnya */}
-          <div className="chart-card animate-fadeInUp stagger-4 xl:row-start-2 xl:col-start-3 w-full min-w-0 max-w-full self-start box-border" style={{ opacity: 0, maxWidth: "100%" }}>
+          {/* Top Agents Card */}
+          <div className="dashboard-top-agents-card chart-card animate-fadeInUp stagger-4 xl:row-start-2 xl:col-start-3 w-full min-w-0 max-w-full box-border" style={{ opacity: 0, maxWidth: "100%" }}>
             <div className="flex items-center justify-between gap-2 mb-3">
               <div className="flex items-center gap-2 min-w-0 flex-1">
                 <div className="p-1.5 rounded-lg bg-purple-500/10 shrink-0">
@@ -1103,7 +1130,7 @@ export default function MainDashboard() {
                 View all <ArrowRight className="h-2.5 w-2.5 shrink-0" />
               </button>
             </div>
-            <div className="flex flex-wrap items-center gap-1.5 mb-3">
+            <div className="dashboard-agent-source-tabs flex flex-wrap items-center gap-1.5 mb-3">
               {[
                 { key: "host", label: "Host" },
                 { key: "fimAgents", label: "FIM" },
@@ -1114,13 +1141,20 @@ export default function MainDashboard() {
                 <button
                   key={option.key}
                   onClick={() => setTopUsersSource(option.key)}
+                  aria-label={option.label}
+                  title={option.label}
                   className={`px-2 py-1 text-[9px] rounded-md font-medium transition-all ${
                     topUsersSource === option.key
                       ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
                       : "text-[var(--soc-text-muted)] hover:text-[var(--soc-text-secondary)] border border-transparent hover:bg-[var(--soc-elevated)]"
                   }`}
                 >
-                  {option.label}
+                  {option.key === "file" ? (
+                    <>
+                      <span className="dashboard-agent-source-label-full">{option.label}</span>
+                      <span className="dashboard-agent-source-label-compact" aria-hidden="true">File</span>
+                    </>
+                  ) : option.label}
                 </button>
               ))}
             </div>
@@ -1228,8 +1262,16 @@ export default function MainDashboard() {
           ],
           nav: "/bot-detection",
         },
-      ].map((section, idx) => (
-        <div key={section.title} className={`chart-card animate-fadeInUp stagger-${Math.min(idx + 1, 5)}`} style={{ opacity: 0 }}>
+      ].map((section, idx) => {
+        const compactTimeline = [
+          "Command Activity",
+          "File Security Scanner",
+          "File Integrity Monitoring",
+          "ML Threat Detection",
+          "ML Botnet Detection",
+        ].includes(section.title);
+        return (
+        <div key={section.title} className={`chart-card animate-fadeInUp stagger-${Math.min(idx + 1, 5)}${compactTimeline ? " compact-timeline-section" : ""}`} style={{ opacity: 0 }}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className={`p-1.5 rounded-lg ${section.iconBg}`}>
@@ -1247,17 +1289,18 @@ export default function MainDashboard() {
               View <ArrowRight className="h-2.5 w-2.5" />
             </button>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 items-start">
-            <div className="lg:col-span-2 rounded-lg p-3 flex flex-col" style={{ background: "transparent" }}>
-              <div className="flex items-center justify-between mb-4">
+          <div className={`grid grid-cols-1 lg:grid-cols-3 gap-3 items-start${compactTimeline ? " compact-timeline-grid" : ""}`}>
+            <div className={`lg:col-span-2 rounded-lg p-3 flex flex-col${compactTimeline ? " compact-timeline-chart-panel" : ""}`} style={{ background: "transparent" }}>
+              <div className={`flex items-center justify-between mb-4${compactTimeline ? " compact-timeline-chart-title" : ""}`}>
                 <span className="text-[11px] text-[var(--soc-text-muted)]">{section.title} Timeline ({selectedRangeLabel})</span>
               </div>
-                <div className="w-full h-[180px] rounded-lg overflow-hidden" style={{ background: "transparent" }}>
+                <div className={`w-full h-[180px] rounded-lg overflow-hidden${compactTimeline ? " compact-timeline-plot" : ""}`} style={{ background: "transparent" }}>
                   <WaveChart
                   data={section.data}
                   color={section.chartColor}
                   height={160}
                   rangeKey={effectiveRangeKey}
+                  compact={compactTimeline}
                   onPointSelect={(point) => {
                     const start = point?.t;
                     const end = start != null && point?.bucketMs ? start + point.bucketMs - 1 : undefined;
@@ -1269,7 +1312,7 @@ export default function MainDashboard() {
                 />
               </div>
             </div>
-            <div className="rounded-lg p-3">
+            <div className={`rounded-lg p-3${compactTimeline ? " compact-timeline-quick-stats" : ""}`}>
               <div className="text-[8px] text-[var(--soc-text-muted)] uppercase font-semibold mb-2">Quick Stats</div>
               <div className="space-y-0">
                 {section.stats.map((s, i) => (
@@ -1287,7 +1330,8 @@ export default function MainDashboard() {
             </div>
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

@@ -23,17 +23,17 @@ import PageLoader from "../components/PageLoader";
 // ── KPI Card: konsep desain ML (kpi-modern + stagger + fadeInUp) ───────────
 // (hanya wrapper visual — nilai & label tetap milik User Management)
 const KPICard = ({ label, value, icon: Icon, color, desc, loading, index = 0 }) => (
-  <div className={`kpi-modern animate-fadeInUp stagger-${index + 1}`} style={{ opacity: 0 }}>
+  <div className={`user-management-kpi-card kpi-modern animate-fadeInUp stagger-${index + 1}`} style={{ opacity: 0 }}>
     <div className="flex items-center justify-between mb-3">
-      <span className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">{label}</span>
-      <div className={`p-2 rounded-lg ${color} bg-opacity-10`}>
+      <span className="user-management-kpi-label text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">{label}</span>
+      <div className={`user-management-kpi-icon p-2 rounded-lg ${color} bg-opacity-10`}>
         <Icon className={`h-4 w-4 ${color}`} />
       </div>
     </div>
-    <div className={`text-xl font-bold ${color} mb-1`}>
+    <div className={`user-management-kpi-value text-xl font-bold ${color} mb-1`}>
       {loading ? <div className="skeleton h-6 w-16"></div> : value}
     </div>
-    <div className="text-[9px] text-[var(--soc-text-muted)]">{desc}</div>
+    <div className="user-management-kpi-description text-[9px] text-[var(--soc-text-muted)]">{desc}</div>
   </div>
 );
 
@@ -202,20 +202,20 @@ const UserManagement = () => {
   }, [error]);
 
   return (
-    <div className="flex flex-col gap-4 w-full min-w-0">
-      <div className="flex flex-col min-[700px]:flex-row min-[700px]:items-center justify-between gap-3">
+    <div className="user-management-page flex flex-col gap-4 w-full min-w-0">
+      <div className="user-management-header flex flex-col min-[700px]:flex-row min-[700px]:items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg min-[600px]:text-xl font-bold text-[var(--soc-text-primary)]">
+          <h1 className="user-management-title text-lg min-[600px]:text-xl font-bold text-[var(--soc-text-primary)]">
             User Management
           </h1>
-          <p className="text-[11px] text-[var(--soc-text-muted)] mt-0.5">
+          <p className="user-management-subtitle text-[11px] text-[var(--soc-text-muted)] mt-0.5">
             Manage user accounts and monitor admin login activity
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="user-management-header-actions flex items-center gap-2 w-full min-[700px]:w-auto shrink-0">
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center justify-center gap-1.5 rounded-xl bg-violet-500 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-violet-600 w-full sm:w-fit"
+            className="user-management-add-button flex items-center justify-center gap-1.5 rounded-xl bg-violet-500 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-violet-600 w-full min-[700px]:w-fit"
           >
             <Plus className="h-3.5 w-3.5" />
             Add User
@@ -235,19 +235,19 @@ const UserManagement = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-2 min-[700px]:grid-cols-3 gap-3">
+      <div className="user-management-kpi-grid grid grid-cols-1 min-[480px]:grid-cols-2 min-[1024px]:grid-cols-3 gap-3">
         <KPICard label="Total Accounts" value={new Intl.NumberFormat("en-US").format(userStats.total)} icon={Users} color="text-sky-400" desc="all registered users" loading={loading} index={0} />
         <KPICard label="Active Accounts" value={new Intl.NumberFormat("en-US").format(userStats.active)} icon={CheckCircle} color="text-emerald-400" desc="users with normal access" loading={loading} index={1} />
         <KPICard label="Pending Accounts" value={new Intl.NumberFormat("en-US").format(userStats.pending)} icon={Clock} color="text-amber-400" desc="users temporarily restricted" loading={loading} index={2} />
       </div>
 
-      <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl shadow-lg h-auto overflow-hidden animate-fadeInUp stagger-4" style={{ opacity: 0 }}>
+      <div className="user-management-account-card bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl shadow-lg h-auto overflow-hidden animate-fadeInUp stagger-4" style={{ opacity: 0 }}>
         <div className="px-3 py-2.5 md:px-4 md:py-3 border-b border-[var(--soc-border)] bg-[var(--soc-card)]">
           <div className="text-[11px] md:text-xs font-semibold text-slate-300">
             Account Overview
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="user-management-account-content">
               {loading ? (
                 <PageLoader message="Loading users..." size="sm" />
               ) : users.length === 0 ? (
@@ -255,7 +255,9 @@ const UserManagement = () => {
                   <p className="text-sm text-slate-400 font-medium">No users found</p>
                 </div>
               ) : (
-                <table className="w-full min-w-[720px] text-[10px] md:text-[11px] text-left">
+                <>
+                <div className="user-management-table-wrap hidden min-[640px]:block overflow-x-auto">
+                <table className="user-management-table w-full min-w-[720px] text-[10px] md:text-[11px] text-left">
                   <thead>
                     <tr className="border-b border-slate-800 bg-slate-800/70">
                       <th className="px-2 md:px-4 py-2 md:py-2.5 text-left text-[9px] md:text-[11px] font-semibold text-slate-400 uppercase">Name</th>
@@ -348,17 +350,95 @@ const UserManagement = () => {
                     })}
                   </tbody>
                 </table>
+                </div>
+                <div className="user-management-mobile-list min-[640px]:hidden">
+                  {users.map((user) => {
+                    const remainingTime = user.status === "pending" ? getRemainingTime(user.pendingUntil) : null;
+
+                    return (
+                      <article key={user.id} className="user-management-mobile-card">
+                        <div className="user-management-mobile-card-header">
+                          <div className="min-w-0">
+                            <h3 className="user-management-mobile-name">{user.name}</h3>
+                            <p className="user-management-mobile-email">{user.email}</p>
+                          </div>
+                          <div className="user-management-mobile-status">
+                            {user.status === "active" ? (
+                              <>
+                                <CheckCircle className="h-3.5 w-3.5 text-green-400" />
+                                <span className="text-green-400 font-medium">Active</span>
+                              </>
+                            ) : (
+                              <>
+                                <Clock className="h-3.5 w-3.5 text-yellow-400" />
+                                <span className="text-yellow-400 font-medium">
+                                  Pending
+                                  {remainingTime && ` (${remainingTime.hours}h ${remainingTime.minutes}m)`}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <div className="user-management-mobile-card-footer">
+                          <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${
+                            user.role === "admin"
+                              ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-300"
+                              : "border-slate-600 bg-slate-800 text-slate-300"
+                          }`}>
+                            {user.role === "admin" ? "Admin" : "User"}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            {user.status === "active" ? (
+                              <button
+                                onClick={() => handleSuspendUser(user)}
+                                className="user-management-action-button text-yellow-400 hover:bg-yellow-500/20"
+                                title="Suspend for 2 hours"
+                                aria-label={`Suspend ${user.name} for 2 hours`}
+                                disabled={actionLoading}
+                              >
+                                <Clock className="h-4 w-4" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleRestoreUser(user)}
+                                className="user-management-action-button text-green-400 hover:bg-green-500/20"
+                                title="Restore from pending"
+                                aria-label={`Restore ${user.name}`}
+                                disabled={actionLoading}
+                              >
+                                <CheckCircle className="h-4 w-4" />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => {
+                                setSelectedUser(user);
+                                setShowDeleteModal(true);
+                              }}
+                              className="user-management-action-button text-red-400 hover:bg-red-500/20"
+                              title="Delete user"
+                              aria-label={`Delete ${user.name}`}
+                              disabled={actionLoading}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+                </>
               )}
-              </div>
+        </div>
 
               {totalPages > 1 && (
-                <div className="border-t border-slate-800 bg-slate-900/50 px-2 md:px-4 py-3">
-                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2 md:gap-0">
+                <div className="user-management-pagination border-t border-slate-800 bg-slate-900/50 px-2 md:px-4 py-3">
+                  <div className="flex flex-col min-[520px]:flex-row items-start min-[520px]:items-center justify-between gap-2">
                     <div className="text-[10px] md:text-[11px] font-mono text-slate-500">
                       <span className="font-bold text-sky-400">PAGE </span>
                       <span className="font-bold text-white">{currentPage}</span> / {totalPages}
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="user-management-pagination-controls flex flex-wrap items-center gap-2">
                       <button
                         onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                         disabled={currentPage === 1}
@@ -394,7 +474,7 @@ const UserManagement = () => {
 
       {showAddModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center z-[100] p-4 animate-fadeInUp" onClick={() => setShowAddModal(false)}>
-          <div role="alertdialog" aria-label="Add new user" onClick={(e) => e.stopPropagation()} className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-2xl p-7 w-full max-w-sm shadow-2xl text-center">
+          <div role="alertdialog" aria-label="Add new user" onClick={(e) => e.stopPropagation()} className="user-management-modal bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-2xl p-7 w-full max-w-sm shadow-2xl text-center">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-violet-500/15">
               <UserPlus className="h-7 w-7 text-violet-500" />
             </div>
@@ -467,7 +547,7 @@ const UserManagement = () => {
 
       {showDeleteModal && selectedUser && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center z-[100] p-4 animate-fadeInUp" onClick={() => { setShowDeleteModal(false); setSelectedUser(null); }}>
-          <div role="alertdialog" aria-label="Delete user" onClick={(e) => e.stopPropagation()} className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-2xl p-7 w-full max-w-sm shadow-2xl text-center">
+          <div role="alertdialog" aria-label="Delete user" onClick={(e) => e.stopPropagation()} className="user-management-modal bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-2xl p-7 w-full max-w-sm shadow-2xl text-center">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-500/15">
               <AlertCircle className="h-7 w-7 text-red-500" />
             </div>
@@ -500,7 +580,7 @@ const UserManagement = () => {
 
       {showSuspendModal && selectedUser && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center z-[100] p-4 animate-fadeInUp" onClick={() => { setShowSuspendModal(false); setSelectedUser(null); }}>
-          <div role="alertdialog" aria-label="Suspend user" onClick={(e) => e.stopPropagation()} className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-2xl p-7 w-full max-w-sm shadow-2xl text-center">
+          <div role="alertdialog" aria-label="Suspend user" onClick={(e) => e.stopPropagation()} className="user-management-modal bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-2xl p-7 w-full max-w-sm shadow-2xl text-center">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/15">
               <Clock className="h-7 w-7 text-amber-500" />
             </div>
@@ -535,4 +615,3 @@ const UserManagement = () => {
 };
 
 export default UserManagement;
-

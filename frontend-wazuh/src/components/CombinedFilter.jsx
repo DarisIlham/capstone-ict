@@ -17,6 +17,7 @@ export default function CombinedFilter({
   dateFilterLabel = "", onResetDateFilter,
   commandFilterLabel = "", onResetCommandFilter,
   onClearAll,
+  className = "",
 }) {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
@@ -26,8 +27,8 @@ export default function CombinedFilter({
   const calcPosition = useCallback(() => {
     if (!buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
-    const dropdownWidth = 280;
-    const dropdownHeight = 380;
+    const dropdownWidth = window.innerWidth < 400 ? Math.min(260, window.innerWidth - 16) : 280;
+    const dropdownHeight = window.innerWidth < 400 ? 320 : 380;
     const gap = 4;
 
     const spaceBelow = window.innerHeight - rect.bottom;
@@ -73,12 +74,12 @@ export default function CombinedFilter({
   ].filter(Boolean).length;
 
   const Section = ({ label, value, allLabel, options, onChange }) => (
-    <div className="px-3 py-2">
-      <div className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">{label}</div>
+    <div className="host-combined-filter-section px-3 py-2">
+      <div className="host-combined-filter-section-title text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">{label}</div>
       <div className="flex flex-wrap gap-1">
         <button
           onClick={() => onChange("all")}
-          className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+          className={`host-combined-filter-option px-2 py-1 rounded text-[10px] font-medium transition-colors ${
             value === "all"
               ? "bg-orange-500/20 text-orange-300 border border-orange-500/30"
               : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"
@@ -92,7 +93,7 @@ export default function CombinedFilter({
             <button
               key={optVal}
               onClick={() => onChange(optVal)}
-              className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+              className={`host-combined-filter-option px-2 py-1 rounded text-[10px] font-medium transition-colors ${
                 value === optVal
                   ? "bg-orange-500/20 text-orange-300 border border-orange-500/30"
                   : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"
@@ -107,12 +108,12 @@ export default function CombinedFilter({
   );
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className={`host-combined-filter relative ${className}`}>
       <button
         ref={buttonRef}
         type="button"
         onClick={() => setOpen((c) => !c)}
-        className="flex items-center gap-2 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-3 pr-2.5 text-[11px] text-[var(--soc-text-primary)] focus:outline-none focus:ring-1 focus:ring-orange-500/50 transition-colors hover:bg-[var(--soc-elevated)]"
+        className="host-combined-filter-button flex items-center gap-2 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-3 pr-2.5 text-[11px] text-[var(--soc-text-primary)] focus:outline-none focus:ring-1 focus:ring-orange-500/50 transition-colors hover:bg-[var(--soc-elevated)]"
       >
         <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--soc-text-muted)]" />
         <span className="font-medium">Filters</span>
@@ -126,10 +127,10 @@ export default function CombinedFilter({
 
       {open && (
         <div
-          className="fixed z-[9999] w-[280px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] shadow-2xl"
+          className="host-combined-filter-popup fixed z-[9999] w-[280px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] shadow-2xl"
           style={{ top: coords.top, left: coords.left }}
         >
-          <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--soc-border)]">
+          <div className="host-combined-filter-popup-header flex items-center justify-between px-3 py-2 border-b border-[var(--soc-border)]">
             <span className="text-[10px] font-semibold text-[var(--soc-text-primary)]">Filter Options</span>
             {activeCount > 0 && (
               <button
@@ -152,7 +153,7 @@ export default function CombinedFilter({
             <div className="border-b border-[var(--soc-border)] px-3 py-2">
               <div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--soc-text-muted)]">Timeline date filter</div>
               <div className="mt-1">
-                <span className="block min-w-0 truncate rounded border border-orange-500/30 bg-orange-500/20 px-2 py-1 text-[10px] font-medium text-orange-300" title={dateFilterLabel}>{dateFilterLabel}</span>
+                <span className="host-active-filter-chip block min-w-0 truncate rounded border border-orange-500/30 bg-orange-500/20 px-2 py-1 text-[10px] font-medium text-orange-300" title={dateFilterLabel}>{dateFilterLabel}</span>
               </div>
             </div>
           )}
@@ -160,12 +161,12 @@ export default function CombinedFilter({
             <div className="border-b border-[var(--soc-border)] px-3 py-2">
               <div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--soc-text-muted)]">Command filter</div>
               <div className="mt-1">
-                <span className="block min-w-0 truncate rounded border border-orange-500/30 bg-orange-500/20 px-2 py-1 text-[10px] font-medium text-orange-300" title={commandFilterLabel}>{commandFilterLabel}</span>
+                <span className="host-active-filter-chip block min-w-0 truncate rounded border border-orange-500/30 bg-orange-500/20 px-2 py-1 text-[10px] font-medium text-orange-300" title={commandFilterLabel}>{commandFilterLabel}</span>
               </div>
             </div>
           )}
 
-          <div className="divide-y divide-[var(--soc-border)] max-h-[360px] overflow-y-auto">
+          <div className="host-combined-filter-options divide-y divide-[var(--soc-border)] max-h-[360px] overflow-y-auto">
             <Section
               label="Status"
               value={statusFilter}

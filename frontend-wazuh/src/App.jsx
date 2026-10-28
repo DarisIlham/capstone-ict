@@ -14,6 +14,7 @@ import AttackDashboard from "./pages/AttackDashboard.jsx";
 import FileSecurityScanner from "./pages/FileSecurityScanner.jsx";
 import UserManagement from "./pages/UserManagement.jsx";
 import Alert from "./pages/Alert.jsx";
+import { isDemoMode } from "./utils/demoMode";
 
 function App() {
   const routerBasename =
@@ -93,22 +94,22 @@ function App() {
                 </PrivateRoute>
               }
             />
-            <Route
-              path="/bot-detection"
-              element={
-                <PrivateRoute>
-                  <AppLayout>
-                    <BotDetection />
-                  </AppLayout>
-                </PrivateRoute>
-              }
-            />
+              <Route
+                path="/bot-detection"
+                element={
+                  <PrivateRoute>
+                    <AppLayout>
+                      <BotDetection />
+                    </AppLayout>
+                  </PrivateRoute>
+                }
+              />
             <Route
               path="/users"
               element={
                 <PrivateRoute requiredRole="admin">
                   <AppLayout>
-                    <UserManagement />
+                    {isDemoMode() ? <MainDashboard /> : <UserManagement />}
                   </AppLayout>
                 </PrivateRoute>
               }

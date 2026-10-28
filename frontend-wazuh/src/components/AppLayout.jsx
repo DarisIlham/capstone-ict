@@ -66,7 +66,7 @@ const SimpleToggle = ({ icon: Icon, label, hint, checked, onToggle }) => (
     role="switch"
     aria-checked={checked}
     onClick={onToggle}
-    className="flex w-full items-center gap-3 px-3 py-3.5 text-left hover:bg-[var(--soc-elevated)]/60 transition-colors"
+    className="alarm-panel-toggle flex w-full items-center gap-3 px-3 py-3.5 text-left hover:bg-[var(--soc-elevated)]/60 transition-colors"
   >
     <Icon className={`h-4 w-4 shrink-0 ${checked ? "text-[var(--soc-text-primary)]" : "text-[var(--soc-text-muted)]"}`} />
     <span className="min-w-0 flex-1 leading-relaxed">
@@ -105,7 +105,7 @@ const AlarmPanel = ({ history, onClose, onClear, onViewAll, onOpenItem, alarmEna
   return (
     <div
       ref={ref}
-      className="absolute right-0 top-full mt-1.5 w-[340px] max-w-[calc(100vw-2rem)] rounded-xl border border-[var(--soc-border)] shadow-2xl overflow-hidden z-[80] animate-fadeInUp"
+      className="alarm-notification-panel absolute right-0 top-full mt-1.5 w-[340px] max-w-[calc(100vw-2rem)] rounded-xl border border-[var(--soc-border)] shadow-2xl overflow-hidden z-[80] animate-fadeInUp"
       style={{ background: "var(--soc-card)" }}
     >
       <div className="flex items-center justify-between px-4 py-3.5 border-b border-[var(--soc-border)]">
@@ -324,8 +324,13 @@ export default function AppLayout({ children }) {
       {/* Navigation */}
       <nav className={`flex-1 overflow-y-auto ${isMobile ? "px-2" : collapsed ? "px-1.5" : "px-2"} py-1.5`}>
         {NAV_GROUPS.map((group) => {
+          const demo = isDemoMode();
           const visibleItems = group.items.filter(
-            (item) => !item.adminOnly || user?.role === "admin"
+            (item) => {
+              if (item.adminOnly && user?.role !== "admin") return false;
+              if (demo && item.label === "User Management") return false;
+              return true;
+            }
           );
           if (visibleItems.length === 0) return null;
 
@@ -502,7 +507,7 @@ export default function AppLayout({ children }) {
               <FlaskConical className="h-4 w-4" />
               <span className="hidden sm:inline">Demo</span>
             </button>
-            <ThemeToggle compact />
+            <ThemeToggle compact className="header-theme-toggle" />
             {/* Ikon lonceng membuka daftar riwayat alarm, bukan navigasi ke
                 halaman /alerts. Halaman penuh tetap tersedia lewat "View all". */}
             <div className="relative">

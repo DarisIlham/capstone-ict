@@ -308,8 +308,7 @@ function buildMlPredictions(startMs, endMs) {
   for (let i = 0; i < total; i += 1) {
     const t = startMs + Math.floor(span * rnd());
     const label = pickWeighted(rnd, DEMO_ML_LABELS);
-    const benign = label === "benign";
-    const conf = benign ? 60 + rnd() * 39 : 50 + rnd() * 49;
+    const conf = 80 + rnd() * 20;
     const agent = pick(rnd, DEMO_AGENTS);
     list.push({
       id: `demo-pred-${i + 1}`,

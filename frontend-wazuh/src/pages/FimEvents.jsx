@@ -16,6 +16,7 @@ import {
   toDateTimeLocalValue,
 } from "../utils/dateRange";
 import { adaptiveLeftGutter } from "../utils/chartAxis";
+import { getTopFilterValues } from "../utils/topFilterValues";
 import { InlineEmptyState } from "../components/EmptyState";
 
 const API_BASE = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
@@ -77,7 +78,7 @@ const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey, compact = f
   const pointSpacing = data.length ? innerW / (data.length - 1) : innerW;
   const defaultBucketMs = rangeKey === "1h" ? 300000 : rangeKey === "24h" ? 3600000 : rangeKey === "7d" ? 21600000 : 86400000;
   const isDense = data.length > 30;
-  const denseVisualR = isDense ? 1.6 : 3.5;
+  const denseVisualR = isDense ? 2.6 : 3.5;
   const denseHitR = isDense ? 5 : 10;
   const gridSteps = 5;
   const gridLines = [];
@@ -169,7 +170,7 @@ const WaveChart = ({ data, color = "#10b981", height = 80, rangeKey, compact = f
         const anchorX = xPct < 18 ? 6 : xPct > 82 ? 94 : xPct;
         const tx = xPct < 18 ? "-6%" : xPct > 82 ? "-94%" : "-50%";
         return (
-          <div className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-lg"
+          <div className="fim-timeline-tooltip pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-lg"
             style={{ left: `${anchorX}%`, top: flipBelow ? `${((selectedPoint.y + 18) / height) * 100}%` : `${Math.max(((selectedPoint.y - 40) / height) * 100, 6)}%`, transform: `translate(${tx}, ${flipBelow ? "0" : "-100%"})` }}>
             <div className="font-semibold text-[var(--soc-text-primary)]">{selectedPoint.value} events</div>
             <div className="mt-1 text-[var(--soc-text-secondary)]">{formatDetailedTimestamp(selectedPoint.time)}</div>
@@ -286,7 +287,7 @@ const TopAgentsCard = ({ agents, onItemClick = null, activeName = null }) => {
   const maxCount = Math.max(...agents.map((a) => a.count), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
   return (
-    <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
+    <div className={`fim-top-agent-list top5-fixed w-full min-w-0 max-w-full space-y-1.5${agents.length === 5 ? " fim-top-agent-list--full" : ""}`}>
       {agents.map((item, i) => {
         const color = CHART_COLORS[i % CHART_COLORS.length];
         const isActive = activeName != null && String(item.name) === String(activeName);
@@ -294,18 +295,18 @@ const TopAgentsCard = ({ agents, onItemClick = null, activeName = null }) => {
           <div key={item.name} onClick={() => onItemClick?.(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg ${onItemClick ? "cursor-pointer" : ""} ${isActive ? "bg-emerald-500/10 ring-1 ring-emerald-500/30" : ""}`} title={onItemClick ? `Filter events for ${item.name}` : undefined}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>
+                <span className="fim-list-rank w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>
                   {i + 1}
                 </span>
-                <span className="min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)] font-mono" title={item.name}>
+                <span className="fim-list-label min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)] font-mono" title={item.name}>
                   {item.name}
                 </span>
               </div>
-              <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">
+              <span className="fim-list-value min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">
                 {new Intl.NumberFormat("en-US").format(item.count)}
               </span>
             </div>
-            <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
+            <div className="fim-list-progress mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
@@ -330,8 +331,8 @@ const FimCombinedFilter = ({ agentFilter, onAgentChange, agentOptions = [], user
   const calcPosition = useCallback(() => {
     if (!buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
-    const dropdownWidth = 280;
-    const dropdownHeight = 380;
+    const dropdownWidth = window.innerWidth < 400 ? Math.min(260, window.innerWidth - 16) : 280;
+    const dropdownHeight = window.innerWidth < 400 ? 320 : 380;
     const gap = 4;
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceRight = window.innerWidth - rect.right;
@@ -364,35 +365,35 @@ const FimCombinedFilter = ({ agentFilter, onAgentChange, agentOptions = [], user
   };
   const activeCount = [agentFilter !== "all", userFilter !== "all", eventFilter !== "all", severityFilter !== "all", Boolean(dateFilterLabel), Boolean(pathFilter), Boolean(timelineFilterLabel)].filter(Boolean).length;
   const Section = ({ label, value, allLabel, options, onChange }) => (
-    <div className="px-3 py-2">
-      <div className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">{label}</div>
+    <div className="fim-filter-section px-3 py-2">
+      <div className="fim-filter-section-title text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">{label}</div>
       <div className="flex flex-wrap gap-1">
-        <button onClick={() => onChange("all")} className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${value === "all" ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}>{allLabel}</button>
+        <button onClick={() => onChange("all")} className={`fim-filter-option px-2 py-1 rounded text-[10px] font-medium transition-colors ${value === "all" ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}>{allLabel}</button>
         {options.map((opt) => {
           const { value: optVal, label: optLabel } = normalizeOption(opt);
-          return <button key={optVal} onClick={() => onChange(optVal)} className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${value === optVal ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}>{optLabel}</button>;
+          return <button key={optVal} onClick={() => onChange(optVal)} className={`fim-filter-option px-2 py-1 rounded text-[10px] font-medium transition-colors ${value === optVal ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}>{optLabel}</button>;
         })}
       </div>
     </div>
   );
   return (
-    <div ref={containerRef} className="relative">
-      <button ref={buttonRef} type="button" onClick={() => setOpen((c) => !c)} className="flex items-center gap-2 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-3 pr-2.5 text-[11px] text-[var(--soc-text-primary)] focus:outline-none focus:ring-1 focus:ring-emerald-500/50 transition-colors hover:bg-[var(--soc-elevated)]">
+    <div ref={containerRef} className="fim-table-filter relative">
+      <button ref={buttonRef} type="button" onClick={() => setOpen((c) => !c)} className="fim-table-filter-button flex items-center gap-2 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-3 pr-2.5 text-[11px] text-[var(--soc-text-primary)] focus:outline-none focus:ring-1 focus:ring-emerald-500/50 transition-colors hover:bg-[var(--soc-elevated)]">
         <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--soc-text-muted)]" />
         <span className="font-medium">Filters</span>
         {activeCount > 0 && <span className="flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-emerald-500/20 text-emerald-300 text-[9px] font-bold">{activeCount}</span>}
         <ChevronDown className={`h-3.5 w-3.5 text-[var(--soc-text-muted)] transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="fixed z-[9999] w-[280px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] shadow-2xl" style={{ top: coords.top, left: coords.left }}>
-          <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--soc-border)]">
+        <div className="fim-filter-popup fixed z-[9999] w-[280px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] shadow-2xl" style={{ top: coords.top, left: coords.left }}>
+          <div className="fim-filter-popup-header flex items-center justify-between px-3 py-2 border-b border-[var(--soc-border)]">
             <span className="text-[10px] font-semibold text-[var(--soc-text-primary)]">Filter Options</span>
             {activeCount > 0 && <button onClick={() => { onAgentChange("all"); onUserChange("all"); onEventChange("all"); onSeverityChange("all"); if (dateFilterLabel && onResetDateFilter) onResetDateFilter(); if (onClearPathFilter) onClearPathFilter(); if (onClearTimelineFilter) onClearTimelineFilter(); }} className="text-[9px] font-semibold text-emerald-400 hover:text-emerald-300 transition-colors">Clear all</button>}
           </div>
           {pathFilter && (
-            <div className="border-b border-[var(--soc-border)] px-3 py-2">
+            <div className="fim-active-filter-section border-b border-[var(--soc-border)] px-3 py-2">
               <div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--soc-text-muted)]">Path filter</div>
-              <div className="mt-1.5 flex items-center gap-1.5 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-300">
+              <div className="fim-active-filter-chip mt-1.5 flex items-center gap-1.5 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-300">
                 <FileText className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
                 <span className="min-w-0 flex-1 truncate" title={pathFilter}>{pathFilter}</span>
                 {matchingEventsCount > 0 && <span className="shrink-0 font-mono text-emerald-300/70">{matchingEventsCount.toLocaleString()} matching</span>}
@@ -401,17 +402,17 @@ const FimCombinedFilter = ({ agentFilter, onAgentChange, agentOptions = [], user
             </div>
           )}
           {timelineFilterLabel && (
-            <div className="border-b border-[var(--soc-border)] px-3 py-2">
+            <div className="fim-active-filter-section border-b border-[var(--soc-border)] px-3 py-2">
               <div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--soc-text-muted)]">Timeline filter</div>
-              <div className="mt-1.5 flex items-center gap-1.5 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-300">
+              <div className="fim-active-filter-chip mt-1.5 flex items-center gap-1.5 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-300">
                 <Clock className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
                 <span className="min-w-0 flex-1 truncate" title={timelineFilterLabel}>{timelineFilterLabel}</span>
                 <button onClick={onClearTimelineFilter} className="shrink-0 hover:text-white" aria-label="Clear timeline filter"><X className="h-3 w-3" /></button>
               </div>
             </div>
           )}
-          {dateFilterLabel && <div className="border-b border-[var(--soc-border)] px-3 py-2"><div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--soc-text-muted)]">Timeline date filter</div><div className="mt-1"><span className="block min-w-0 truncate rounded border border-emerald-500/30 bg-emerald-500/20 px-2 py-1 text-[10px] font-medium text-emerald-300" title={dateFilterLabel}>{dateFilterLabel}</span></div></div>}
-          <div className="divide-y divide-[var(--soc-border)] max-h-[360px] overflow-y-auto">
+          {dateFilterLabel && <div className="fim-active-filter-section border-b border-[var(--soc-border)] px-3 py-2"><div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--soc-text-muted)]">Timeline date filter</div><div className="mt-1"><span className="fim-active-filter-chip block min-w-0 truncate rounded border border-emerald-500/30 bg-emerald-500/20 px-2 py-1 text-[10px] font-medium text-emerald-300" title={dateFilterLabel}>{dateFilterLabel}</span></div></div>}
+          <div className="fim-filter-options-list divide-y divide-[var(--soc-border)] max-h-[360px] overflow-y-auto">
             <Section label="Agent" value={agentFilter} allLabel="All agents" options={agentOptions} onChange={onAgentChange} />
             <Section label="User" value={userFilter} allLabel="All users" options={userOptions} onChange={onUserChange} />
             <Section label="Event" value={eventFilter} allLabel="All events" options={eventOptions} onChange={onEventChange} />
@@ -433,6 +434,7 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
   const palette = theme === "light" ? WORD_COLORS_LIGHT : WORD_COLORS_DARK;
   const wrapRef = useRef(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const [isCompact, setIsCompact] = useState(() => window.innerWidth <= 399);
 
   // viewBox harus selalu mengikuti lebar aktual container, kalau tidak
   // SVG me-render sebagai blob sempit di tengah (meet) dan kotaknya
@@ -440,6 +442,7 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
   const syncSize = useCallback(() => {
     const node = wrapRef.current;
     if (!node) return;
+    setIsCompact(window.innerWidth <= 399);
     const rect = node.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) {
       setSize((prev) =>
@@ -483,7 +486,7 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
     };
   })();
 
-  const fontSize = (count) => Math.round(11 + ((count - minCount) / range) * 31);
+  const fontSize = (count) => Math.round((isCompact ? 8 : 11) + ((count - minCount) / range) * (isCompact ? 24 : 31));
   const toWeight = (fs) => (fs > 26 ? "800" : fs > 18 ? "700" : "500");
   const placed = [];
   const rects = [];
@@ -587,14 +590,14 @@ const CopyablePath = ({ value }) => {
 
 // ── KPI Card (copy from MainDashboard) ────────────────────────────────────
 const KPICard = ({ label, value, icon: Icon, color, desc, loading, index = 0 }) => (
-  <div className={`kpi-modern animate-fadeInUp stagger-${index + 1}`} style={{ opacity: 0 }}>
+  <div className={`fim-kpi-card kpi-modern animate-fadeInUp stagger-${index + 1}`} style={{ opacity: 0 }}>
     <div className="flex items-center justify-between mb-3">
-      <span className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">{label}</span>
+      <span className="fim-kpi-label text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">{label}</span>
       <div className={`p-2 rounded-lg ${color} bg-opacity-10`}>
         <Icon className={`h-4 w-4 ${color}`} />
       </div>
     </div>
-    <div className={`text-xl font-bold ${color} mb-1`}>
+    <div className={`fim-kpi-value text-xl font-bold ${color} mb-1`}>
       {loading ? (
         <div className="skeleton h-6 w-16"></div>
       ) : (
@@ -602,7 +605,7 @@ const KPICard = ({ label, value, icon: Icon, color, desc, loading, index = 0 }) 
       )}
     </div>
     {desc && (
-      <div className="block max-w-full truncate text-[9px] text-[var(--soc-text-muted)]" title={desc}>{desc}</div>
+      <div className="fim-kpi-description block max-w-full truncate text-[9px] text-[var(--soc-text-muted)]" title={desc}>{desc}</div>
     )}
   </div>
 );
@@ -1075,15 +1078,11 @@ const FimEvents = ({ agentId = "all" }) => {
   }, [derived?.topFiles?.length]);
 
   const filterOptions = useMemo(() => {
-    const agentSet = new Set();
-    const userSet = new Set();
-    for (const e of events) {
-      agentSet.add(String(e.agentName || "Unknown").trim() || "Unknown");
-      const u = String(e.username || "-").trim();
-      if (u && u !== "-") userSet.add(u);
-    }
-    return { agents: Array.from(agentSet).sort(), users: Array.from(userSet).sort() };
-  }, [events]);
+    return {
+      agents: getTopFilterValues(events, (event) => String(event.agentName || "Unknown").trim() || "Unknown", undefined, agentFilter),
+      users: getTopFilterValues(events, (event) => event.username, undefined, userFilter),
+    };
+  }, [events, agentFilter, userFilter]);
 
   const tableEvents = useMemo(() => {
     return events
@@ -1158,16 +1157,16 @@ const FimEvents = ({ agentId = "all" }) => {
   }
 
   return (
-    <div className="flex flex-col gap-4 w-full min-w-0">
+    <div className="file-integrity-monitoring-page flex flex-col gap-4 w-full min-w-0">
       {/* Header — like Host Monitoring */}
       <div className="flex flex-col min-[700px]:flex-row min-[700px]:items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg min-[600px]:text-xl font-bold text-[var(--soc-text-primary)]">
+          <h1 className="fim-page-title text-lg min-[600px]:text-xl font-bold text-[var(--soc-text-primary)]">
             File Integrity Monitoring
           </h1>
-          <p className="text-[11px] text-[var(--soc-text-muted)] mt-0.5">Real-time file changes monitoring</p>
+          <p className="fim-page-subtitle text-[11px] text-[var(--soc-text-muted)] mt-0.5">Real-time file changes monitoring</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="fim-page-controls flex items-center gap-2">
           <RangeFilter
             rangeKey={rangeKey}
             onRangeChange={(nextRange) => {
@@ -1180,6 +1179,7 @@ const FimEvents = ({ agentId = "all" }) => {
             }}
           />
           <DateRangeFilter
+            className="fim-date-range-filter"
             value={customDateRange}
             onChange={(range) => {
               setClientPage(1);
@@ -1199,7 +1199,7 @@ const FimEvents = ({ agentId = "all" }) => {
               setCustomDateRange(createDefaultDateRange(1));
             }}
           />
-          <div className="relative flex items-center bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)]">
+          <div className="fim-page-size-control relative flex items-center bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)]">
             <select
               value={pageSize}
               onChange={(event) => {
@@ -1274,26 +1274,26 @@ const FimEvents = ({ agentId = "all" }) => {
       {/* Timeline + Top Agents — sebaris mulai lg seperti Dashboard */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="md:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col" style={{ opacity: 0 }}>
-          <div className="flex items-center justify-between mb-3">
+          <div className="fim-timeline-header flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-emerald-500/10">
                 <Activity className="h-3.5 w-3.5 text-emerald-400" />
               </div>
               <div>
-                <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">FIM Timeline</h3>
-                <p className="text-[9px] text-[var(--soc-text-muted)]">File integrity changes over time. Click a point to filter.</p>
+                <h3 className="text-[10px] min-[400px]:text-[11px] font-semibold text-[var(--soc-text-primary)]">FIM Timeline</h3>
+                <p className="text-[8px] min-[400px]:text-[9px] text-[var(--soc-text-muted)]">File integrity changes over time. Click a point to filter.</p>
               </div>
             </div>
             <div className="text-right min-w-0">
-              <div className="text-[11px] text-[var(--soc-text-muted)]">{filterMode === "custom" ? `${new Date(customDateRange.start).toLocaleDateString("en-US", { month: "short", day: "2-digit" })} – ${new Date(customDateRange.end).toLocaleDateString("en-US", { month: "short", day: "2-digit" })}` : `Last ${rangeKey}`}</div>
-              <div className="text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatTime(lastUpdated)}</div>
+              <div className="text-[9px] min-[400px]:text-[11px] text-[var(--soc-text-muted)]">{filterMode === "custom" ? `${new Date(customDateRange.start).toLocaleDateString("en-US", { month: "short", day: "2-digit" })} – ${new Date(customDateRange.end).toLocaleDateString("en-US", { month: "short", day: "2-digit" })}` : `Last ${rangeKey}`}</div>
+              <div className="text-[8px] min-[400px]:text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatTime(lastUpdated)}</div>
             </div>
           </div>
-          <div className="h-[220px]" style={{ background: "transparent" }}>
+          <div className="fim-timeline-chart h-[220px]" style={{ background: "transparent" }}>
             <WaveChart data={derived.series} color="#10b981" height={220} rangeKey={rangeKey} compact={isMobile} activePointKey={selectedTimelinePoint?.key ?? null} onPointSelect={handleTimelinePointSelect} />
           </div>
         </div>
-        <div ref={topAgentsPanelRef} className="chart-card animate-fadeInUp stagger-2 flex flex-col" style={{ opacity: 0 }}>
+        <div ref={topAgentsPanelRef} className="fim-top-agents-card chart-card animate-fadeInUp stagger-2 flex flex-col" style={{ opacity: 0 }}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-purple-500/10">
@@ -1305,9 +1305,9 @@ const FimEvents = ({ agentId = "all" }) => {
               </div>
             </div>
           </div>
-          <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-[9px] text-[var(--soc-text-muted)]">Unique agents</span>
-            <span className="text-[11px] font-bold text-[var(--soc-text-primary)]">{derived.uniqueAgents}</span>
+          <div className="fim-agent-summary flex items-center justify-between mb-2 px-1">
+            <span className="fim-agent-summary-label text-[9px] text-[var(--soc-text-muted)]">Unique agents</span>
+            <span className="fim-agent-summary-value text-[11px] font-bold text-[var(--soc-text-primary)]">{derived.uniqueAgents}</span>
           </div>
           <TopAgentsCard agents={derived.topAgents} onItemClick={handleAgentSummaryClick} activeName={agentFilter !== "all" ? agentFilter : null} />
         </div>
@@ -1326,7 +1326,7 @@ const FimEvents = ({ agentId = "all" }) => {
                 <p className="text-[9px] text-[var(--soc-text-muted)]">Share of events by type</p>
               </div>
             </div>
-            <span className="text-[10px] font-bold text-[var(--soc-text-primary)]">{derived.total} events</span>
+            <span className="fim-chart-summary-count text-[10px] font-bold text-[var(--soc-text-primary)]">{derived.total} events</span>
           </div>
           {(() => {
             const items = derived.eventItems || [];
@@ -1337,19 +1337,19 @@ const FimEvents = ({ agentId = "all" }) => {
             );
             const maxV = Math.max(...items.map((d) => d.value), 1);
             return (
-              <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
+              <div className={`fim-chart-list top5-fixed w-full min-w-0 max-w-full space-y-1.5${items.length === 5 ? " fim-chart-list--full" : ""}`}>
                 {items.map((item, i) => {
                   const isActive = eventFilter !== "all" && String(eventFilter).toLowerCase() === String(item.label).toLowerCase();
                   return (
                     <div key={item.label} onClick={() => handleEventSummaryClick(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg cursor-pointer ${isActive ? "bg-emerald-500/10 ring-1 ring-emerald-500/30" : ""}`}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color: item.color }}>{i + 1}</span>
-                          <span className="min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)]" title={item.label}>{item.label}</span>
+                          <span className="fim-list-rank w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color: item.color }}>{i + 1}</span>
+                          <span className="fim-list-label min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)]" title={item.label}>{item.label}</span>
                         </div>
-                        <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(item.value)}</span>
+                        <span className="fim-list-value min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(item.value)}</span>
                       </div>
-                      <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
+                      <div className="fim-list-progress mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
                         <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(item.value / maxV) * 100}%`, backgroundColor: item.color }} />
                       </div>
                     </div>
@@ -1371,7 +1371,7 @@ const FimEvents = ({ agentId = "all" }) => {
                 <p className="text-[9px] text-[var(--soc-text-muted)]">Share of events by severity</p>
               </div>
             </div>
-            <span className="text-[10px] font-bold text-[var(--soc-text-primary)]">{derived.total} total</span>
+            <span className="fim-chart-summary-count text-[10px] font-bold text-[var(--soc-text-primary)]">{derived.total} total</span>
           </div>
           {(() => {
             const items = derived.severityItems || [];
@@ -1382,19 +1382,19 @@ const FimEvents = ({ agentId = "all" }) => {
             );
             const maxV = Math.max(...items.map((d) => d.value), 1);
             return (
-              <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
+              <div className={`fim-chart-list top5-fixed w-full min-w-0 max-w-full space-y-1.5${items.length === 5 ? " fim-chart-list--full" : ""}`}>
                 {items.map((item, i) => {
                   const isActive = severityFilter !== "all" && String(severityFilter) === String(item.label);
                   return (
                     <div key={item.label} onClick={() => handleSeveritySummaryClick(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg cursor-pointer ${isActive ? "bg-emerald-500/10 ring-1 ring-emerald-500/30" : ""}`}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color: item.color }}>{i + 1}</span>
-                          <span className="min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)]" title={item.label}>{item.label}</span>
+                          <span className="fim-list-rank w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color: item.color }}>{i + 1}</span>
+                          <span className="fim-list-label min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)]" title={item.label}>{item.label}</span>
                         </div>
-                        <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(item.value)}</span>
+                        <span className="fim-list-value min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(item.value)}</span>
                       </div>
-                      <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
+                      <div className="fim-list-progress mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
                         <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(item.value / maxV) * 100}%`, backgroundColor: item.color }} />
                       </div>
                     </div>
@@ -1415,7 +1415,7 @@ const FimEvents = ({ agentId = "all" }) => {
                 <p className="text-[9px] text-[var(--soc-text-muted)]">Most active users by file changes</p>
               </div>
             </div>
-            <span className="text-[10px] font-bold text-violet-400">{derived.topUsers?.length || 0} users</span>
+            <span className="fim-chart-summary-count text-[10px] font-bold text-violet-400">{derived.topUsers?.length || 0} users</span>
           </div>
           {(() => {
             const items = derived.topUsers || [];
@@ -1426,19 +1426,19 @@ const FimEvents = ({ agentId = "all" }) => {
             );
             const maxV = Math.max(...items.map((d) => d.value), 1);
             return (
-              <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
+              <div className={`fim-chart-list top5-fixed w-full min-w-0 max-w-full space-y-1.5${items.length === 5 ? " fim-chart-list--full" : ""}`}>
                 {items.map((item, i) => {
                   const isActive = userFilter !== "all" && String(userFilter) === String(item.label);
                   return (
                     <div key={item.label} onClick={() => handleUserSummaryClick(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg cursor-pointer ${isActive ? "bg-emerald-500/10 ring-1 ring-emerald-500/30" : ""}`} title={`Filter events for ${item.label}`}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color: item.color }}>{i + 1}</span>
-                          <span className="min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)]" title={item.label}>{item.label}</span>
+                          <span className="fim-list-rank w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color: item.color }}>{i + 1}</span>
+                          <span className="fim-list-label min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)]" title={item.label}>{item.label}</span>
                         </div>
-                        <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(item.value)}</span>
+                        <span className="fim-list-value min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(item.value)}</span>
                       </div>
-                      <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
+                      <div className="fim-list-progress mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
                         <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(item.value / maxV) * 100}%`, backgroundColor: item.color }} />
                       </div>
                     </div>
@@ -1485,7 +1485,7 @@ const FimEvents = ({ agentId = "all" }) => {
                 <p className="text-[9px] text-[var(--soc-text-muted)]">Most frequently modified files</p>
               </div>
             </div>
-            <span className="text-[10px] font-bold text-sky-400">{derived.topFiles?.length || 0} files</span>
+            <span className="fim-chart-summary-count text-[10px] font-bold text-sky-400">{derived.topFiles?.length || 0} files</span>
           </div>
           {(() => {
             const items = derived.topFiles || [];
@@ -1496,22 +1496,22 @@ const FimEvents = ({ agentId = "all" }) => {
             );
             const maxV = Math.max(...items.map((d) => d.value), 1);
             return (
-              <div className="top5-fixed-sub w-full min-w-0 max-w-full space-y-1.5">
+              <div className={`fim-top-files-list top5-fixed-sub w-full min-w-0 max-w-full space-y-1.5${items.length === 5 ? " fim-top-files-list--full" : ""}`}>
                 {items.map((item, i) => (
                   <div key={item.label} onClick={() => handleFileSummaryClick(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg cursor-pointer ${pathFilter && String(pathFilter) === String(item.label) ? "bg-emerald-500/10 ring-1 ring-emerald-500/30" : ""}`} title={`Filter events for ${item.label}`}>
                     <div className="flex items-center justify-between gap-2 min-w-0">
                       <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
-                        <span className="w-5 h-5 shrink-0 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color: item.color }}>{i + 1}</span>
-                        <span className="min-w-0 flex-1 truncate text-[10px] font-medium text-[var(--soc-text-secondary)] font-mono" title={item.label}>{item.label}</span>
+                        <span className="fim-file-rank w-5 h-5 shrink-0 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color: item.color }}>{i + 1}</span>
+                        <span className="fim-file-name min-w-0 flex-1 truncate text-[10px] font-medium text-[var(--soc-text-secondary)] font-mono" title={item.label}>{item.label}</span>
                       </div>
-                      <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(item.value)}</span>
+                      <span className="fim-file-count min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(item.value)}</span>
                     </div>
                     {item.sub && (
                       <div className="-mt-0.5 ml-7 leading-none">
-                        <span className="text-[9px] text-[var(--soc-text-muted)]" title={`by ${item.sub}`}>by {item.sub}</span>
+                        <span className="fim-file-by text-[9px] text-[var(--soc-text-muted)]" title={`by ${item.sub}`}>by {item.sub}</span>
                       </div>
                     )}
-                    <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
+                    <div className="fim-file-progress mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
                       <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(item.value / maxV) * 100}%`, backgroundColor: item.color }} />
                     </div>
                   </div>
@@ -1525,10 +1525,10 @@ const FimEvents = ({ agentId = "all" }) => {
       {/* Logs Table — filter log disamakan dengan Host Monitoring (AttackDashboard) */}
       <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl shadow-lg h-auto overflow-hidden">
         <div ref={logsTableRef} className="px-3 py-2.5 md:px-4 md:py-3 border-b border-[var(--soc-border)] bg-[var(--soc-card)]">
-          <div className="flex gap-2 flex-wrap attack-logs-search soc-filter-row items-center">
-            <div className="flex-1 min-w-0 basis-full sm:basis-0 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-500" />
-              <input type="text" value={searchQuery} onChange={(e) => { setClientPage(1); setSearchQuery(e.target.value); }} placeholder="Search agent, user, path, event, rule..." className="w-full pl-10 pr-4 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500" />
+          <div className="fim-filter-toolbar flex gap-2 flex-wrap attack-logs-search soc-filter-row items-center">
+            <div className="fim-search-container flex-1 min-w-0 basis-full sm:basis-0 relative">
+              <Search className="fim-search-icon absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-500" />
+              <input type="text" value={searchQuery} onChange={(e) => { setClientPage(1); setSearchQuery(e.target.value); }} placeholder="Search agent, user, path, event, rule..." className="fim-search-input w-full pl-10 pr-4 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500" />
             </div>
             <FimCombinedFilter
               agentFilter={agentFilter} onAgentChange={(v) => { setClientPage(1); setAgentFilter(v); }} agentOptions={filterOptions.agents}
@@ -1554,12 +1554,12 @@ const FimEvents = ({ agentId = "all" }) => {
                 : ""}
               onClearTimelineFilter={() => { setSelectedTimelinePoint(null); setClientPage(1); }}
             />
-            <ExportCsvButton accent="emerald" onClick={handleExportCsv} />
+            <ExportCsvButton accent="emerald" onClick={handleExportCsv} className="fim-export-csv-button" />
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-[10px] md:text-[11px] text-left">
+          <table className="fim-log-table w-full min-w-[720px] text-[10px] md:text-[11px] text-left">
             <thead>
               <tr className="border-b border-slate-800 bg-slate-800/70">
                 {["↓ time", "agent", "user", "path", "event", "payload", "severity"].map((h) => (
@@ -1582,7 +1582,7 @@ const FimEvents = ({ agentId = "all" }) => {
                   <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 whitespace-nowrap 2xl:w-[190px] 2xl:min-w-[190px] 2xl:max-w-[190px] text-slate-500 text-[10px] md:text-[11px] lg:text-[10px]">{formatTime(evt.timestamp)}</td>
                   <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 whitespace-nowrap 2xl:w-[190px] 2xl:min-w-[190px] 2xl:max-w-[190px] text-sky-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]">{evt.agentName}</td>
                   <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 whitespace-nowrap 2xl:w-[140px] 2xl:min-w-[140px] 2xl:max-w-[140px] text-violet-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]">{evt.username}</td>
-                  <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 text-emerald-400 font-mono text-[10px] md:text-[11px] lg:text-[10px] max-w-[140px] sm:max-w-[180px] md:max-w-[220px] lg:max-w-[260px] 2xl:w-[420px] 2xl:min-w-[420px] 2xl:max-w-[420px]">
+                  <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 text-emerald-400 font-mono text-[10px] md:text-[11px] lg:text-[10px] max-w-[110px] sm:max-w-[140px] md:max-w-[180px] lg:max-w-[220px] 2xl:w-[240px] 2xl:min-w-[240px] 2xl:max-w-[240px]">
                     <CopyablePath value={evt.syscheckPath} />
                   </td>
                   <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 2xl:w-[130px] 2xl:min-w-[130px] 2xl:max-w-[130px]">
@@ -1590,8 +1590,8 @@ const FimEvents = ({ agentId = "all" }) => {
                       {evt.syscheckEvent}
                     </span>
                   </td>
-                  <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 w-full min-w-[280px] max-w-[320px] sm:max-w-[400px] md:max-w-[560px] lg:max-w-none xl:max-w-[880px] 2xl:max-w-[900px] align-top">
-                    <div className="flex flex-col gap-1 w-full min-w-0 max-w-[320px] sm:max-w-[400px] md:max-w-[560px] lg:max-w-none xl:max-w-[880px] 2xl:max-w-[900px]">
+                  <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 w-full min-w-[260px] max-w-[340px] sm:max-w-[460px] md:max-w-[580px] lg:max-w-[720px] xl:max-w-[860px] 2xl:w-[620px] 2xl:min-w-[620px] 2xl:max-w-[620px] align-top">
+                    <div className="flex flex-col gap-1 w-full min-w-0 max-w-[260px] sm:max-w-[460px] md:max-w-[580px] lg:max-w-[720px] xl:max-w-[860px] 2xl:max-w-[620px]">
                       <div className="rounded-md border bg-[var(--soc-payload-bg)] px-2.5 py-2" style={{ borderColor: "var(--soc-payload-border)" }}>
                         <div className="text-[9px] font-bold tracking-wider text-cyan-400 uppercase mb-1">CHANGES:</div>
                         <pre className="whitespace-pre-wrap break-words font-mono text-[10px] leading-[1.4] text-[var(--soc-payload-text)] max-h-[120px] overflow-y-auto scrollbar-thin">
@@ -1612,9 +1612,9 @@ ${evt.syscheckEvent}${evt.fileDiff ? `\n${String(evt.fileDiff).replace(/\\n/g, "
         </div>
 
         {/* Pagination */}
-        <div className="border-t border-slate-800 bg-slate-900/50 px-4 lg:px-3 py-3 lg:py-2">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="text-[10px] md:text-[11px] font-mono text-slate-500">
+        <div className="fim-pagination-footer border-t border-slate-800 bg-slate-900/50 px-4 lg:px-3 py-3 lg:py-2">
+          <div className="fim-pagination-layout flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="fim-pagination-summary text-[10px] md:text-[11px] font-mono text-slate-500">
               <span className="hidden md:inline">SHOWING </span>
               <span className="font-bold text-sky-400">{tableEvents.length === 0 ? 0 : (clientPage - 1) * pageSize + 1}</span>
               <span className="hidden md:inline"> - </span>
@@ -1625,22 +1625,22 @@ ${evt.syscheckEvent}${evt.fileDiff ? `\n${String(evt.fileDiff).replace(/\\n/g, "
               <span className="font-bold text-sky-400">{totalEventHits.toLocaleString()}</span>
               <span className="hidden md:inline"> EVENTS</span>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="fim-pagination-controls flex flex-wrap items-center gap-2">
               <button disabled={clientPage === 1} onClick={() => setClientPage(1)} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 hover:border-sky-500/50 hover:bg-sky-900/20 disabled:opacity-20">
-                <span className="hidden md:inline">FIRST</span><span className="md:hidden">«</span>
+                FIRST
               </button>
               <button disabled={clientPage === 1} onClick={() => setClientPage(Math.max(clientPage - 1, 1))} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 hover:border-sky-500/50 hover:bg-sky-900/20 disabled:opacity-20">
-                <span className="hidden md:inline">← PREV</span><span className="md:hidden">‹</span>
+                <span className="hidden md:inline">← PREV</span><span className="md:hidden">PREV</span>
               </button>
               <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400">
                 <span className="hidden md:inline">PAGE </span>
                 <span className="text-[var(--soc-text-primary)]">{clientPage}</span> / {totalPages}
               </span>
               <button disabled={clientPage === totalPages} onClick={() => setClientPage(Math.min(clientPage + 1, totalPages))} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 hover:border-sky-500/50 hover:bg-sky-900/20 disabled:opacity-20">
-                <span className="hidden md:inline">NEXT →</span><span className="md:hidden">›</span>
+                <span className="hidden md:inline">NEXT →</span><span className="md:hidden">NEXT</span>
               </button>
               <button disabled={clientPage === totalPages} onClick={() => setClientPage(totalPages)} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 hover:border-sky-500/50 hover:bg-sky-900/20 disabled:opacity-20">
-                <span className="hidden md:inline">LAST</span><span className="md:hidden">»</span>
+                LAST
               </button>
             </div>
           </div>

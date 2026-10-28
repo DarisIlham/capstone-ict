@@ -28,6 +28,7 @@ import {
   toDateTimeLocalValue,
 } from "../utils/dateRange";
 import { adaptiveLeftGutter } from "../utils/chartAxis";
+import { getTopFilterValues } from "../utils/topFilterValues";
 import { InlineEmptyState } from "../components/EmptyState";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -317,7 +318,7 @@ const WaveChart = ({ data, color = "#f97316", rangeKey = "24h", height = 80, com
         const tx = xPct < 18 ? "-6%" : xPct > 82 ? "-94%" : "-50%";
         return (
           <div
-            className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-lg"
+            className="host-timeline-tooltip pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-lg"
             style={{
               left: `${anchorX}%`,
               top: flipBelow ? `${((hoveredPoint.y + 18) / height) * 100}%` : `${Math.max(((hoveredPoint.y - 40) / height) * 100, 6)}%`,
@@ -491,9 +492,9 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items", onP
   return (
     <div className="relative w-full min-w-0 max-w-full flex flex-col h-full min-h-0 overflow-hidden" onMouseLeave={() => setSelected(null)}>
       <div className="flex items-center justify-between mb-1 px-1 min-w-0">
-        <span className="text-[11px] text-slate-600 uppercase font-semibold shrink-0">Total</span>
-        <span className="text-sm font-bold text-slate-300 truncate">
-          {total} <span className="text-xs font-normal text-slate-500">{totalLabel}</span>
+        <span className="host-category-total-label text-[11px] text-slate-600 uppercase font-semibold shrink-0">Total</span>
+        <span className="host-category-total-value text-sm font-bold text-slate-300 truncate">
+          {total} <span className="host-category-total-unit text-xs font-normal text-slate-500">{totalLabel}</span>
         </span>
       </div>
       <div ref={rootRef} className="relative w-full min-w-0 max-w-full min-h-0 flex-1 overflow-hidden cat-chart-plot" style={{ minHeight: 0 }}>
@@ -573,7 +574,7 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items", onP
             const pos = getContainedTooltip(selected.x, selected.y, width, height);
             return (
               <div
-                className="pointer-events-none absolute z-20 min-w-[110px] max-w-[180px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-xl"
+                className="host-category-tooltip pointer-events-none absolute z-20 min-w-[110px] max-w-[180px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-xl"
                 style={{
                   left: `${pos.left}px`,
                   top: `${pos.top}px`,
@@ -586,7 +587,7 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items", onP
             );
           })()}
       </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 justify-center px-1 mt-1 min-w-0 max-w-full overflow-hidden">
+      <div className="host-category-legend flex flex-wrap items-center gap-x-3 gap-y-1 justify-center px-1 mt-1 min-w-0 max-w-full overflow-hidden">
         {points.map((p) => {
           const isLegendSelected = selected?.index === p.index;
           const isActive = activeLabel != null && String(p.label) === String(activeLabel);
@@ -612,12 +613,13 @@ const CompactBarChart = ({ items, emptyLabel = "No data available", onItemClick 
     );
   }
 
-  const maxValue = Math.max(...items.map((d) => d.value), 1);
+  const visibleItems = items.slice(0, 5);
+  const maxValue = Math.max(...visibleItems.map((d) => d.value), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
 
   return (
-    <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
-      {items.map((item, i) => {
+    <div className={`host-compact-list top5-fixed w-full min-w-0 max-w-full space-y-1.5${visibleItems.length === 5 ? " host-compact-list--full" : ""}`}>
+      {visibleItems.map((item, i) => {
         const color = item.color || CHART_COLORS[i % CHART_COLORS.length];
         const label = item.label;
         const value = item.value;
@@ -626,18 +628,18 @@ const CompactBarChart = ({ items, emptyLabel = "No data available", onItemClick 
           <div key={label} onClick={() => onItemClick?.(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg ${onItemClick ? "cursor-pointer" : ""} ${isActive ? "bg-orange-500/10 ring-1 ring-orange-500/30" : ""}`} title={onItemClick ? `Filter logs for ${label}` : undefined}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>
+                <span className="host-list-rank w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>
                   {i + 1}
                 </span>
-                <span className="min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)]" title={label}>
+                <span className="host-list-label min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)]" title={label}>
                   {label}
                 </span>
               </div>
-              <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">
+              <span className="host-list-value min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">
                 {new Intl.NumberFormat("en-US").format(value)}
               </span>
             </div>
-            <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
+            <div className="host-list-progress mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
               <div
                 className="h-full rounded-full transition-all duration-500"
                 title={`${label}: ${value} executions`}
@@ -665,7 +667,7 @@ const TopAgentsCard = ({ agents, onItemClick = null, activeName = null }) => {
   const maxValue = Math.max(...agents.map((a) => a.value), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
   return (
-    <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
+    <div className={`host-top-agent-list top5-fixed w-full min-w-0 max-w-full space-y-1.5${agents.length === 5 ? " host-top-agent-list--full" : ""}`}>
       {agents.map((item, i) => {
         const color = CHART_COLORS[i % CHART_COLORS.length];
         const value = item.value;
@@ -675,18 +677,18 @@ const TopAgentsCard = ({ agents, onItemClick = null, activeName = null }) => {
           <div key={label} onClick={() => onItemClick?.(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg ${onItemClick ? "cursor-pointer" : ""} ${isActive ? "bg-orange-500/10 ring-1 ring-orange-500/30" : ""}`} title={onItemClick ? `Filter logs for ${label}` : undefined}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>
+                <span className="host-list-rank w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>
                   {i + 1}
                 </span>
-                <span className="min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)]" title={label}>
+                <span className="host-list-label min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)]" title={label}>
                   {label}
                 </span>
               </div>
-              <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">
+              <span className="host-list-value min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">
                 {new Intl.NumberFormat("en-US").format(value)}
               </span>
             </div>
-            <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
+            <div className="host-list-progress mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
               <div
                 className="h-full rounded-full transition-all duration-500"
                 title={item.lastSeen ? `Last seen ${formatDetailedTimestamp(item.lastSeen)}` : `${label}: ${value} events`}
@@ -719,10 +721,10 @@ const PaginationControls = ({
   const end = Math.min(page * limit, total);
 
   return (
-    <div className="border-t border-slate-800 bg-slate-900/50 px-4 py-3">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-          <div className="text-[10px] md:text-[11px] font-mono text-slate-500">
+    <div className="host-pagination-footer border-t border-slate-800 bg-slate-900/50 px-4 py-3">
+      <div className="host-pagination-layout flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="host-pagination-summary-wrap flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+          <div className="host-pagination-summary text-[10px] md:text-[11px] font-mono text-slate-500">
             <span className="hidden md:inline">SHOWING </span>
             <span className="font-bold text-sky-400">{start}</span>
             <span className="hidden md:inline"> - </span>
@@ -753,14 +755,14 @@ const PaginationControls = ({
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="host-pagination-controls flex flex-wrap items-center gap-2">
           <button
             disabled={page === 1 || loading}
             onClick={() => onPageChange(1)}
             className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
           >
             <span className="hidden md:inline">FIRST</span>
-            <span className="md:hidden">«</span>
+            <span className="md:hidden">FIRST</span>
           </button>
           <button
             disabled={page === 1 || loading}
@@ -768,7 +770,7 @@ const PaginationControls = ({
             className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
           >
             <span className="hidden md:inline">← PREV</span>
-            <span className="md:hidden">‹</span>
+            <span className="md:hidden">PREV</span>
           </button>
           <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400">
             <span className="hidden md:inline">PAGE </span>
@@ -780,7 +782,7 @@ const PaginationControls = ({
             className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
           >
             <span className="hidden md:inline">NEXT →</span>
-            <span className="md:hidden">›</span>
+            <span className="md:hidden">NEXT</span>
           </button>
           <button
             disabled={page === totalPages || loading}
@@ -788,7 +790,7 @@ const PaginationControls = ({
             className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
           >
             <span className="hidden md:inline">LAST</span>
-            <span className="md:hidden">»</span>
+            <span className="md:hidden">LAST</span>
           </button>
         </div>
       </div>
@@ -833,6 +835,7 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
   const palette = theme === "light" ? WORD_COLORS_LIGHT : WORD_COLORS_DARK;
   const rootRef = useRef(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const [isCompact, setIsCompact] = useState(() => window.innerWidth <= 399);
 
   // The SVG viewBox MUST track the live box size: a stale viewBox renders
   // as a narrow centered blob (meet) or stretched text (none). Size is
@@ -841,6 +844,7 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
   const syncSize = useCallback(() => {
     const node = rootRef.current;
     if (!node) return;
+    setIsCompact(window.innerWidth <= 399);
     const rect = node.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) {
       setSize((prev) =>
@@ -888,6 +892,7 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
   })();
 
   const toWeight = (fs) => (fs > 26 ? "800" : fs > 18 ? "700" : "500");
+  const minFontSize = isCompact ? 7 : 10;
   const SAFE_X = 18;
   const SAFE_Y = 14;
   const prominence = (count) => (
@@ -918,14 +923,14 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
       const { text, count } = words[i];
       // Ranking changes the relative font size; `scale` is the shared
       // auto-fit multiplier found below.
-      let fs = Math.max(10, Math.round((13 + prominence(count) * 21) * scale));
+      let fs = Math.max(minFontSize, Math.round((13 + prominence(count) * 21) * scale));
       let weight = toWeight(fs);
       let tw = measureTextWidth(text, fs, weight);
       let th = Math.ceil(fs * 1.4);
 
       // A single long path/token may be reduced just enough to stay within
       // the canvas, while the other words retain the shared auto-fit scale.
-      while (fs > 10 && (tw > W - 2 * SAFE_X || th > H - 2 * SAFE_Y)) {
+      while (fs > minFontSize && (tw > W - 2 * SAFE_X || th > H - 2 * SAFE_Y)) {
         fs -= 1;
         weight = toWeight(fs);
         tw = measureTextWidth(text, fs, weight);
@@ -956,10 +961,10 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
   // Binary-search the maximum usable scale. This removes fixed "10/16 word"
   // thresholds: sparse clouds grow until their words nearly fill the box,
   // while dense clouds shrink only as much as needed to fit all words.
-  let bestLayout = layoutAtScale(0.25);
-  let bestScale = 0.25;
+  let bestLayout = layoutAtScale(isCompact ? 0.15 : 0.25);
+  let bestScale = isCompact ? 0.15 : 0.25;
   if (bestLayout.complete) {
-    let low = 0.25;
+    let low = isCompact ? 0.15 : 0.25;
     let high = 1;
     while (high < 8) {
       const candidate = layoutAtScale(high);
@@ -984,7 +989,7 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
   // Leave a little breathing room rather than using the absolute largest
   // possible glyphs; the cloud remains adaptive but reads more comfortably.
   const placed = bestLayout.complete
-    ? layoutAtScale(Math.max(0.25, bestScale * 0.70)).placed
+    ? layoutAtScale(Math.max(isCompact ? 0.15 : 0.25, bestScale * (isCompact ? 0.55 : 0.70))).placed
     : bestLayout.placed;
 
   // Uniform scaling only: with "meet" the text can never be stretched
@@ -1638,17 +1643,24 @@ const HostMonitoring = () => {
 
   const filterOptions = useMemo(() => {
     const source = analyticsLogs.length ? analyticsLogs : logs;
-    const toOptions = (getKey) =>
-      Array.from(
-        new Set(source.map(getKey).filter((value) => value && value !== "-"))
-      ).sort((a, b) => String(a).localeCompare(String(b)));
+    const sessions = getTopFilterValues(source, (log) => log.sessionId, undefined, sessionFilter);
+    const sessionCounts = new Map();
+    for (const log of source) {
+      const session = String(log.sessionId ?? "").trim();
+      if (session && session !== "-") {
+        sessionCounts.set(session, (sessionCounts.get(session) || 0) + 1);
+      }
+    }
 
     return {
-      users: toOptions((log) => log.user),
-      agents: toOptions((log) => log.agentName),
-      sessions: toOptions((log) => log.sessionId),
+      users: getTopFilterValues(source, (log) => log.user, undefined, userFilter),
+      agents: getTopFilterValues(source, (log) => log.agentName, undefined, agentFilter),
+      sessions: sessions.map((session) => ({
+        value: session,
+        label: `${session} (${sessionCounts.get(session) || 0})`,
+      })),
     };
-  }, [analyticsLogs, logs]);
+  }, [analyticsLogs, logs, userFilter, agentFilter, sessionFilter]);
 
   // Height is now controlled by CSS (.soc-panel--responsive-height) for
   // responsiveness; no inline fixed height needed.
@@ -1908,18 +1920,18 @@ const HostMonitoring = () => {
 
   return (
     <>
-      <div className="flex flex-col gap-4 w-full min-w-0">
+      <div className="host-monitoring-page flex flex-col gap-4 w-full min-w-0">
         {/* Header */}
         <div className="flex flex-col min-[700px]:flex-row min-[700px]:items-center justify-between gap-3">
           <div>
-            <h1 className="text-lg min-[600px]:text-xl font-bold text-[var(--soc-text-primary)]">
+            <h1 className="host-page-title text-lg min-[600px]:text-xl font-bold text-[var(--soc-text-primary)]">
               Host Monitoring
             </h1>
-            <p className="text-[11px] text-[var(--soc-text-muted)] mt-0.5">
+            <p className="host-page-subtitle text-[11px] text-[var(--soc-text-muted)] mt-0.5">
               Real-time Linux command auditing and user activity tracking
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="host-page-controls flex items-center gap-2">
             <RangeFilter
               rangeKey={rangeKey}
               onRangeChange={(nextRange) => {
@@ -1932,6 +1944,7 @@ const HostMonitoring = () => {
               }}
             />
             <DateRangeFilter
+              className="host-date-range-filter"
               value={customDateRange}
               closeOnChange
               onChange={(range) => {
@@ -1952,7 +1965,7 @@ const HostMonitoring = () => {
                 setCustomDateRange(createDefaultDateRange(1));
               }}
             />
-            <div className="relative flex items-center bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)]">
+            <div className="host-page-size-control relative flex items-center bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)]">
               <select
                 value={pageSize}
                 onChange={(event) => {
@@ -1985,75 +1998,75 @@ const HostMonitoring = () => {
 
         {/* KPI Cards — disamakan dengan MainDashboard (gambar 1): kpi-modern + stagger + p-2 icon wrapper */}
         <div className="grid grid-cols-2 min-[700px]:grid-cols-4 gap-3">
-          <div className="kpi-modern animate-fadeInUp stagger-1" style={{ opacity: 0 }}>
+          <div className="host-kpi-card kpi-modern animate-fadeInUp stagger-1" style={{ opacity: 0 }}>
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">Commands</span>
+              <span className="host-kpi-label text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">Commands</span>
               <div className="p-2 rounded-lg text-purple-400 bg-opacity-10">
                 <Terminal className="h-4 w-4 text-purple-400" />
               </div>
             </div>
-            <div className="text-xl font-bold text-purple-400 mb-1">
+            <div className="host-kpi-value text-xl font-bold text-purple-400 mb-1">
               {loading ? <div className="skeleton h-6 w-16"></div> : new Intl.NumberFormat("en-US").format(Number(stats.totalCommands || 0))}
             </div>
-            <div className="text-[9px] text-[var(--soc-text-muted)]">Linux commands monitored</div>
+            <div className="host-kpi-description text-[9px] text-[var(--soc-text-muted)]">Linux commands monitored</div>
           </div>
-          <div className="kpi-modern animate-fadeInUp stagger-2" style={{ opacity: 0 }}>
+          <div className="host-kpi-card kpi-modern animate-fadeInUp stagger-2" style={{ opacity: 0 }}>
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">Suspicious</span>
+              <span className="host-kpi-label text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">Suspicious</span>
               <div className="p-2 rounded-lg text-pink-400 bg-opacity-10">
                 <AlertTriangle className="h-4 w-4 text-pink-400" />
               </div>
             </div>
-            <div className="text-xl font-bold text-pink-400 mb-1">
+            <div className="host-kpi-value text-xl font-bold text-pink-400 mb-1">
               {loading ? <div className="skeleton h-6 w-16"></div> : new Intl.NumberFormat("en-US").format(Number(stats.suspiciousCount || 0))}
             </div>
-            <div className="text-[9px] text-[var(--soc-text-muted)]">Suspicious detected</div>
+            <div className="host-kpi-description text-[9px] text-[var(--soc-text-muted)]">Suspicious detected</div>
           </div>
-          <div className="kpi-modern animate-fadeInUp stagger-3" style={{ opacity: 0 }}>
+          <div className="host-kpi-card kpi-modern animate-fadeInUp stagger-3" style={{ opacity: 0 }}>
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">Sessions</span>
+              <span className="host-kpi-label text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">Sessions</span>
               <div className="p-2 rounded-lg text-cyan-400 bg-opacity-10">
                 <Users className="h-4 w-4 text-cyan-400" />
               </div>
             </div>
-            <div className="text-xl font-bold text-cyan-400 mb-1">
+            <div className="host-kpi-value text-xl font-bold text-cyan-400 mb-1">
               {loading ? <div className="skeleton h-6 w-16"></div> : new Intl.NumberFormat("en-US").format(Number(stats.uniqueSessions || 0))}
             </div>
-            <div className="text-[9px] text-[var(--soc-text-muted)]">Unique sessions</div>
+            <div className="host-kpi-description text-[9px] text-[var(--soc-text-muted)]">Unique sessions</div>
           </div>
-          <div className="kpi-modern animate-fadeInUp stagger-4" style={{ opacity: 0 }}>
+          <div className="host-kpi-card kpi-modern animate-fadeInUp stagger-4" style={{ opacity: 0 }}>
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">Users</span>
+              <span className="host-kpi-label text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">Users</span>
               <div className="p-2 rounded-lg text-emerald-400 bg-opacity-10">
                 <Activity className="h-4 w-4 text-emerald-400" />
               </div>
             </div>
-            <div className="text-xl font-bold text-emerald-400 mb-1">
+            <div className="host-kpi-value text-xl font-bold text-emerald-400 mb-1">
               {loading ? <div className="skeleton h-6 w-16"></div> : new Intl.NumberFormat("en-US").format(Number(stats.uniqueUsers || 0))}
             </div>
-            <div className="text-[9px] text-[var(--soc-text-muted)]">Unique users</div>
+            <div className="host-kpi-description text-[9px] text-[var(--soc-text-muted)]">Unique users</div>
           </div>
         </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {/* Command Timeline — disamakan dengan Risk Distribution (Dashboard) */}
             <div className="md:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col" style={{ opacity: 0 }}>
-              <div className="flex items-center justify-between mb-3">
+              <div className="host-timeline-header flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 rounded-lg bg-orange-500/10">
                     <Activity className="h-3.5 w-3.5 text-orange-400" />
                   </div>
                   <div>
-                    <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Command Timeline</h3>
-                    <p className="text-[9px] text-[var(--soc-text-muted)]">Commands executed by agents. Click a point to filter logs.</p>
+                    <h3 className="text-[10px] min-[400px]:text-[11px] font-semibold text-[var(--soc-text-primary)]">Command Timeline</h3>
+                    <p className="text-[8px] min-[400px]:text-[9px] text-[var(--soc-text-muted)]">Commands executed by agents. Click a point to filter logs.</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-[11px] text-[var(--soc-text-muted)]">{filterMode === "custom" ? `${new Date(customDateRange.start).toLocaleDateString("en-US", { month: "short", day: "2-digit" })} – ${new Date(customDateRange.end).toLocaleDateString("en-US", { month: "short", day: "2-digit" })}` : `Last ${rangeKey}`}</div>
-                  <div className="text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatLiveTimestamp(lastUpdated)}</div>
+                  <div className="text-[9px] min-[400px]:text-[11px] text-[var(--soc-text-muted)]">{filterMode === "custom" ? `${new Date(customDateRange.start).toLocaleDateString("en-US", { month: "short", day: "2-digit" })} – ${new Date(customDateRange.end).toLocaleDateString("en-US", { month: "short", day: "2-digit" })}` : `Last ${rangeKey}`}</div>
+                  <div className="text-[8px] min-[400px]:text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatLiveTimestamp(lastUpdated)}</div>
                 </div>
               </div>
-              <div className="h-[220px]">
+              <div className="host-timeline-chart h-[220px]">
                 <WaveChart
                   data={timelineData}
                   rangeKey={rangeKey}
@@ -2078,9 +2091,9 @@ const HostMonitoring = () => {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center justify-between mb-2 px-1">
-                <span className="text-[9px] text-[var(--soc-text-muted)]">Unique agents</span>
-                <span className="text-[11px] font-bold text-[var(--soc-text-primary)]">{analytics.uniqueAgents}</span>
+              <div className="host-agent-summary flex items-center justify-between mb-2 px-1">
+                <span className="host-agent-summary-label text-[9px] text-[var(--soc-text-muted)]">Unique agents</span>
+                <span className="host-agent-summary-value text-[11px] font-bold text-[var(--soc-text-primary)]">{analytics.uniqueAgents}</span>
               </div>
               <TopAgentsCard agents={analytics.topAgents} onItemClick={handleAgentSummaryClick} activeName={agentFilter !== "all" ? agentFilter : null} />
             </div>
@@ -2100,7 +2113,7 @@ const HostMonitoring = () => {
                   </div>
                 </div>
               </div>
-              <div className="w-full min-w-0 max-w-full min-h-0 overflow-hidden" style={{ height: 220 }}>
+              <div className="host-category-chart w-full min-w-0 max-w-full min-h-0 overflow-hidden" style={{ height: 220 }}>
                 <CategoryLineChart
                   items={analytics.topSessions}
                   color="#f97316"
@@ -2123,8 +2136,8 @@ const HostMonitoring = () => {
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className="text-[9px] text-[var(--soc-text-muted)]">Unique</span>
-                  <span className="ml-1 text-[11px] font-bold text-purple-400">{new Set((analyticsLogs.length ? analyticsLogs : logs).map(l=>l.user).filter(u=>u && u!=="-")).size}</span>
+                  <span className="host-user-summary-label text-[9px] text-[var(--soc-text-muted)]">Unique</span>
+                  <span className="host-user-summary-value ml-1 text-[11px] font-bold text-purple-400">{new Set((analyticsLogs.length ? analyticsLogs : logs).map(l=>l.user).filter(u=>u && u!=="-")).size}</span>
                 </div>
               </div>
               {(() => {
@@ -2137,7 +2150,7 @@ const HostMonitoring = () => {
                 const maxValue = Math.max(...items.map(d=>d.value), 1);
                 const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
                 return (
-                  <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
+                  <div className={`host-user-list top5-fixed w-full min-w-0 max-w-full space-y-1.5${items.slice(0, 5).length === 5 ? " host-user-list--full" : ""}`}>
                     {items.slice(0,5).map((item, i) => {
                       const color = item.color || CHART_COLORS[i % CHART_COLORS.length];
                       const label = item.label;
@@ -2147,12 +2160,12 @@ const HostMonitoring = () => {
                         <div key={label} onClick={() => handleUserSummaryClick(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg cursor-pointer ${isActive ? "bg-orange-500/10 ring-1 ring-orange-500/30" : ""}`} title={`Filter logs for ${label}`}>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>{i + 1}</span>
-                              <span className="min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)]" title={label}>{label}</span>
+                              <span className="host-list-rank w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>{i + 1}</span>
+                              <span className="host-list-label min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)]" title={label}>{label}</span>
                             </div>
-                            <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(value)}</span>
+                            <span className="host-list-value min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(value)}</span>
                           </div>
-                          <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
+                          <div className="host-list-progress mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
                             <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(value / maxValue) * 100}%`, backgroundColor: color }} />
                           </div>
                         </div>
@@ -2165,7 +2178,7 @@ const HostMonitoring = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="md:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col overflow-hidden" style={{ opacity: 0 }}>
+            <div className="host-command-keywords-card md:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col overflow-hidden" style={{ opacity: 0 }}>
               <div className="flex items-center justify-between mb-3 shrink-0">
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 rounded-lg bg-cyan-500/10">
@@ -2177,14 +2190,14 @@ const HostMonitoring = () => {
                   </div>
                 </div>
               </div>
-              <div className="w-full h-[206px] shrink-0 overflow-hidden rounded-xl" style={{ background: "transparent" }}>
+              <div className="host-command-keywords-canvas w-full min-h-0 overflow-hidden rounded-xl" style={{ background: "transparent" }}>
                 <div className="w-full h-full rounded-xl overflow-hidden" style={{ background: "transparent" }}>
                   <PayloadWordCloud words={commandPayloadWords} activeWord={selectedKeyword} onWordClick={handleSelectKeyword} />
                 </div>
               </div>
             </div>
 
-            <div className="chart-card animate-fadeInUp stagger-2 flex flex-col" style={{ opacity: 0 }}>
+            <div className="host-dangerous-commands-card chart-card animate-fadeInUp stagger-2 flex flex-col" style={{ opacity: 0 }}>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 rounded-lg bg-purple-500/10">
@@ -2207,9 +2220,9 @@ const HostMonitoring = () => {
 
         <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl shadow-lg h-auto">
           <div ref={logsTableRef} className="px-3 py-2.5 md:px-4 md:py-3 border-b border-[var(--soc-border)] bg-[var(--soc-card)]">
-            <div className="flex gap-2 flex-wrap attack-logs-search soc-filter-row items-center">
-              <div className="flex-1 min-w-0 basis-full sm:basis-0 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-500" />
+            <div className="host-filter-toolbar flex gap-2 flex-wrap attack-logs-search soc-filter-row items-center">
+              <div className="host-search-container flex-1 min-w-0 basis-full sm:basis-0 relative">
+                <Search className="host-search-icon absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-500" />
                 <input
                   type="text"
                   placeholder="Search user or command..."
@@ -2219,10 +2232,11 @@ const HostMonitoring = () => {
                     setSelectedCommandFilter("");
                     setSearchQuery(e.target.value);
                   }}
-                  className="w-full pl-10 pr-4 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500"
+                  className="host-search-input w-full pl-10 pr-4 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500"
                 />
               </div>
               <CombinedFilter
+                className="host-table-filter"
                 statusFilter={statusFilter}
                 onStatusChange={(v) => { setPage(1); setStatusFilter(v); }}
                 userFilter={userFilter}
@@ -2252,7 +2266,7 @@ const HostMonitoring = () => {
                   setCustomDateRange(createDefaultDateRange(1));
                 }}
               />
-              <ExportCsvButton accent="orange" onClick={handleExportCsv} />
+              <ExportCsvButton accent="orange" onClick={handleExportCsv} className="host-export-csv-button" />
             </div>
           </div>
 
@@ -2279,7 +2293,7 @@ const HostMonitoring = () => {
           )}
 
           <div className="overflow-x-auto soc-table-scroll">
-            <table className="soc-logs-table w-full min-w-[720px] text-[11px] md:text-[12px] text-left soc-responsive-table">
+            <table className="host-log-table soc-logs-table w-full min-w-[720px] text-[11px] md:text-[12px] text-left soc-responsive-table">
               <colgroup>
                 <col style={{ width: "14%" }} />
                 <col style={{ width: "10%" }} />
@@ -2405,8 +2419,8 @@ const HostMonitoring = () => {
 
       {/* ========== SESSION DETAIL MODAL ========== */}
       {selectedSession && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="host-session-modal-backdrop fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="host-session-modal bg-slate-800 border border-slate-700 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             {/* Header */}
             <div className="sticky top-0 bg-slate-800 border-b border-slate-700 px-6 py-4 flex justify-between items-center">
               <div>

@@ -79,9 +79,8 @@ export const DEMO_URIS = [
 
 export const DEMO_ML_LABELS = [
   { label: "bruteforce_http", weight: 55 },
-  { label: "benign", weight: 25 },
-  { label: "sql_injection_http", weight: 12 },
-  { label: "xss_http", weight: 8 },
+  { label: "sql_injection_http", weight: 30 },
+  { label: "xss_http", weight: 15 },
 ];
 
 export function pickWeighted(rnd, entries) {

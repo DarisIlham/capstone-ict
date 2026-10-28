@@ -55,7 +55,7 @@ export default function ExportCsvButton({
       onClick={handleClick}
       disabled={exporting || disabled}
       title="Export data pada periode tanggal yang dipilih (CSV)"
-      className={`flex shrink-0 items-center gap-1.5 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-2.5 py-2 text-[11px] font-medium text-slate-300 transition-colors focus:outline-none focus:ring-1 ${style.ring} ${
+      className={`flex shrink-0 items-center gap-1.5 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-2.5 py-1.5 text-[10px] font-medium text-slate-300 transition-colors focus:outline-none focus:ring-1 ${style.ring} ${
         exporting ? "opacity-60 cursor-wait" : style.idle
       } ${className}`}
     >

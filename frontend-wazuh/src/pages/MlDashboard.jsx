@@ -15,6 +15,7 @@ import {
   toDateTimeLocalValue,
 } from "../utils/dateRange";
 import { adaptiveLeftGutter } from "../utils/chartAxis";
+import { getTopFilterValues } from "../utils/topFilterValues";
 import { InlineEmptyState } from "../components/EmptyState";
 import { useIpGeo } from "../hooks/useIpGeo";
 import undipLogo from "../assets/Undip.svg";
@@ -146,22 +147,22 @@ const buildTimelineFromPredictions = (predictions, minutes, start, end) => {
 
 // ── KPI Card (kpi-modern seperti FimEvents / FileSecurityScanner) ────────────────
 const KPICard = ({ label, value, icon: Icon, color, desc, loading, index = 0 }) => (
-  <div className={`kpi-modern animate-fadeInUp stagger-${index + 1}`} style={{ opacity: 0 }}>
-    <div className="flex items-center justify-between mb-3">
-      <span className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">{label}</span>
-      <div className={`p-2 rounded-lg ${color} bg-opacity-10`}>
-        <Icon className={`h-4 w-4 ${color}`} />
+  <div className={`ml-kpi-card kpi-modern p-2.5 min-[400px]:p-4 animate-fadeInUp stagger-${index + 1}`} style={{ opacity: 0 }}>
+    <div className="flex items-center justify-between mb-2 min-[400px]:mb-3">
+      <span className="ml-kpi-label text-[8px] min-[400px]:text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">{label}</span>
+      <div className={`p-1.5 min-[400px]:p-2 rounded-lg ${color} bg-opacity-10`}>
+        <Icon className={`h-3.5 w-3.5 min-[400px]:h-4 min-[400px]:w-4 ${color}`} />
       </div>
     </div>
-    <div className={`text-xl font-bold ${color} mb-1`}>
-      {loading ? <div className="skeleton h-6 w-16"></div> : value}
+    <div className={`ml-kpi-value text-lg min-[400px]:text-xl font-bold ${color} mb-1`}>
+      {loading ? <div className="skeleton h-5 min-[400px]:h-6 w-14 min-[400px]:w-16"></div> : value}
     </div>
-    {desc && <div className="text-[9px] text-[var(--soc-text-muted)]">{desc}</div>}
+    {desc && <div className="ml-kpi-description text-[8px] min-[400px]:text-[9px] text-[var(--soc-text-muted)]">{desc}</div>}
   </div>
 );
 
 // ── BarList (seperti FileSecurityScanner) ────────────────────────────────────
-const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue = null }) => {
+const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue = null, listClassName = "" }) => {
   if (!items || items.length === 0) {
     return (
       <div className="top5-fixed w-full min-w-0 max-w-full flex items-center justify-center">
@@ -172,7 +173,7 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
   const maxValue = Math.max(...items.map((d) => d.value), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
   return (
-    <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
+    <div className={`ml-bar-list top5-fixed w-full min-w-0 max-w-full space-y-1.5 ${listClassName}`}>
       {items.map((item, i) => {
         const color = item.color || CHART_COLORS[i % CHART_COLORS.length];
         const label = item.label;
@@ -182,21 +183,21 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
           <>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>{i + 1}</span>
-                <span className="min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)] font-mono" title={label}>{label}</span>
+                <span className="ml-bar-list-rank w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>{i + 1}</span>
+                <span className="ml-bar-list-label min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)] font-mono" title={label}>{label}</span>
               </div>
-              <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(value)}</span>
+              <span className="ml-bar-list-value min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(value)}</span>
             </div>
-            <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
+            <div className="ml-bar-list-progress mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
               <div className="h-full rounded-full transition-all duration-500" title={`${label}: ${value}`} style={{ width: `${(value / maxValue) * 100}%`, backgroundColor: color }} />
             </div>
           </>
         );
         if (!onSelect) {
-          return <div key={label} className="w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">{inner}</div>;
+          return <div key={label} className="ml-bar-list-item w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">{inner}</div>;
         }
         return (
-          <button key={label} type="button" onClick={() => onSelect(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg text-left ${isActive ? "bg-violet-500/10 ring-1 ring-violet-500/30" : ""}`}>
+          <button key={label} type="button" onClick={() => onSelect(item)} className={`ml-bar-list-item w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg text-left ${isActive ? "bg-violet-500/10 ring-1 ring-violet-500/30" : ""}`}>
             {inner}
           </button>
         );
@@ -216,7 +217,7 @@ const TopAgentsCard = ({ agents, onItemClick = null, activeName = null }) => {
   const maxCount = Math.max(...agents.map((a) => Number(a.count) || 0), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
   return (
-    <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
+    <div className={`ml-top-agents-list top5-fixed w-full min-w-0 max-w-full space-y-1.5${agents.length === 5 ? " ml-top-agents-list--full" : ""}`}>
       {agents.map((item, i) => {
         const color = CHART_COLORS[i % CHART_COLORS.length];
         const label = item.name || "Unknown agent";
@@ -226,21 +227,21 @@ const TopAgentsCard = ({ agents, onItemClick = null, activeName = null }) => {
           <>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>{i + 1}</span>
-                <span className="min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)] font-mono" title={label}>{label}</span>
+                <span className="ml-top-agent-rank w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>{i + 1}</span>
+                <span className="ml-top-agent-name min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)] font-mono" title={label}>{label}</span>
               </div>
-              <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(value)}</span>
+              <span className="ml-top-agent-count min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(value)}</span>
             </div>
-            <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
+            <div className="ml-top-agent-progress mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
               <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(value / maxCount) * 100}%`, backgroundColor: color }} />
             </div>
           </>
         );
         if (!onItemClick) {
-          return <div key={label} className="w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">{inner}</div>;
+          return <div key={label} className="ml-top-agent-item w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">{inner}</div>;
         }
         return (
-          <button key={label} type="button" onClick={() => onItemClick(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg text-left ${isActive ? "bg-violet-500/10 ring-1 ring-violet-500/30" : ""}`}>
+          <button key={label} type="button" onClick={() => onItemClick(item)} className={`ml-top-agent-item w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg text-left ${isActive ? "bg-violet-500/10 ring-1 ring-violet-500/30" : ""}`}>
             {inner}
           </button>
         );
@@ -258,7 +259,7 @@ const MlCombinedFilter = ({ labelFilter, onLabelChange, labelOptions = [], agent
   const calcPosition = useCallback(() => {
     if (!buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
-    const dropdownWidth = 280;
+    const dropdownWidth = window.innerWidth < 640 ? 210 : 280;
     const dropdownHeight = 380;
     const gap = 4;
     const spaceBelow = window.innerHeight - rect.bottom;
@@ -292,27 +293,27 @@ const MlCombinedFilter = ({ labelFilter, onLabelChange, labelOptions = [], agent
   };
   const activeCount = [labelFilter !== "all", agentFilter !== "all", sourceIpFilter !== "all", destIpFilter !== "all", serviceFilter !== "all", confidenceRangeFilter !== "all", Boolean(dateFilterLabel), Boolean(timelineFilterLabel)].filter(Boolean).length;
   const Section = ({ label, value, allLabel, options, onChange }) => (
-    <div className="px-3 py-2">
-      <div className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">{label}</div>
+    <div className="ml-filter-section px-2.5 py-1.5 min-[400px]:px-3 min-[400px]:py-2">
+      <div className="ml-filter-section-title text-[8px] min-[400px]:text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">{label}</div>
       <div className="flex flex-wrap gap-1">
-        <button onClick={() => onChange("all")} className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${value === "all" ? "bg-violet-500/20 text-violet-300 border border-violet-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}>{allLabel}</button>
+        <button onClick={() => onChange("all")} className={`ml-filter-option px-1.5 min-[400px]:px-2 py-0.5 min-[400px]:py-1 rounded text-[9px] min-[400px]:text-[10px] font-medium transition-colors ${value === "all" ? "bg-violet-500/20 text-violet-300 border border-violet-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}>{allLabel}</button>
         {options.map((opt) => {
           const { value: optVal, label: optLabel } = normalizeOption(opt);
-          return <button key={optVal} onClick={() => onChange(optVal)} className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${value === optVal ? "bg-violet-500/20 text-violet-300 border border-violet-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}>{optLabel}</button>;
+          return <button key={optVal} onClick={() => onChange(optVal)} className={`ml-filter-option px-1.5 min-[400px]:px-2 py-0.5 min-[400px]:py-1 rounded text-[9px] min-[400px]:text-[10px] font-medium transition-colors ${value === optVal ? "bg-violet-500/20 text-violet-300 border border-violet-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}>{optLabel}</button>;
         })}
       </div>
     </div>
   );
   return (
-    <div ref={containerRef} className="relative">
-      <button ref={buttonRef} type="button" onClick={() => setOpen((c) => !c)} className="flex items-center gap-2 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-3 pr-2.5 text-[11px] text-[var(--soc-text-primary)] focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition-colors hover:bg-[var(--soc-elevated)]">
+    <div ref={containerRef} className="ml-table-filter relative">
+      <button ref={buttonRef} type="button" onClick={() => setOpen((c) => !c)}       className="ml-table-filter-button flex items-center gap-1.5 min-[400px]:gap-2 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-1.5 min-[400px]:py-2 pl-2.5 min-[400px]:pl-3 pr-2 min-[400px]:pr-2.5 text-[10px] min-[400px]:text-[11px] text-[var(--soc-text-primary)] focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition-colors hover:bg-[var(--soc-elevated)]">
         <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--soc-text-muted)]" />
         <span className="font-medium">Filters</span>
         {activeCount > 0 && <span className="flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-violet-500/20 text-violet-300 text-[9px] font-bold">{activeCount}</span>}
         <ChevronDown className={`h-3.5 w-3.5 text-[var(--soc-text-muted)] transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="fixed z-[9999] w-[280px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] shadow-2xl" style={{ top: coords.top, left: coords.left }}>
+        <div className="ml-filter-popup fixed z-[9999] w-[min(280px,calc(100vw-1rem))] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] shadow-2xl" style={{ top: coords.top, left: coords.left }}>
           <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--soc-border)]">
             <span className="text-[10px] font-semibold text-[var(--soc-text-primary)]">Filter Options</span>
             {activeCount > 0 && <button onClick={() => { onLabelChange("all"); onAgentChange("all"); onSourceIpChange("all"); onDestIpChange("all"); onServiceChange("all"); onConfidenceRangeChange("all"); if (dateFilterLabel && onResetDateFilter) onResetDateFilter(); if (onClearTimelineFilter) onClearTimelineFilter(); }} className="text-[9px] font-semibold text-violet-400 hover:text-violet-300 transition-colors">Clear all</button>}
@@ -346,7 +347,10 @@ const CategoryLineChart = ({ items, color = "#a78bfa", totalLabel = "items", onP
   const [selected, setSelected] = useState(null);
   const rootRef = useRef(null);
   const [size, setSize] = useState({ width: 1000, height: 210 });
-  const basePadding = { l: 56, r: 56, t: 12, b: 42 };
+  const narrow = size.width < 400;
+  const basePadding = narrow
+    ? { l: 38, r: 38, t: 8, b: 30 }
+    : { l: 56, r: 56, t: 12, b: 42 };
   useEffect(() => {
     const node = rootRef.current;
     if (!node) return undefined;
@@ -368,7 +372,10 @@ const CategoryLineChart = ({ items, color = "#a78bfa", totalLabel = "items", onP
   const total = sorted.reduce((s, it) => s + it.value, 0) || 1;
   const maxV = Math.max(1, ...sorted.map((d) => d.value));
   const gridVals = [0, 1, 2, 3].map((i) => Math.round(((i / 3) * maxV * 10)) / 10);
-  const padding = { ...basePadding, l: adaptiveLeftGutter(gridVals, basePadding.l, 12, "600 10px sans-serif") };
+  const padding = {
+    ...basePadding,
+    l: adaptiveLeftGutter(gridVals, basePadding.l, narrow ? 6 : 12, narrow ? "600 8px sans-serif" : "600 10px sans-serif"),
+  };
   const innerW = width - padding.l - padding.r;
   const innerH = height - padding.t - padding.b;
   const step = sorted.length > 1 ? innerW / (sorted.length - 1) : innerW;
@@ -390,12 +397,12 @@ const CategoryLineChart = ({ items, color = "#a78bfa", totalLabel = "items", onP
     segments.push({ d: `M ${a.x} ${a.y} C ${controlX} ${a.y}, ${controlX} ${b.y}, ${b.x} ${b.y}`, color: b.color, key: `${a.label}-${b.label}` });
   }
   return (
-    <div className="relative w-full flex-1 min-h-0 flex flex-col" onMouseLeave={() => setSelected(null)}>
+    <div className="ml-category-line-chart relative w-full flex-1 min-h-0 flex flex-col" onMouseLeave={() => setSelected(null)}>
       <div className="flex items-center justify-between mb-1 px-1">
         <span className="text-[11px] text-slate-600 uppercase font-semibold">Total</span>
         <span className="text-sm font-bold text-slate-300">{total} <span className="text-xs font-normal text-slate-500">{totalLabel}</span></span>
       </div>
-      <div ref={rootRef} className="flex-1 min-h-0 w-full">
+      <div ref={rootRef} className="ml-category-plot flex-1 min-h-0 w-full">
         <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block">
           {gridLines.map((grid, idx) => (
             <g key={`grid-${idx}`}>
@@ -429,7 +436,7 @@ const CategoryLineChart = ({ items, color = "#a78bfa", totalLabel = "items", onP
           })}
         </svg>
       </div>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 justify-center px-1 mt-1">
+      <div className="ml-category-legend flex flex-wrap items-center gap-x-2 gap-y-0.5 justify-center px-1 mt-1">
         {points.map((p) => {
           const isActive = activeLabel != null && String(p.label) === String(activeLabel);
           return (
@@ -457,7 +464,7 @@ const CategoryLineChart = ({ items, color = "#a78bfa", totalLabel = "items", onP
         const anchorX = xPct < 18 ? 6 : xPct > 82 ? 94 : xPct;
         const tx = xPct < 18 ? "-6%" : xPct > 82 ? "-94%" : "-50%";
         return (
-          <div className="pointer-events-none absolute z-10 min-w-[110px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-xl" style={{ left: `${anchorX}%`, top: flipBelow ? `${((selected.y + 18) / height) * 100}%` : `${Math.max(((selected.y - 46) / height) * 100, 2)}%`, transform: `translate(${tx}, ${flipBelow ? "0" : "-100%"})` }}>
+          <div className="ml-category-tooltip pointer-events-none absolute z-10 min-w-[110px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-xl" style={{ left: `${anchorX}%`, top: flipBelow ? `${((selected.y + 18) / height) * 100}%` : `${Math.max(((selected.y - 46) / height) * 100, 2)}%`, transform: `translate(${tx}, ${flipBelow ? "0" : "-100%"})` }}>
             <div className="font-semibold text-[var(--soc-text-primary)]">{selected.label}</div>
             <div className="mt-1 text-[var(--soc-text-muted)]">{selected.value} {totalLabel}</div>
           </div>
@@ -536,7 +543,7 @@ const WaveChart = ({ data, color = "#a78bfa", rangeKey = "24h", height = 220, co
   const tickCount = clamp(Math.floor(innerW / (compact ? 260 : 160)), compact ? 2 : 3, compact ? 4 : 7);
   const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
   return (
-    <div ref={rootRef} className="relative h-full w-full" onMouseLeave={() => setSelectedPoint(null)}>
+    <div ref={rootRef} className="ml-timeline-chart relative h-full w-full" onMouseLeave={() => setSelectedPoint(null)}>
       <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="block">
         {gridLines.map((grid) => (
           <g key={`grid-${grid.ratio}`}>
@@ -589,7 +596,7 @@ const WaveChart = ({ data, color = "#a78bfa", rangeKey = "24h", height = 220, co
         const anchorX = xPct < 18 ? 6 : xPct > 82 ? 94 : xPct;
         const tx = xPct < 18 ? "-6%" : xPct > 82 ? "-94%" : "-50%";
         return (
-          <div className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-lg" style={{ left: `${anchorX}%`, top: flipBelow ? `${((selectedPoint.y + 18) / height) * 100}%` : `${Math.max(((selectedPoint.y - 40) / height) * 100, 6)}%`, transform: `translate(${tx}, ${flipBelow ? "0" : "-100%"})` }}>
+          <div className="ml-timeline-tooltip pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-lg" style={{ left: `${anchorX}%`, top: flipBelow ? `${((selectedPoint.y + 18) / height) * 100}%` : `${Math.max(((selectedPoint.y - 40) / height) * 100, 6)}%`, transform: `translate(${tx}, ${flipBelow ? "0" : "-100%"})` }}>
             <div className="font-semibold text-[var(--soc-text-primary)]">{selectedPoint.value} predictions</div>
             <div className="mt-1 text-[var(--soc-text-secondary)]">{formatDetailedTimestamp(selectedPoint.start || selectedPoint.time)}</div>
           </div>
@@ -844,16 +851,14 @@ export default function MlDashboard() {
   }, [loadAll]);
 
   const uniqueOptions = useMemo(() => {
-    const agents = new Set(); const labels = new Set(); const srcs = new Set(); const dests = new Set(); const services = new Set();
-    for (const p of predictions) {
-      if (p.agent) agents.add(p.agent);
-      if (p.predictedLabel) labels.add(p.predictedLabel);
-      if (p.sourceIp) srcs.add(p.sourceIp);
-      if (p.destinationIp) dests.add(p.destinationIp);
-      if (p.service) services.add(p.service);
-    }
-    return { agents: Array.from(agents).sort(), labels: Array.from(labels).sort(), srcs: Array.from(srcs).sort(), dests: Array.from(dests).sort(), services: Array.from(services).sort() };
-  }, [predictions]);
+    return {
+      agents: getTopFilterValues(predictions, (prediction) => prediction.agent, undefined, filters.agent),
+      labels: getTopFilterValues(predictions, (prediction) => prediction.predictedLabel, undefined, filters.label),
+      srcs: getTopFilterValues(predictions, (prediction) => prediction.sourceIp, undefined, filters.sourceIp),
+      dests: getTopFilterValues(predictions, (prediction) => prediction.destinationIp, undefined, filters.destinationIp),
+      services: getTopFilterValues(predictions, (prediction) => prediction.service, undefined, filters.service),
+    };
+  }, [predictions, filters]);
 
   const filtered = useMemo(() => {
     let result = predictions.filter((p) => {
@@ -919,10 +924,10 @@ export default function MlDashboard() {
   const avgConfidence = useMemo(() => {
     let total = 0; let count = 0;
     for (const p of filtered) {
-      const c = typeof p.confidence === 'number' ? p.confidence : parseFloat(p.confidence);
-      if (!Number.isNaN(c)) { total += c; count += 1; }
+      const confidence = getConfidenceScore(p);
+      if (confidence !== null) { total += confidence; count += 1; }
     }
-    return count ? (total / count) * 100 : 0;
+    return count ? total / count : 0;
   }, [filtered]);
 
   const uniqueSourceIpCount = useMemo(() => { const set = new Set(); for (const p of filtered) set.add(p.sourceIp || "unknown"); return set.size; }, [filtered]);
@@ -939,11 +944,12 @@ export default function MlDashboard() {
     const map = new Map();
     for (const p of predictions) { const ip = p.sourceIp || 'unknown'; map.set(ip, (map.get(ip) || 0) + 1); }
     const ranked = Array.from(map.entries())
-      .sort((a, b) => b[1] - a[1])
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .slice(0, 10)
       .map(([ip, count]) => ({ value: ip, label: `${ip} (${count})` }));
     // IP dari deep-link (mis. halaman Alerts) tetap muncul walau di luar top 10.
     if (filters.sourceIp && filters.sourceIp !== "all" && !ranked.some((o) => o.value === filters.sourceIp)) {
+      ranked.splice(9, 1);
       ranked.unshift({ value: filters.sourceIp, label: `${filters.sourceIp} (filter)` });
     }
     return ranked;
@@ -1055,14 +1061,14 @@ export default function MlDashboard() {
   const topDestBarItems = topDestIps.map((ip, i) => ({ label: String(ip.label), value: Number(ip.count) || 0, color: TOP_DEST_IPS_COLORS[i % TOP_DEST_IPS_COLORS.length] }));
 
   return (
-    <div className="flex flex-col gap-4 w-full min-w-0">
+    <div className="ml-predictions-page flex flex-col gap-4 w-full min-w-0">
       {/* Header — ML Predictions (tanpa icon, sejajar File Security / FimEvents) */}
       <div className="flex flex-col min-[700px]:flex-row min-[700px]:items-center justify-between gap-3">
         <div>
           <h1 className="text-lg min-[600px]:text-xl font-bold text-[var(--soc-text-primary)]">ML Predictions</h1>
-          <p className="text-[11px] text-[var(--soc-text-muted)] mt-0.5">Real-time machine learning traffic prediction and threat classification</p>
+          <p className="text-[9px] min-[400px]:text-[10px] min-[600px]:text-[11px] text-[var(--soc-text-muted)] mt-0.5 leading-snug">Real-time machine learning traffic prediction and threat classification</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="ml-predictions-controls flex items-center gap-1.5 min-[400px]:gap-2">
           <RangeFilter
             rangeKey={timeRange}
             onRangeChange={(nextRange) => {
@@ -1070,6 +1076,7 @@ export default function MlDashboard() {
             }}
           />
           <DateRangeFilter
+            className="ml-date-range-filter"
             value={customDateRange}
             onChange={(range) => { setPage(1); setSelectedTimelinePoint(null); setCustomDateRange(range); setFilterMode("custom"); }}
             onClear={() => {
@@ -1084,7 +1091,7 @@ export default function MlDashboard() {
               setCustomDateRange(createDefaultDateRange(1));
             }}
           />
-          <div className="relative flex items-center bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)]">
+          <div className="ml-page-size-control relative flex items-center bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)]">
             <select
               value={pageSize}
               onChange={(event) => {
@@ -1123,20 +1130,20 @@ export default function MlDashboard() {
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-violet-500/10"><BarChart3 className="h-3.5 w-3.5 text-violet-400" /></div>
               <div>
-                <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">ML Predictions Timeline</h3>
-                <p className="text-[9px] text-[var(--soc-text-muted)]">Predictions over time. Click a point to filter.</p>
+                <h3 className="text-[10px] min-[400px]:text-[11px] font-semibold text-[var(--soc-text-primary)]">ML Predictions Timeline</h3>
+                <p className="text-[8px] min-[400px]:text-[9px] text-[var(--soc-text-muted)]">Predictions over time. Click a point to filter.</p>
               </div>
             </div>
             <div className="text-right min-w-0">
-              <div className="text-[11px] text-[var(--soc-text-muted)]" title={filterMode === "custom" ? `${customDateRange.start} – ${customDateRange.end}` : undefined}>{filterMode === "custom" ? formatShortRange(customDateRange.start, customDateRange.end) : `Last ${timeRange}`}</div>
-              <div className="text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatLiveTimestamp(lastUpdated)}</div>
+              <div className="text-[9px] min-[400px]:text-[11px] text-[var(--soc-text-muted)]" title={filterMode === "custom" ? `${customDateRange.start} – ${customDateRange.end}` : undefined}>{filterMode === "custom" ? formatShortRange(customDateRange.start, customDateRange.end) : `Last ${timeRange}`}</div>
+              <div className="text-[8px] min-[400px]:text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatLiveTimestamp(lastUpdated)}</div>
             </div>
           </div>
           <div className="h-[220px]" style={{ background: "transparent" }}>
             <WaveChart data={waveData} color="#a78bfa" rangeKey={timeRange} height={220} compact={isMobile} activePointKey={selectedTimelinePoint?.key ?? null} onPointSelect={handleTimelinePointSelect} />
           </div>
         </div>
-        <div ref={topAgentsPanelRef} className="chart-card animate-fadeInUp stagger-2 flex flex-col" style={{ opacity: 0 }}>
+        <div ref={topAgentsPanelRef} className="ml-top-agents-card chart-card animate-fadeInUp stagger-2 flex flex-col" style={{ opacity: 0 }}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-purple-500/10"><Users className="h-3.5 w-3.5 text-purple-400" /></div>
@@ -1147,8 +1154,8 @@ export default function MlDashboard() {
             </div>
           </div>
           <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-[9px] text-[var(--soc-text-muted)]">Unique agents</span>
-            <span className="text-[11px] font-bold text-[var(--soc-text-primary)]">{uniqueAgents}</span>
+            <span className="ml-agent-summary-label text-[9px] text-[var(--soc-text-muted)]">Unique agents</span>
+            <span className="ml-agent-summary-value text-[11px] font-bold text-[var(--soc-text-primary)]">{uniqueAgents}</span>
           </div>
           <TopAgentsCard agents={topAgents} onItemClick={handleMLAgentSummaryClick} activeName={filters.agent !== "all" ? filters.agent : null} />
         </div>
@@ -1156,7 +1163,7 @@ export default function MlDashboard() {
 
       {/* Label Distribution + Top IPs (Source/Destination tabs) — sebaris mulai md */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div className="chart-card animate-fadeInUp stagger-1 flex flex-col md:col-span-2" style={{ opacity: 0, height: topIpsH > 0 ? Math.max(topIpsH, 240) : undefined }}>
+        <div className="ml-label-distribution-card chart-card animate-fadeInUp stagger-1 flex flex-col md:col-span-2" style={{ opacity: 0, height: topIpsH > 0 ? Math.max(topIpsH, 240) : undefined }}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-violet-500/10"><LineChart className="h-3.5 w-3.5 text-violet-400" /></div>
@@ -1165,22 +1172,22 @@ export default function MlDashboard() {
                 <p className="text-[9px] text-[var(--soc-text-muted)]">Distribution of prediction labels</p>
               </div>
             </div>
-            <span className="text-[10px] font-bold text-[var(--soc-text-primary)]">{filtered.length} predictions</span>
+            <span className="ml-chart-summary-count text-[10px] font-bold text-[var(--soc-text-primary)]">{filtered.length} predictions</span>
           </div>
-          <div className="flex-1 min-h-[160px] md:min-h-0 flex flex-col">
+          <div className="ml-label-distribution-body flex-1 min-h-[160px] md:min-h-0 flex flex-col">
             <CategoryLineChart items={distribution} totalLabel="predictions" onPointClick={handleLabelSummaryClick} activeLabel={filters.label && filters.label !== "all" ? filters.label : null} />
           </div>
         </div>
         <div ref={topIpsCardRef} className="chart-card animate-fadeInUp stagger-2 flex flex-col self-start w-full lg:min-h-[320px]" style={{ opacity: 0 }}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-emerald-500/10"><Globe className={`h-3.5 w-3.5 ${ipTab === "source" ? "text-emerald-400" : "text-sky-400"}`} /></div>
-              <div>
+          <div className="flex items-start justify-between gap-2 mb-3">
+            <div className="flex min-w-0 flex-1 items-start gap-2">
+              <div className="shrink-0 p-1.5 rounded-lg bg-emerald-500/10"><Globe className={`h-3.5 w-3.5 ${ipTab === "source" ? "text-emerald-400" : "text-sky-400"}`} /></div>
+              <div className="min-w-0">
                 <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Top 5 IPs</h3>
-                <p className="text-[9px] text-[var(--soc-text-muted)]">Most frequent source / destination IPs</p>
+                <p className="text-[9px] leading-tight text-[var(--soc-text-muted)]">Most frequent source / destination IPs</p>
               </div>
             </div>
-            <span className={`text-[10px] font-bold ${ipTab === "source" ? "text-emerald-400" : "text-sky-400"}`}>{(ipTab === "source" ? topSourceBarItems : topDestBarItems).length} IPs</span>
+            <span className={`ml-chart-summary-count shrink-0 whitespace-nowrap text-[10px] font-bold ${ipTab === "source" ? "text-emerald-400" : "text-sky-400"}`}>{(ipTab === "source" ? topSourceBarItems : topDestBarItems).length} IPs</span>
           </div>
           <div className="flex flex-wrap items-center gap-1.5 mb-3">
             {[
@@ -1205,6 +1212,7 @@ export default function MlDashboard() {
             emptyLabel={ipTab === "source" ? "No source IP data" : "No destination IP data"}
             onSelect={handleIPSummaryClick}
             activeValue={(ipTab === "source" ? filters.sourceIp : filters.destinationIp) !== "all" ? (ipTab === "source" ? filters.sourceIp : filters.destinationIp) : null}
+            listClassName={(ipTab === "source" ? topSourceBarItems : topDestBarItems).length === 5 ? "ml-bar-list--full" : ""}
           />
         </div>
       </div>
@@ -1212,10 +1220,10 @@ export default function MlDashboard() {
       {/* Logs Table — search/filter disamakan dengan FileSecurityScanner / FimEvents */}
       <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl shadow-lg h-auto overflow-hidden">
         <div ref={predictionsTableRef} className="px-3 py-2.5 md:px-4 md:py-3 border-b border-[var(--soc-border)] bg-[var(--soc-card)]">
-          <div className="flex gap-2 flex-wrap attack-logs-search soc-filter-row items-center">
-            <div className="flex-1 min-w-0 basis-full sm:basis-0 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-500" />
-              <input type="text" value={searchQuery} onChange={(e) => { setPage(1); setSearchQuery(e.target.value); }} placeholder="Search by source IP, destination IP, service, or agent..." className="w-full pl-10 pr-4 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500" />
+          <div className="ml-filter-toolbar flex gap-1.5 min-[400px]:gap-2 flex-nowrap attack-logs-search soc-filter-row items-center overflow-x-auto">
+            <div className="ml-predictions-search-container flex-1 min-w-0 basis-0 relative">
+              <Search className="ml-predictions-search-icon absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-500" />
+              <input type="text" value={searchQuery} onChange={(e) => { setPage(1); setSearchQuery(e.target.value); }} placeholder="Search by source IP, destination IP, service, or agent..." className="ml-predictions-search-input w-full pl-10 pr-4 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500" />
             </div>
             <MlCombinedFilter
               labelFilter={filters.label} onLabelChange={(v) => { setPage(1); setFilters((s) => ({ ...s, label: v })); }} labelOptions={uniqueOptions.labels}
@@ -1238,28 +1246,28 @@ export default function MlDashboard() {
               timelineFilterLabel={selectedTimelinePoint ? formatTimelineBucketLabel(selectedTimelinePoint, timeRange) : ""}
               onClearTimelineFilter={() => { setSelectedTimelinePoint(null); setPage(1); }}
             />
-            <ExportCsvButton accent="violet" onClick={handleExportCsv} />
+            <ExportCsvButton accent="violet" onClick={handleExportCsv} className="ml-export-csv-button" />
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1000px] table-fixed text-[10px] md:text-[11px] text-left">
+          <table className="ml-predictions-log-table w-full min-w-[1000px] table-fixed text-[10px] md:text-[11px] text-left">
             <colgroup>
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "9%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "10%" }} />
+              <col style={{ width: "11%" }} />
               <col style={{ width: "8%" }} />
-              <col style={{ width: "10%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "9%" }} />
               <col style={{ width: "7%" }} />
-              <col style={{ width: "7%" }} />
-              <col style={{ width: "12%" }} />
-              <col />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "24%" }} />
+              <col style={{ width: "11%" }} />
             </colgroup>
             <thead>
               <tr className="border-b border-slate-800 bg-slate-800/70">
                 {["time", "agent", "label", "source ip", "country", "destination ip", "service", "confidence", "http uri", "http post body"].map((h) => (
-                  <th key={h} className={`py-2 md:py-3 lg:py-2 text-[9px] md:text-[11px] lg:text-[10px] font-semibold text-slate-400 uppercase ${(h === "http uri" || h === "http post body") ? "px-7 md:px-7" : "px-1.5 md:px-2"}`}>{h}</th>
+                  <th key={h} className={`py-2 md:py-3 lg:py-2 text-[9px] md:text-[11px] lg:text-[10px] font-semibold text-slate-400 uppercase ${(h === "http uri" || h === "http post body") ? "px-3 md:px-4" : "px-1.5 md:px-2"}`}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -1275,16 +1283,16 @@ export default function MlDashboard() {
                 </tr>
               ) : pageItems.map((p, idx) => (
                 <tr key={p.id || p.zeekUid || idx} className={`border-b border-slate-800/60 transition-all duration-150 hover:bg-purple-500/10 hover:shadow-[inset_3px_0_0_0_#a855f7] ${idx % 2 !== 0 ? 'bg-[var(--soc-zebra)]' : ''}`}>
-                  <td className="px-1.5 md:px-2 py-1.5 md:py-3 lg:py-2 text-slate-500 text-[10px] md:text-[11px] lg:text-[10px] whitespace-nowrap overflow-hidden text-ellipsis" title={formatTimeFull(p.timestamp)}>{formatTime(p.timestamp)}</td>
-                  <td className="px-1.5 md:px-2 py-1.5 md:py-3 lg:py-2 text-sky-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-full overflow-hidden text-ellipsis whitespace-nowrap" title={p.agent || "-"}>{p.agent || '-'}</div></td>
-                  <td className="px-1.5 md:px-2 py-1.5 md:py-3 lg:py-2 whitespace-nowrap"><PredictionBadge label={p.predictedLabel} /></td>
-                  <td className="px-1.5 md:px-2 py-1.5 md:py-3 lg:py-2 text-emerald-400 font-mono text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-full overflow-hidden text-ellipsis whitespace-nowrap" title={p.sourceIp || "-"}>{p.sourceIp || '-'}</div></td>
-                  <td className="px-1.5 md:px-2 py-1.5 md:py-3 lg:py-2 whitespace-nowrap"><CountryFlag ip={p.sourceIp} entry={ipGeo.get(p.sourceIp)} /></td>
-                  <td className="px-1.5 md:px-2 py-1.5 md:py-3 lg:py-2 text-violet-400 font-mono text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-full overflow-hidden text-ellipsis whitespace-nowrap" title={p.destinationIp || "-"}>{p.destinationIp || '-'}</div></td>
-                  <td className="px-1.5 md:px-2 py-1.5 md:py-3 lg:py-2 text-slate-300 text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-full overflow-hidden text-ellipsis whitespace-nowrap" title={p.service || "-"}>{p.service || '-'}</div></td>
-                  <td className="px-1.5 md:px-2 py-1.5 md:py-3 lg:py-2 whitespace-nowrap"><ConfidenceBadge score={p.confidence} label={p.predictedLabel} /></td>
-                  <td className="px-7 md:px-7 py-1.5 md:py-3 lg:py-2 text-slate-400 font-mono text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-[330px] overflow-hidden text-ellipsis whitespace-nowrap" title={p.httpUri || "-"}>{p.httpUri || '-'}</div></td>
-                  <td className="px-7 md:px-7 py-1.5 md:py-3 lg:py-2 text-amber-300/90 font-mono text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-[330px] overflow-hidden text-ellipsis whitespace-nowrap" title={p.httpPostBody || "-"}>{p.httpPostBody || '-'}</div></td>
+                  <td className="px-1.5 md:px-2 py-3 md:py-5 lg:py-4 text-slate-500 text-[10px] md:text-[11px] lg:text-[10px] whitespace-nowrap overflow-hidden text-ellipsis" title={formatTimeFull(p.timestamp)}>{formatTime(p.timestamp)}</td>
+                  <td className="px-1.5 md:px-2 py-3 md:py-5 lg:py-4 text-sky-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-full overflow-hidden text-ellipsis whitespace-nowrap" title={p.agent || "-"}>{p.agent || '-'}</div></td>
+                  <td className="px-1.5 md:px-2 py-3 md:py-5 lg:py-4 whitespace-nowrap"><PredictionBadge label={p.predictedLabel} /></td>
+                  <td className="px-1.5 md:px-2 py-3 md:py-5 lg:py-4 text-emerald-400 font-mono text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-full overflow-hidden text-ellipsis whitespace-nowrap" title={p.sourceIp || "-"}>{p.sourceIp || '-'}</div></td>
+                  <td className="px-1.5 md:px-2 py-3 md:py-5 lg:py-4 whitespace-nowrap"><CountryFlag ip={p.sourceIp} entry={ipGeo.get(p.sourceIp)} /></td>
+                  <td className="px-1.5 md:px-2 py-3 md:py-5 lg:py-4 text-violet-400 font-mono text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-full overflow-hidden text-ellipsis whitespace-nowrap" title={p.destinationIp || "-"}>{p.destinationIp || '-'}</div></td>
+                  <td className="px-1.5 md:px-2 py-3 md:py-5 lg:py-4 text-slate-300 text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-full overflow-hidden text-ellipsis whitespace-nowrap" title={p.service || "-"}>{p.service || '-'}</div></td>
+                  <td className="px-1.5 md:px-2 py-3 md:py-5 lg:py-4 whitespace-nowrap"><ConfidenceBadge score={p.confidence} label={p.predictedLabel} /></td>
+                  <td className="px-3 md:px-4 py-3 md:py-5 lg:py-4 text-slate-400 font-mono text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-full overflow-hidden text-ellipsis whitespace-nowrap" title={p.httpUri || "-"}>{p.httpUri || '-'}</div></td>
+                  <td className="px-3 md:px-4 py-3 md:py-5 lg:py-4 text-amber-300/90 font-mono text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-full overflow-hidden text-ellipsis whitespace-nowrap" title={p.httpPostBody || "-"}>{p.httpPostBody || '-'}</div></td>
                 </tr>
               ))}
             </tbody>
@@ -1292,9 +1300,9 @@ export default function MlDashboard() {
         </div>
 
         {filtered.length > 0 && (
-          <div className="border-t border-slate-800 bg-slate-900/50 px-2 md:px-4 py-3">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2 md:gap-0">
-              <div className="text-[10px] md:text-[11px] font-mono text-slate-500">
+          <div className="ml-pagination-footer border-t border-slate-800 bg-slate-900/50 px-2 md:px-4 py-3">
+            <div className="ml-pagination-layout flex flex-col md:flex-row items-start md:items-center justify-between gap-2 md:gap-0">
+              <div className="ml-pagination-summary text-[10px] md:text-[11px] font-mono text-slate-500">
                 <span className="hidden md:inline">SHOWING </span>
                 <span className="font-bold text-sky-400">{filtered.length === 0 ? 0 : (activePage - 1) * pageSize + 1}</span>
                 <span className="hidden md:inline"> - </span><span className="md:hidden">-</span>
@@ -1303,7 +1311,7 @@ export default function MlDashboard() {
                 <span className="font-bold text-sky-400">{filtered.length}</span>
                 <span className="hidden md:inline"> PREDICTIONS</span>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="ml-pagination-controls flex flex-wrap items-center gap-2">
                 <button disabled={activePage === 1 || loading} onClick={() => { setPage(1); scrollPredictionsTableIntoView(); }} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">FIRST</button>
                 <button disabled={activePage === 1 || loading} onClick={() => { setPage(Math.max(1, activePage - 1)); scrollPredictionsTableIntoView(); }} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">PREV</button>
                 <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400"><span className="hidden md:inline">PAGE </span><span className="text-[var(--soc-text-primary)]">{activePage}</span> / {totalPages}</span>

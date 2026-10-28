@@ -14,6 +14,7 @@ import {
   toDateTimeLocalValue,
 } from "../utils/dateRange";
 import { adaptiveLeftGutter } from "../utils/chartAxis";
+import { getTopFilterValues } from "../utils/topFilterValues";
 import { InlineEmptyState } from "../components/EmptyState";
 import {
   AlertTriangle,
@@ -410,7 +411,7 @@ const WaveChart = ({ data, color = "#ef4444", rangeKey = "24h", height = 80, com
         const anchorX = xPct < 18 ? 6 : xPct > 82 ? 94 : xPct;
         const tx = xPct < 18 ? "-6%" : xPct > 82 ? "-94%" : "-50%";
         return (
-          <div className="pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-lg" style={{ left: `${anchorX}%`, top: flipBelow ? `${((selectedPoint.y + 18) / height) * 100}%` : `${Math.max(((selectedPoint.y - 40) / height) * 100, 6)}%`, transform: `translate(${tx}, ${flipBelow ? "0" : "-100%"})` }}>
+          <div className="fss-timeline-tooltip pointer-events-none absolute z-10 min-w-[120px] max-w-[220px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-lg" style={{ left: `${anchorX}%`, top: flipBelow ? `${((selectedPoint.y + 18) / height) * 100}%` : `${Math.max(((selectedPoint.y - 40) / height) * 100, 6)}%`, transform: `translate(${tx}, ${flipBelow ? "0" : "-100%"})` }}>
             <div className="font-semibold text-[var(--soc-text-primary)]">{selectedPoint.value} detections</div>
             <div className="mt-1 text-[var(--soc-text-secondary)]">{formatDetailedTimestamp(selectedPoint.start || selectedPoint.time)}</div>
           </div>
@@ -422,17 +423,17 @@ const WaveChart = ({ data, color = "#ef4444", rangeKey = "24h", height = 80, com
 
 // ── KPI Card (kpi-modern seperti FimEvents / MainDashboard) ────────────────
 const KPICard = ({ label, value, icon: Icon, color, desc, loading, index = 0 }) => (
-  <div className={`kpi-modern animate-fadeInUp stagger-${index + 1}`} style={{ opacity: 0 }}>
+  <div className={`fss-kpi-card kpi-modern animate-fadeInUp stagger-${index + 1}`} style={{ opacity: 0 }}>
     <div className="flex items-center justify-between mb-3">
-      <span className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">{label}</span>
+      <span className="fss-kpi-label text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">{label}</span>
       <div className={`p-2 rounded-lg ${color} bg-opacity-10`}>
         <Icon className={`h-4 w-4 ${color}`} />
       </div>
     </div>
-    <div className={`text-xl font-bold ${color} mb-1`}>
+    <div className={`fss-kpi-value text-xl font-bold ${color} mb-1`}>
       {loading ? <div className="skeleton h-6 w-16"></div> : value}
     </div>
-    {desc && <div className="text-[9px] text-[var(--soc-text-muted)]">{desc}</div>}
+    {desc && <div className="fss-kpi-description text-[9px] text-[var(--soc-text-muted)]">{desc}</div>}
   </div>
 );
 
@@ -479,28 +480,28 @@ const FileSecCombinedFilter = ({ agentFilter, onAgentChange, agentOptions = [], 
   };
   const activeCount = [agentFilter !== "all", typeFilter !== "all", severityFilter !== "all", Boolean(dateFilterLabel), Boolean(timelineFilterLabel), Boolean(folderFilterLabel), Boolean(fileFilterLabel)].filter(Boolean).length;
   const Section = ({ label, value, allLabel, options, onChange }) => (
-    <div className="px-3 py-2">
-      <div className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">{label}</div>
+    <div className="fss-filter-section px-3 py-2">
+      <div className="fss-filter-section-title text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">{label}</div>
       <div className="flex flex-wrap gap-1">
-        <button onClick={() => onChange("all")} className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${value === "all" ? "bg-red-500/20 text-red-300 border border-red-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}>{allLabel}</button>
+        <button onClick={() => onChange("all")} className={`fss-filter-option px-2 py-1 rounded text-[10px] font-medium transition-colors ${value === "all" ? "bg-red-500/20 text-red-300 border border-red-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}>{allLabel}</button>
         {options.map((opt) => {
           const { value: optVal, label: optLabel } = normalizeOption(opt);
-          return <button key={optVal} onClick={() => onChange(optVal)} className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${value === optVal ? "bg-red-500/20 text-red-300 border border-red-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}>{optLabel}</button>;
+          return <button key={optVal} onClick={() => onChange(optVal)} className={`fss-filter-option px-2 py-1 rounded text-[10px] font-medium transition-colors ${value === optVal ? "bg-red-500/20 text-red-300 border border-red-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}>{optLabel}</button>;
         })}
       </div>
     </div>
   );
   return (
-    <div ref={containerRef} className="relative">
-      <button ref={buttonRef} type="button" onClick={() => setOpen((c) => !c)} className="flex items-center gap-2 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-3 pr-2.5 text-[11px] text-[var(--soc-text-primary)] focus:outline-none focus:ring-1 focus:ring-red-500/50 transition-colors hover:bg-[var(--soc-elevated)]">
+    <div ref={containerRef} className="fss-table-filter relative">
+      <button ref={buttonRef} type="button" onClick={() => setOpen((c) => !c)} className="fss-table-filter-button flex items-center gap-2 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-3 pr-2.5 text-[11px] text-[var(--soc-text-primary)] focus:outline-none focus:ring-1 focus:ring-red-500/50 transition-colors hover:bg-[var(--soc-elevated)]">
         <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--soc-text-muted)]" />
         <span className="font-medium">Filters</span>
         {activeCount > 0 && <span className="flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-red-500/20 text-red-300 text-[9px] font-bold">{activeCount}</span>}
         <ChevronDown className={`h-3.5 w-3.5 text-[var(--soc-text-muted)] transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="fixed z-[9999] w-[280px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] shadow-2xl" style={{ top: coords.top, left: coords.left }}>
-          <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--soc-border)]">
+        <div className="fss-filter-popup fixed z-[9999] w-[280px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] shadow-2xl" style={{ top: coords.top, left: coords.left }}>
+          <div className="fss-filter-popup-header flex items-center justify-between px-3 py-2 border-b border-[var(--soc-border)]">
             <span className="text-[10px] font-semibold text-[var(--soc-text-primary)]">Filter Options</span>
             {activeCount > 0 && <button onClick={() => { onAgentChange("all"); onTypeChange("all"); onSeverityChange("all"); if (dateFilterLabel && onResetDateFilter) onResetDateFilter(); if (onClearTimelineFilter) onClearTimelineFilter(); if (onClearFolderFilter) onClearFolderFilter(); if (onClearFileFilter) onClearFileFilter(); }} className="text-[9px] font-semibold text-red-400 hover:text-red-300 transition-colors">Clear all</button>}
           </div>
@@ -535,7 +536,7 @@ const FileSecCombinedFilter = ({ agentFilter, onAgentChange, agentOptions = [], 
             </div>
           )}
           {dateFilterLabel && <div className="border-b border-[var(--soc-border)] px-3 py-2"><div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--soc-text-muted)]">Timeline date filter</div><div className="mt-1"><span className="block min-w-0 truncate rounded border border-red-500/30 bg-red-500/20 px-2 py-1 text-[10px] font-medium text-red-300" title={dateFilterLabel}>{dateFilterLabel}</span></div></div>}
-          <div className="divide-y divide-[var(--soc-border)] max-h-[360px] overflow-y-auto">
+          <div className="fss-filter-options-list divide-y divide-[var(--soc-border)] max-h-[360px] overflow-y-auto">
             <Section label="Agent" value={agentFilter} allLabel="All agents" options={agentOptions} onChange={onAgentChange} />
             <Section label="Type" value={typeFilter} allLabel="All types" options={typeOptions} onChange={onTypeChange} />
             <Section label="Severity" value={severityFilter} allLabel="All severities" options={severityOptions} onChange={onSeverityChange} />
@@ -547,7 +548,7 @@ const FileSecCombinedFilter = ({ agentFilter, onAgentChange, agentOptions = [], 
 };
 
 // ── Bar list (severity / folders / etc) seperti FimEvents ──────────────────
-const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue = null }) => {
+const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue = null, listClassName = "" }) => {
   if (!items || items.length === 0) {
     return (
       <div className="flex-1 w-full min-w-0 max-w-full flex items-center justify-center">
@@ -558,7 +559,7 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
   const maxValue = Math.max(...items.map((d) => d.value), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
   return (
-    <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
+    <div className={`fss-bar-list top5-fixed w-full min-w-0 max-w-full space-y-1.5 ${listClassName}`}>
       {items.map((item, i) => {
         const color = item.color || CHART_COLORS[i % CHART_COLORS.length];
         const label = item.label;
@@ -568,21 +569,21 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
           <>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>{i + 1}</span>
-                <span className="min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)]" title={label}>{label}</span>
+                <span className="fss-bar-list-rank w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>{i + 1}</span>
+                <span className="fss-bar-list-label min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)]" title={label}>{label}</span>
               </div>
-              <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(value)}</span>
+              <span className="fss-bar-list-value min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(value)}</span>
             </div>
-            <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
+            <div className="fss-bar-list-progress mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
               <div className="h-full rounded-full transition-all duration-500" title={`${label}: ${value}`} style={{ width: `${(value / maxValue) * 100}%`, backgroundColor: color }} />
             </div>
           </>
         );
         if (!onSelect) {
-          return <div key={label} className="w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">{inner}</div>;
+          return <div key={label} className="fss-bar-list-item w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">{inner}</div>;
         }
         return (
-          <button key={label} type="button" onClick={() => onSelect(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg text-left ${isActive ? "bg-red-500/10 ring-1 ring-red-500/30" : ""}`}>
+          <button key={label} type="button" onClick={() => onSelect(item)} className={`fss-bar-list-item w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg text-left ${isActive ? "bg-red-500/10 ring-1 ring-red-500/30" : ""}`}>
             {inner}
           </button>
         );
@@ -602,7 +603,7 @@ const TopAgentsCard = ({ agents, onItemClick = null, activeName = null }) => {
   const maxCount = Math.max(...agents.map((a) => Number(a.count) || 0), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
   return (
-    <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
+    <div className={`fss-top-agents-list top5-fixed w-full min-w-0 max-w-full space-y-1.5${agents.length === 5 ? " fss-top-agents-list--full" : ""}`}>
       {agents.map((item, i) => {
         const color = CHART_COLORS[i % CHART_COLORS.length];
         const label = item.name || "Unknown agent";
@@ -612,21 +613,21 @@ const TopAgentsCard = ({ agents, onItemClick = null, activeName = null }) => {
           <>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>{i + 1}</span>
-                <span className="min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)] font-mono" title={label}>{label}</span>
+                <span className="fss-top-agent-rank w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>{i + 1}</span>
+                <span className="fss-top-agent-name min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)] font-mono" title={label}>{label}</span>
               </div>
-              <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(value)}</span>
+              <span className="fss-top-agent-count min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(value)}</span>
             </div>
-            <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
+            <div className="fss-top-agent-progress mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
               <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(value / maxCount) * 100}%`, backgroundColor: color }} />
             </div>
           </>
         );
         if (!onItemClick) {
-          return <div key={label} className="w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">{inner}</div>;
+          return <div key={label} className="fss-top-agent-item w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">{inner}</div>;
         }
         return (
-          <button key={label} type="button" onClick={() => onItemClick(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg text-left ${isActive ? "bg-red-500/10 ring-1 ring-red-500/30" : ""}`}>
+          <button key={label} type="button" onClick={() => onItemClick(item)} className={`fss-top-agent-item w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg text-left ${isActive ? "bg-red-500/10 ring-1 ring-red-500/30" : ""}`}>
             {inner}
           </button>
         );
@@ -637,13 +638,13 @@ const TopAgentsCard = ({ agents, onItemClick = null, activeName = null }) => {
 
 const RiskIndicator = ({ severity }) => {
   const sev = normalizeSeverity(severity, "INFO");
-  return <span className={`px-2 py-0.5 rounded-full text-[9px] md:text-[10px] font-bold ${severityColors[sev]}`}>{sev}</span>;
+  return <span className={`fss-detail-risk-indicator px-2 py-0.5 rounded-full text-[9px] md:text-[10px] font-bold ${severityColors[sev]}`}>{sev}</span>;
 };
 
 const RiskScoreBadge = ({ score }) => {
   const value = Number(score || 0);
   const tone = value >= 75 ? "text-red-300 bg-red-500/15 border-red-500/30" : value >= 40 ? "text-amber-300 bg-amber-500/15 border-amber-500/30" : "text-emerald-300 bg-emerald-500/15 border-emerald-500/30";
-  return <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${tone}`}>{value}%</span>;
+  return <span className={`fss-detail-risk-score inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${tone}`}>{value}%</span>;
 };
 
 const PaginationControls = ({ pagination, page, pageSize, loading, onPageChange }) => {
@@ -653,27 +654,25 @@ const PaginationControls = ({ pagination, page, pageSize, loading, onPageChange 
   const start = total === 0 ? 0 : (page - 1) * limit + 1;
   const end = Math.min(page * limit, total);
   return (
-    <div className="border-t border-slate-800 bg-slate-900/50 px-4 py-3">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-          <div className="text-[10px] md:text-[11px] font-mono text-slate-500">
-            <span className="hidden md:inline">SHOWING </span>
-            <span className="font-bold text-sky-400">{start}</span>
-            <span className="hidden md:inline"> - </span>
-            <span className="md:hidden">-</span>
-            <span className="font-bold text-sky-400">{end}</span>
-            <span className="hidden md:inline"> OF </span>
-            <span className="md:hidden"> / </span>
-            <span className="font-bold text-sky-400">{total}</span>
-            <span className="hidden md:inline"> RECORDS</span>
-          </div>
+    <div className="fss-pagination-footer border-t border-slate-800 bg-slate-900/50 px-4 py-3">
+      <div className="fss-pagination-layout flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="fss-pagination-summary text-[10px] md:text-[11px] font-mono text-slate-500">
+          <span className="hidden md:inline">SHOWING </span>
+          <span className="font-bold text-sky-400">{start}</span>
+          <span className="hidden md:inline"> - </span>
+          <span className="md:hidden">-</span>
+          <span className="font-bold text-sky-400">{end}</span>
+          <span className="hidden md:inline"> OF </span>
+          <span className="md:hidden"> / </span>
+          <span className="font-bold text-sky-400">{total}</span>
+          <span className="hidden md:inline"> RECORDS</span>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button disabled={page === 1 || loading} onClick={() => onPageChange(1)} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"><span className="hidden md:inline">FIRST</span><span className="md:hidden">«</span></button>
-          <button disabled={page === 1 || loading} onClick={() => onPageChange(Math.max(page - 1, 1))} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"><span className="hidden md:inline">← PREV</span><span className="md:hidden">‹</span></button>
+        <div className="fss-pagination-controls flex flex-wrap items-center gap-2">
+          <button disabled={page === 1 || loading} onClick={() => onPageChange(1)} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">FIRST</button>
+          <button disabled={page === 1 || loading} onClick={() => onPageChange(Math.max(page - 1, 1))} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">PREV</button>
           <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400"><span className="hidden md:inline">PAGE </span><span className="text-[var(--soc-text-primary)]">{page}</span> / {totalPages}</span>
-          <button disabled={page >= totalPages || loading} onClick={() => onPageChange(Math.min(page + 1, totalPages))} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"><span className="hidden md:inline">NEXT →</span><span className="md:hidden">›</span></button>
-          <button disabled={page >= totalPages || loading} onClick={() => onPageChange(totalPages)} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"><span className="hidden md:inline">LAST</span><span className="md:hidden">»</span></button>
+          <button disabled={page >= totalPages || loading} onClick={() => onPageChange(Math.min(page + 1, totalPages))} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">NEXT</button>
+          <button disabled={page >= totalPages || loading} onClick={() => onPageChange(totalPages)} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">LAST</button>
         </div>
       </div>
     </div>
@@ -838,14 +837,11 @@ const FileSecurityScanner = () => {
   }, [isMobile, viewportWidth]);
 
   const filterOptions = useMemo(() => {
-    const agents = new Set();
-    const types = new Set();
-    files.forEach((file) => {
-      if (file.agentName && file.agentName !== "-") agents.add(String(file.agentName));
-      if (file.fileType && file.fileType !== "-") types.add(String(file.fileType));
-    });
-    return { agents: Array.from(agents).sort((a,b)=>a.localeCompare(b)), types: Array.from(types).sort((a,b)=>a.localeCompare(b)) };
-  }, [files]);
+    return {
+      agents: getTopFilterValues(files, (file) => file.agentName, undefined, filterAgent),
+      types: getTopFilterValues(files, (file) => file.fileType, undefined, filterType),
+    };
+  }, [files, filterAgent, filterType]);
 
   const filteredFiles = useMemo(() => {
     let result = files;
@@ -965,14 +961,14 @@ const FileSecurityScanner = () => {
   const avgRisk = files.length ? Math.round(files.reduce((s,f)=>s+(Number(f.riskScore)||0),0)/files.length) : 0;
 
   return (
-    <div className="flex flex-col gap-4 w-full min-w-0">
+    <div className="file-security-scanner-page flex flex-col gap-4 w-full min-w-0">
       {/* Header — File Security Scanner (tanpa icon, sejajar FimEvents) */}
       <div className="flex flex-col min-[700px]:flex-row min-[700px]:items-center justify-between gap-3">
         <div>
           <h1 className="text-lg min-[600px]:text-xl font-bold text-[var(--soc-text-primary)]">File Security Scanner</h1>
-          <p className="text-[11px] text-[var(--soc-text-muted)] mt-0.5">Real-time file content scanning and suspicious file detection</p>
+          <p className="fss-page-subtitle text-[11px] text-[var(--soc-text-muted)] mt-0.5">Real-time file content scanning and suspicious file detection</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="fss-page-controls flex items-center gap-2">
           <RangeFilter
             rangeKey={rangeKey}
             onRangeChange={(nextRange) => {
@@ -985,6 +981,7 @@ const FileSecurityScanner = () => {
             }}
           />
           <DateRangeFilter
+            className="fss-date-range-filter"
             value={customDateRange}
             onChange={(range) => { setPage(1); setSelectedTimelinePoint(null); setCustomDateRange(range); setFilterMode("custom"); }}
             onClear={() => {
@@ -999,7 +996,7 @@ const FileSecurityScanner = () => {
               setCustomDateRange(createDefaultDateRange(1));
             }}
           />
-          <div className="relative flex items-center bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)]">
+          <div className="fss-page-size-control relative flex items-center bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)]">
             <select
               value={pageSize}
               onChange={(event) => {
@@ -1039,16 +1036,16 @@ const FileSecurityScanner = () => {
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-red-500/10"><Activity className="h-3.5 w-3.5 text-red-400" /></div>
               <div>
-                <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Detection Timeline</h3>
-                <p className="text-[9px] text-[var(--soc-text-muted)]">File scan detections over time. Click a point to filter.</p>
+                <h3 className="text-[10px] min-[400px]:text-[11px] font-semibold text-[var(--soc-text-primary)]">Detection Timeline</h3>
+                <p className="text-[8px] min-[400px]:text-[9px] text-[var(--soc-text-muted)]">File scan detections over time. Click a point to filter.</p>
               </div>
             </div>
             <div className="text-right min-w-0">
-              <div className="text-[11px] text-[var(--soc-text-muted)]">{filterMode === "custom" ? `${new Date(customDateRange.start).toLocaleDateString("en-US", { month: "short", day: "2-digit" })} – ${new Date(customDateRange.end).toLocaleDateString("en-US", { month: "short", day: "2-digit" })}` : `Last ${rangeKey}`}</div>
-              <div className="text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatLiveTimestamp(lastUpdated)}</div>
+              <div className="text-[9px] min-[400px]:text-[11px] text-[var(--soc-text-muted)]">{filterMode === "custom" ? `${new Date(customDateRange.start).toLocaleDateString("en-US", { month: "short", day: "2-digit" })} – ${new Date(customDateRange.end).toLocaleDateString("en-US", { month: "short", day: "2-digit" })}` : `Last ${rangeKey}`}</div>
+              <div className="text-[8px] min-[400px]:text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatLiveTimestamp(lastUpdated)}</div>
             </div>
           </div>
-          <div className="h-[220px]" style={{ background: "transparent" }}>
+          <div className="fss-detection-timeline h-[220px]" style={{ background: "transparent" }}>
             <WaveChart data={timeline} color="#ef4444" rangeKey={rangeKey} height={220} compact={isMobile} activePointKey={selectedTimelinePoint?.key ?? null} onPointSelect={handleTimelinePointSelect} />
           </div>
         </div>
@@ -1063,8 +1060,8 @@ const FileSecurityScanner = () => {
             </div>
           </div>
           <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-[9px] text-[var(--soc-text-muted)]">Unique agents</span>
-            <span className="text-[11px] font-bold text-[var(--soc-text-primary)]">{analytics.uniqueAgents}</span>
+            <span className="fss-agent-summary-label text-[9px] text-[var(--soc-text-muted)]">Unique agents</span>
+            <span className="fss-agent-summary-value text-[11px] font-bold text-[var(--soc-text-primary)]">{analytics.uniqueAgents}</span>
           </div>
           <TopAgentsCard agents={analytics.topAgents} onItemClick={handleAgentSummaryClick} activeName={filterAgent !== "all" ? filterAgent : null} />
         </div>
@@ -1081,9 +1078,15 @@ const FileSecurityScanner = () => {
                 <p className="text-[9px] text-[var(--soc-text-muted)]">Scanned files grouped by detection severity</p>
               </div>
             </div>
-            <span className="text-[10px] font-bold text-[var(--soc-text-primary)]">{files.length} files</span>
+            <span className="fss-chart-summary-count text-[10px] font-bold text-[var(--soc-text-primary)]">{files.length} files</span>
           </div>
-          <BarList items={analytics.severities} emptyLabel="No severity data" onSelect={handleSeveritySummaryClick} activeValue={filterSeverity !== "all" ? filterSeverity : null} />
+          <BarList
+            items={analytics.severities}
+            emptyLabel="No severity data"
+            onSelect={handleSeveritySummaryClick}
+            activeValue={filterSeverity !== "all" ? filterSeverity : null}
+            listClassName={analytics.severities.length === 5 ? "fss-bar-list--full" : ""}
+          />
         </div>
         <div className="chart-card animate-fadeInUp stagger-2 flex flex-col" style={{ opacity: 0 }}>
           <div className="flex items-center justify-between mb-3">
@@ -1094,9 +1097,15 @@ const FileSecurityScanner = () => {
                 <p className="text-[9px] text-[var(--soc-text-muted)]">Folders with the most files scanned</p>
               </div>
             </div>
-            <span className="text-[10px] font-bold text-violet-400">{analytics.topFolders?.length || 0} folders</span>
+            <span className="fss-chart-summary-count text-[10px] font-bold text-violet-400">{analytics.topFolders?.length || 0} folders</span>
           </div>
-          <BarList items={analytics.topFolders} emptyLabel="No folder data" onSelect={handleFolderSummaryClick} activeValue={folderFilter !== "all" ? folderFilter : null} />
+          <BarList
+            items={analytics.topFolders}
+            emptyLabel="No folder data"
+            onSelect={handleFolderSummaryClick}
+            activeValue={folderFilter !== "all" ? folderFilter : null}
+            listClassName={analytics.topFolders.length === 5 ? "fss-bar-list--full" : ""}
+          />
         </div>
         <div className="chart-card animate-fadeInUp stagger-3 flex flex-col" style={{ opacity: 0 }}>
           <div className="flex items-center justify-between mb-3">
@@ -1107,10 +1116,10 @@ const FileSecurityScanner = () => {
                 <p className="text-[9px] text-[var(--soc-text-muted)]">Most suspicious files by findings</p>
               </div>
             </div>
-            <span className="text-[10px] font-bold text-red-400">{analytics.topSuspiciousFiles?.length || 0} files</span>
+            <span className="fss-chart-summary-count text-[10px] font-bold text-red-400">{Math.min(analytics.topSuspiciousFiles?.length || 0, 5)} files</span>
           </div>
           {(() => {
-            const items = analytics.topSuspiciousFiles || [];
+            const items = (analytics.topSuspiciousFiles || []).slice(0, 5);
             if (!items.length) return (
               <div className="top5-fixed-wrap w-full min-w-0 max-w-full flex items-center justify-center">
                 <InlineEmptyState title="No suspicious file data" description="No suspicious file activity for the selected time range." />
@@ -1118,21 +1127,21 @@ const FileSecurityScanner = () => {
             );
             const maxV = Math.max(...items.map((d) => d.value), 1);
             return (
-              <div className="w-full min-w-0 max-w-full space-y-1.5">
+              <div className={`fss-top-suspicious-files-list w-full min-w-0 max-w-full space-y-1.5${items.length === 5 ? " fss-top-suspicious-files-list--full" : ""}`}>
                 {items.map((item, i) => {
                     const isActive = fileFilter !== "all" && String(item.label) === String(fileFilter);
                     const inner = (
                       <>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2 min-w-0 flex-1">
-                            <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold shrink-0" style={{ color: item.color }}>{i + 1}</span>
-                            <span className="min-w-0 max-w-full text-[10px] font-medium text-[var(--soc-text-secondary)] font-mono break-all leading-snug line-clamp-2" title={item.fullLabel || item.label}>{item.label}</span>
+                            <span className="fss-top-suspicious-file-rank w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold shrink-0" style={{ color: item.color }}>{i + 1}</span>
+                            <span className="fss-top-suspicious-file-name min-w-0 max-w-full text-[10px] font-medium text-[var(--soc-text-secondary)] font-mono break-all leading-snug line-clamp-2" title={item.fullLabel || item.label}>{item.label}</span>
                           </div>
-                          <span className="min-w-[1.5rem] shrink-0 self-start text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(item.value)}</span>
+                          <span className="fss-top-suspicious-file-count min-w-[1.5rem] shrink-0 self-start text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{new Intl.NumberFormat("en-US").format(item.value)}</span>
                         </div>
                         {item.sub && (
                           <div className="mt-1 ml-7 leading-relaxed">
-                            <span className="block truncate text-[9px] text-[var(--soc-text-muted)]" title={`by ${item.sub}`}>by {item.sub}</span>
+                            <span className="fss-top-suspicious-file-path block truncate text-[9px] text-[var(--soc-text-muted)]" title={`by ${item.sub}`}>by {item.sub}</span>
                           </div>
                         )}
                         <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
@@ -1141,7 +1150,7 @@ const FileSecurityScanner = () => {
                       </>
                     );
                     return (
-                      <button key={item.fullLabel || item.label} type="button" onClick={() => handleFileSummaryClick(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg text-left ${isActive ? "bg-red-500/10 ring-1 ring-red-500/30" : ""}`}>
+                      <button key={`${item.fullLabel || item.label}-${i}`} type="button" onClick={() => handleFileSummaryClick(item)} className={`fss-top-suspicious-file-item w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg text-left ${isActive ? "bg-red-500/10 ring-1 ring-red-500/30" : ""}`}>
                         {inner}
                       </button>
                     );
@@ -1155,10 +1164,10 @@ const FileSecurityScanner = () => {
       {/* Logs Table — search/filter disamakan dengan FimEvents */}
       <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl shadow-lg h-auto overflow-hidden">
         <div ref={filesTableRef} className="px-3 py-2.5 md:px-4 md:py-3 border-b border-[var(--soc-border)] bg-[var(--soc-card)]">
-          <div className="flex gap-2 flex-wrap attack-logs-search soc-filter-row items-center">
-            <div className="flex-1 min-w-0 basis-full sm:basis-0 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-500" />
-              <input type="text" value={searchQuery} onChange={(e)=>{ setPage(1); setSearchQuery(e.target.value); }} placeholder="Search current page by file, path, agent, scanner, or SHA-256..." className="w-full pl-10 pr-4 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500" />
+          <div className="fss-filter-toolbar flex gap-2 flex-wrap attack-logs-search soc-filter-row items-center">
+            <div className="fss-search-container flex-1 min-w-0 basis-full sm:basis-0 relative">
+              <Search className="fss-search-icon absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-500" />
+              <input type="text" value={searchQuery} onChange={(e)=>{ setPage(1); setSearchQuery(e.target.value); }} placeholder="Search current page by file, path, agent, scanner, or SHA-256..." className="fss-search-input w-full pl-10 pr-4 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500" />
             </div>
             <FileSecCombinedFilter
               agentFilter={filterAgent} onAgentChange={(v)=>{ setPage(1); setFilterAgent(v); }} agentOptions={filterOptions.agents}
@@ -1184,26 +1193,26 @@ const FileSecurityScanner = () => {
               fileFilterLabel={fileFilter !== "all" ? String(fileFilter) : ""}
               onClearFileFilter={() => setFileFilter("all")}
             />
-            <ExportCsvButton accent="red" onClick={handleExportCsv} />
+            <ExportCsvButton accent="red" onClick={handleExportCsv} className="fss-export-csv-button" />
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-[10px] md:text-[11px] text-left">
+          <table className="fss-log-table w-full min-w-[720px] text-[10px] md:text-[11px] text-left">
             <colgroup>
-              <col />
-              <col style={{ minWidth: "120px" }} />
-              <col />
-              <col style={{ minWidth: "100px" }} />
-              <col />
               <col style={{ minWidth: "130px" }} />
+              <col style={{ minWidth: "140px" }} />
+              <col />
               <col style={{ minWidth: "100px" }} />
-              <col style={{ minWidth: "120px" }} />
+              <col style={{ minWidth: "200px" }} />
+              <col style={{ minWidth: "110px" }} />
+              <col style={{ minWidth: "110px" }} />
+              <col className="fss-action-column" style={{ minWidth: "140px" }} />
             </colgroup>
             <thead>
               <tr className="border-b border-slate-800 bg-slate-800/70">
                 {["time","agent","file","type","file path","severity","findings","action"].map((h)=>(
-                  <th key={h} className="px-2 md:px-4 lg:px-3 py-2 md:py-3 lg:py-2 text-[9px] md:text-[11px] lg:text-[10px] font-semibold text-slate-400 uppercase">{h}</th>
+                  <th key={h} className={`px-2 md:px-4 lg:px-3 py-2 md:py-3 lg:py-2 text-[9px] md:text-[11px] lg:text-[10px] font-semibold text-slate-400 uppercase ${h === "file" ? "fss-file-column" : h === "type" ? "fss-type-column" : h === "action" ? "fss-action-column" : ""}`}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -1219,9 +1228,9 @@ const FileSecurityScanner = () => {
                 const maxSeverity = file.findings.reduce((max, finding)=>(severityOrder[finding.severity] > severityOrder[max.severity] ? finding : max), file.findings[0]);
                 return (
                   <tr key={file.id} className={`border-b border-slate-800/60 transition-all duration-150 hover:bg-purple-500/10 hover:shadow-[inset_3px_0_0_0_#a855f7] ${idx % 2 !== 0 ? "bg-[var(--soc-zebra)]" : ""}`}>
-                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-slate-500 text-[10px] md:text-[11px] lg:text-[10px] whitespace-nowrap">{formatTime(file.timestamp)}</td>
-                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-sky-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-[140px] sm:max-w-[180px] md:max-w-[220px] lg:max-w-[260px] overflow-hidden text-ellipsis whitespace-nowrap" title={file.agentName}>{file.agentName}</div></td>
-                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2">
+                    <td className="px-2 md:px-4 lg:px-3 py-2 md:py-3.5 lg:py-3 text-slate-500 text-[10px] md:text-[11px] lg:text-[10px] whitespace-nowrap">{formatTime(file.timestamp)}</td>
+                    <td className="px-2 md:px-4 lg:px-3 py-2 md:py-3.5 lg:py-3 text-sky-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]"><div className="truncate max-w-[140px] sm:max-w-[180px] md:max-w-[220px] lg:max-w-[260px] overflow-hidden text-ellipsis whitespace-nowrap" title={file.agentName}>{file.agentName}</div></td>
+                    <td className="fss-file-column px-2 md:px-4 lg:px-3 py-2 md:py-3.5 lg:py-3">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-slate-700 rounded flex items-center justify-center text-xs font-bold text-slate-300 shrink-0">{String(file.fileType || "?").charAt(0).toUpperCase()}</div>
                         <div className="min-w-0 max-w-[140px] sm:max-w-[180px] md:max-w-[260px] lg:max-w-[340px]">
@@ -1230,14 +1239,14 @@ const FileSecurityScanner = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-[10px] md:text-[11px] text-slate-400">{file.fileType}</td>
-                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 max-w-[140px] sm:max-w-[180px] md:max-w-[380px] lg:max-w-[520px]">
+                    <td className="fss-type-column px-2 md:px-4 lg:px-3 py-2 md:py-3.5 lg:py-3 text-[10px] md:text-[11px] text-slate-400">{file.fileType}</td>
+                    <td className="px-2 md:px-4 lg:px-3 py-2 md:py-3.5 lg:py-3 max-w-[140px] sm:max-w-[180px] md:max-w-[380px] lg:max-w-[520px]">
                       <div className="truncate max-w-[140px] sm:max-w-[180px] md:max-w-[380px] lg:max-w-[520px] overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[10px] md:text-[11px] text-amber-300" title={file.filePath}>{file.filePath || "-"}</div>
                     </td>
-                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2"><RiskIndicator severity={maxSeverity?.severity || "HIGH"} /></td>
-                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-[10px] md:text-[11px]"><span className="text-slate-300 font-mono">{file.findingsCount} found</span></td>
-                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2">
-                      <button onClick={()=>setSelectedFile(file)} className="px-3 py-1.5 rounded text-[10px] md:text-[11px] font-medium transition-colors flex items-center gap-1 bg-red-500/10 text-red-300 hover:bg-red-500/20"><FileText className="h-3.5 w-3.5" />Detail</button>
+                    <td className="px-2 md:px-4 lg:px-3 py-2 md:py-3.5 lg:py-3"><RiskIndicator severity={maxSeverity?.severity || "HIGH"} /></td>
+                    <td className="px-2 md:px-4 lg:px-3 py-2 md:py-3.5 lg:py-3 text-[10px] md:text-[11px]"><span className="text-slate-300 font-mono">{file.findingsCount} found</span></td>
+                    <td className="fss-action-column px-2 md:px-4 lg:px-3 py-2 md:py-3.5 lg:py-3">
+                      <button onClick={()=>setSelectedFile(file)} className="fss-detail-button px-2.5 py-1 rounded text-[10px] md:text-[11px] font-medium transition-colors flex items-center justify-center gap-1 bg-red-500/10 text-red-300 hover:bg-red-500/20 w-[72px] shrink-0"><FileText className="h-3 w-3" />Detail</button>
                     </td>
                   </tr>
                 );
@@ -1249,16 +1258,16 @@ const FileSecurityScanner = () => {
       </div>
 
       {selectedFile && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-lg max-w-2xl w-full max-h-[85vh] overflow-y-auto">
-            <div className="sticky top-0 bg-slate-800 border-b border-slate-700 px-4 py-3 flex justify-between items-center">
+        <div className="fss-detail-backdrop fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="fss-detail-modal bg-slate-800 border border-slate-700 rounded-lg max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+            <div className="fss-detail-header sticky top-0 bg-slate-800 border-b border-slate-700 px-4 py-3 flex justify-between items-center">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 bg-slate-700 rounded flex items-center justify-center text-xs font-bold text-slate-300">{String(selectedFile.fileType || "?").charAt(0).toUpperCase()}</div>
                 <div><h2 className="text-base font-bold text-slate-100">{selectedFile.fileName}</h2><p className="text-[11px] text-slate-500 mt-0.5">Forensic Analysis Report</p></div>
               </div>
               <button onClick={()=>setSelectedFile(null)} className="text-slate-400 hover:text-slate-200 text-xl">✕</button>
             </div>
-            <div className="p-3 md:p-4 space-y-4">
+            <div className="fss-detail-content p-3 md:p-4 space-y-4">
               <div>
                 <h3 className="text-xs md:text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2"><FileText className="h-3.5 w-3.5" /> File Metadata</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-700/30 rounded-lg p-3 border border-slate-700">
@@ -1272,10 +1281,10 @@ const FileSecurityScanner = () => {
               </div>
               <div>
                 <h3 className="text-xs md:text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2"><FileText className="h-3.5 w-3.5" /> File Hashes</h3>
-                <div className="space-y-2 bg-slate-700/30 rounded-lg p-3 border border-slate-700">
-                  <div>
-                    <p className="text-[10px] text-slate-400 uppercase font-semibold mb-1.5">SHA-256</p>
-                    <div className="flex items-center gap-2 bg-slate-800/50 rounded p-2">
+                <div className="fss-file-hashes space-y-2 bg-slate-700/30 rounded-lg p-3 border border-slate-700">
+                  <div className="fss-hash-entry">
+                    <p className="fss-hash-label text-[10px] text-slate-400 uppercase font-semibold mb-1.5">SHA-256</p>
+                    <div className="fss-hash-row flex items-center gap-2 bg-slate-800/50 rounded p-2">
                       <code className="text-[11px] text-slate-300 font-mono flex-1 break-all">{selectedFile.sha256}</code>
                       <button onClick={()=>copyToClipboard(selectedFile.sha256, "sha256")} className={`p-1.5 rounded transition-colors ${copiedText === "sha256" ? "bg-green-500/30 text-green-300" : "bg-slate-600/30 text-slate-400 hover:bg-slate-600"}`}><Copy className="h-3.5 w-3.5" /></button>
                       {selectedFile.sha256 !== "-" && (<a href={getVirusTotalLink(selectedFile.sha256)} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded bg-slate-600/30 text-slate-400 hover:text-sky-400 transition-colors"><ExternalLink className="h-3.5 w-3.5" /></a>)}
@@ -1294,7 +1303,7 @@ const FileSecurityScanner = () => {
               {selectedFile.matchedSources.length > 0 && (<div><h3 className="text-xs md:text-sm font-semibold text-slate-200 mb-3">Matched Sources ({selectedFile.matchedSources.length})</h3><div className="space-y-2">{selectedFile.matchedSources.map((source, idx) => (<div key={`${source}-${idx}`} className="bg-slate-700/30 rounded-lg p-2 border border-slate-700"><p className="text-xs text-slate-300 font-mono break-all">{typeof source === "object" ? JSON.stringify(source) : source}</p></div>))}</div></div>)}
               <div>
                 <h3 className="text-xs md:text-sm font-semibold text-slate-200 mb-3">Recommended Actions</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="fss-recommended-actions grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <button onClick={runVirusTotalScan} disabled={selectedFile.sha256 === "-" || vtState.status === "loading"} className="px-3 py-2 bg-sky-600 hover:bg-sky-700 rounded-lg text-xs font-medium text-white transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"><ExternalLink className="h-3.5 w-3.5" />{vtState.status === "loading" ? "Scanning..." : "Scan with VirusTotal"}</button>
                   <button onClick={()=>copyToClipboard(JSON.stringify(selectedFile, null, 2), "export")} className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2 ${copiedText === "export" ? "bg-green-600/30 text-green-300" : "bg-slate-700 hover:bg-slate-600"}`}><Copy className="h-3.5 w-3.5" /> {copiedText === "export" ? "Copied!" : "Copy JSON"}</button>
                 </div>

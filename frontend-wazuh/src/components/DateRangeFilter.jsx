@@ -34,10 +34,10 @@ export default function DateRangeFilter({ value, onChange, onClear = null, close
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-[100] w-56 rounded-xl border border-[var(--soc-border)] shadow-2xl overflow-hidden bg-[var(--soc-elevated)]">
+        <div className="soc-date-range-popup absolute right-0 top-full mt-1 z-[100] w-56 rounded-xl border border-[var(--soc-border)] shadow-2xl overflow-hidden bg-[var(--soc-elevated)]">
           <div className="p-3 space-y-3 bg-[var(--soc-elevated)]">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-[var(--soc-text-muted)] w-8">From</span>
+              <span className="soc-date-range-popup-label text-[10px] text-[var(--soc-text-muted)] w-8">From</span>
               <input
                 type="datetime-local"
                 value={value?.start || ""}
@@ -53,7 +53,7 @@ export default function DateRangeFilter({ value, onChange, onClear = null, close
               />
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-[var(--soc-text-muted)] w-8">To</span>
+              <span className="soc-date-range-popup-label text-[10px] text-[var(--soc-text-muted)] w-8">To</span>
               <input
                 type="datetime-local"
                 value={value?.end || ""}
@@ -77,7 +77,7 @@ export default function DateRangeFilter({ value, onChange, onClear = null, close
                     onClear();
                     setOpen(false);
                   }}
-                  className="flex-1 py-1.5 text-[10px] font-medium rounded-lg border border-[var(--soc-border)] text-[var(--soc-text-secondary)] hover:border-red-400/50 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                  className="soc-date-range-popup-action flex-1 py-1.5 text-[10px] font-medium rounded-lg border border-[var(--soc-border)] text-[var(--soc-text-secondary)] hover:border-red-400/50 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
                 >
                   Reset
                 </button>
@@ -85,7 +85,7 @@ export default function DateRangeFilter({ value, onChange, onClear = null, close
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="flex-1 py-1.5 text-[10px] font-medium rounded-lg text-purple-400 hover:bg-purple-500/20 transition-colors" style={{ backgroundColor: "rgba(139, 92, 246, 0.15)" }}
+                className="soc-date-range-popup-action flex-1 py-1.5 text-[10px] font-medium rounded-lg text-purple-400 hover:bg-purple-500/20 transition-colors" style={{ backgroundColor: "rgba(139, 92, 246, 0.15)" }}
               >
                 Apply
               </button>

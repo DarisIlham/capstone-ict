@@ -35,6 +35,7 @@ import {
   toDateTimeLocalValue,
 } from "../utils/dateRange";
 import { adaptiveLeftGutter } from "../utils/chartAxis";
+import { getTopFilterValues } from "../utils/topFilterValues";
 import { InlineEmptyState } from "../components/EmptyState";
 import undipLogo from "../assets/Undip.svg";
 
@@ -85,6 +86,11 @@ const formatLiveTimestamp = (isoString) => {
   const date = getValidDate(isoString);
   if (!date) return '-';
   return date.toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+};
+const formatChartUpdatedTimestamp = (isoString) => {
+  const date = getValidDate(isoString);
+  if (!date) return '-';
+  return date.toLocaleString('en-US', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 };
 const getRangeWindow = (rangeKey) => {
   const end = new Date();
@@ -140,22 +146,22 @@ const formatPercent = (value, digits = 2) => {
 
 // ── KPI Card (kpi-modern seperti MlDashboard / FimEvents) ─────────────────────
 const KPICard = ({ label, value, icon: Icon, color, desc, loading, index = 0, title }) => (
-  <div className={`kpi-modern animate-fadeInUp stagger-${index + 1}`} style={{ opacity: 0 }} title={title}>
-    <div className="flex items-center justify-between mb-3">
-      <span className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider">{label}</span>
-      <div className="p-2 rounded-lg bg-opacity-10">
-        <Icon className={`h-4 w-4 ${color}`} />
+  <div className={`kpi-modern p-2.5 min-[400px]:p-4 animate-fadeInUp stagger-${index + 1}`} style={{ opacity: 0 }} title={title}>
+    <div className="flex items-center justify-between mb-2 min-[400px]:mb-3 gap-1.5">
+      <span className="bot-kpi-label text-[8px] min-[400px]:text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider leading-tight line-clamp-2">{label}</span>
+      <div className={`p-1.5 min-[400px]:p-2 rounded-lg bg-opacity-10 shrink-0`}>
+        <Icon className={`h-3.5 w-3.5 min-[400px]:h-4 min-[400px]:w-4 ${color}`} />
       </div>
     </div>
-    <div className={`text-xl font-bold ${color} mb-1`}>
-      {loading ? <div className="skeleton h-6 w-16"></div> : value}
+    <div className={`bot-kpi-value text-lg min-[400px]:text-xl font-bold ${color} mb-1`}>
+      {loading ? <div className="skeleton h-5 min-[400px]:h-6 w-14 min-[400px]:w-16"></div> : value}
     </div>
-    {desc && <div className="text-[9px] text-[var(--soc-text-muted)]">{desc}</div>}
+    {desc && <div className="bot-kpi-description text-[8px] min-[400px]:text-[9px] text-[var(--soc-text-muted)]">{desc}</div>}
   </div>
 );
 
 // ── BarList (seperti MlDashboard) ────────────────────────────────────────────
-const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue = null, formatValue = null }) => {
+const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue = null, formatValue = null, listClassName = "" }) => {
   if (!items || items.length === 0) {
     return (
       <div className="top5-fixed w-full min-w-0 max-w-full flex items-center justify-center">
@@ -167,7 +173,7 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
   const maxValue = Math.max(...items.map((d) => d.value), 1);
   const CHART_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
   return (
-    <div className="top5-fixed w-full min-w-0 max-w-full space-y-1.5">
+    <div className={`top5-fixed w-full min-w-0 max-w-full space-y-1 sm:space-y-1.5 ${listClassName}`}>
       {items.map((item, i) => {
         const color = item.color || CHART_COLORS[i % CHART_COLORS.length];
         const label = item.label;
@@ -175,23 +181,23 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
         const isActive = activeValue != null && String(label) === String(activeValue);
         const inner = (
           <>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold shrink-0" style={{ color }}>{i + 1}</span>
-                <span className="min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)] font-mono" title={item.title || label}>{label}</span>
+            <div className="flex items-center justify-between gap-1">
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                <span className="bot-bar-list-rank w-4 h-4 sm:w-5 sm:h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[7px] sm:text-[8px] font-bold shrink-0" style={{ color }}>{i + 1}</span>
+                <span className="bot-bar-list-label min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)] font-mono" title={item.title || label}>{label}</span>
               </div>
-              <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1.5">{fmt(value)}</span>
+              <span className="bot-bar-list-value min-w-[1.25rem] sm:min-w-[1.5rem] shrink-0 text-right text-[10px] font-bold text-[var(--soc-text-primary)] tabular-nums ml-1 sm:ml-1.5">{fmt(value)}</span>
             </div>
-            <div className="mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
+            <div className="mt-0.5 ml-5.5 sm:ml-7 h-1 sm:h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
               <div className="h-full rounded-full transition-all duration-500" title={`${label}: ${fmt(value)}`} style={{ width: `${(value / maxValue) * 100}%`, backgroundColor: color }} />
             </div>
           </>
         );
         if (!onSelect) {
-          return <div key={`${label}-${i}`} className="w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg">{inner}</div>;
+          return <div key={`${label}-${i}`} className="w-full min-w-0 max-w-full list-item-interactive px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg">{inner}</div>;
         }
         return (
-          <button key={`${label}-${i}`} type="button" onClick={() => onSelect(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg text-left ${isActive ? "bg-violet-500/10 ring-1 ring-violet-500/30" : ""}`}>
+          <button key={`${label}-${i}`} type="button" onClick={() => onSelect(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg text-left ${isActive ? "bg-violet-500/10 ring-1 ring-violet-500/30" : ""}`}>
             {inner}
           </button>
         );
@@ -201,7 +207,7 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
 };
 
 // ── Multi-series WaveChart (idiom WaveChart MlDashboard, 3 seri) ─────────────
-  const MultiWaveChart = ({ data, series, rangeKey = "24h", height = 220, formatValue = null, formatAxis = null, logScale = false, axisColor = "var(--soc-border)", onPointSelect = null, activePointKey = null, activeColor = "#38bdf8", pointHint = null }) => {
+  const MultiWaveChart = ({ data, series, rangeKey = "24h", height = 220, formatValue = null, formatAxis = null, logScale = false, axisColor = "var(--soc-border)", onPointSelect = null, activePointKey = null, activeColor = "#38bdf8", pointHint = null, compact = false }) => {
   const [hovered, setHovered] = useState(null);
   const rootRef = useRef(null);
   const svgRef = useRef(null);
@@ -222,6 +228,7 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
 
   const width = size.width;
   const plotH = size.height;
+  const compactLayout = compact && width < 640;
   if (!width || !plotH) return <div ref={rootRef} className="relative h-full w-full" />;
   if (!data || data.length === 0 || !series || series.length === 0) {
     return (
@@ -260,7 +267,9 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
   // selalu muat — sebelumnya yang diukur angka mentah, sehingga label
   // terpotong tepi kiri container (SVG meng-clip di luar viewBox).
   const axisLabels = gridVals.map((v) => String(axisLabel(v)));
-  const padding = { l: adaptiveLeftGutter(axisLabels, 36, 14), r: 10, t: 14, b: 24 };
+  const padding = compactLayout
+    ? { l: adaptiveLeftGutter(axisLabels, 24, 8), r: 4, t: 12, b: 22 }
+    : { l: adaptiveLeftGutter(axisLabels, 36, 14), r: 10, t: 14, b: 24 };
   const innerW = width - padding.l - padding.r;
   const innerH = plotH - padding.t - padding.b;
   const xFor = (i) => padding.l + (data.length > 1 ? (i / (data.length - 1)) * innerW : innerW / 2);
@@ -286,7 +295,14 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
     return { ...s, d };
   });
 
-  const tickCount = clamp(Math.floor(innerW / 160), 3, 7);
+  const tickCount = compactLayout
+    ? clamp(Math.floor(innerW / 110) + 1, 2, 4)
+    : clamp(Math.floor(innerW / 160), 3, 7);
+  const tickIndices = compactLayout
+    ? Array.from(new Set(Array.from({ length: tickCount }, (_, index) =>
+        Math.round((index / Math.max(tickCount - 1, 1)) * (data.length - 1)),
+      )))
+    : null;
   const tickEvery = Math.max(1, Math.floor(data.length / tickCount));
   const stepW = data.length > 1 ? innerW / (data.length - 1) : innerW;
   // Bucket width inferred from consecutive points (date_histogram buckets
@@ -342,7 +358,7 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
           return (
             <g key={`grid-${i}`}>
               <line x1={padding.l} y1={y} x2={padding.l + innerW} y2={y} stroke="var(--soc-border)" strokeDasharray="2,2" opacity="0.5" />
-              <text x={padding.l - 5} y={y + 3} textAnchor="end" fontSize="10" fill="#64748b" fontWeight="500">{axisLabel(value)}</text>
+              <text x={padding.l - 5} y={y + 3} textAnchor="end" fontSize={compactLayout ? "8" : "10"} fill="#64748b" fontWeight="500">{axisLabel(value)}</text>
             </g>
           );
         })}
@@ -393,10 +409,10 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
               {i === activeIdx && (
                 <line x1={xFor(i)} y1={padding.t} x2={xFor(i)} y2={padding.t + innerH} stroke={activeColor} strokeWidth="1.5" strokeDasharray="3,3" opacity="0.8" className="pointer-events-none" />
               )}
-              {i % tickEvery === 0 && (
+              {(compactLayout ? tickIndices.includes(i) : i % tickEvery === 0) && (
                 <>
                   <line x1={xFor(i)} y1={padding.t + innerH} x2={xFor(i)} y2={padding.t + innerH + 3} stroke={axisColor} />
-                  <text x={xFor(i)} y={padding.t + innerH + 14} textAnchor={i === 0 ? "start" : i >= data.length - tickEvery ? "end" : "middle"} fontSize="10" fill="#64748b" fontWeight="500">
+                  <text x={xFor(i)} y={padding.t + innerH + (compactLayout ? 12 : 14)} textAnchor={i === 0 ? "start" : i === data.length - 1 ? "end" : "middle"} fontSize={compactLayout ? "7" : "10"} fill="#64748b" fontWeight="500">
                     {formatBucketLabel(point.timestamp, rangeKey)}
                   </text>
                 </>
@@ -409,12 +425,12 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
         )))}
       </svg>
       {hovered && (
-        <div className="pointer-events-none absolute z-10 min-w-[140px] max-w-[230px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] px-3 py-2 text-xs shadow-lg"
+        <div className={`pointer-events-none absolute z-10 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] shadow-lg ${compactLayout ? "bot-trend-tooltip min-w-[120px] max-w-[190px] px-2 py-1.5 text-[9px]" : "min-w-[140px] max-w-[230px] px-3 py-2 text-xs"}`}
           style={(() => {
             // Float beside/above the point — never glued to the cursor.
             // Flips to the roomier side near the chart edges.
-            const estW = 210;
-            const estH = 64 + series.length * 20;
+            const estW = compactLayout ? 175 : 210;
+            const estH = (compactLayout ? 48 : 64) + series.length * (compactLayout ? 16 : 20);
             const gap = 14;
             let left = hovered.x + gap;
             if (left + estW > width - 4) left = hovered.x - estW - gap;
@@ -426,10 +442,10 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
             return { left: `${left}px`, top: `${top}px` };
           })()}>
           <div className="font-semibold text-[var(--soc-text-primary)]">{formatValue ? valueLabel(hovered.total) : `${hovered.total} alerts`}</div>
-          <div className="mt-1 space-y-0.5">
+          <div className={`mt-1 ${compactLayout ? "space-y-0" : "space-y-0.5"}`}>
             {series.map((s) => (
-              <div key={s.key} className="flex items-center gap-1.5 text-[var(--soc-text-secondary)]">
-                <span className="inline-block w-2 h-2 rounded-sm shrink-0" style={{ background: s.color }} />
+              <div key={s.key} className={`flex items-center text-[var(--soc-text-secondary)] ${compactLayout ? "gap-1" : "gap-1.5"}`}>
+                <span className={`inline-block rounded-sm shrink-0 ${compactLayout ? "w-1.5 h-1.5" : "w-2 h-2"}`} style={{ background: s.color }} />
                 <span className="flex-1">{s.label}</span>
                 <span className="font-mono font-semibold">{valueLabel(hovered.point[s.key])}</span>
               </div>
@@ -565,6 +581,7 @@ const LevelBadge = ({ alert, label }) => {
 
 // ── Bot Combined Filter (konsep MlCombinedFilter: satu tombol Filters + panel) ─
 const BotCombinedFilter = ({
+  className = "",
   detector, onDetectorChange,
   behaviorType, onBehaviorTypeChange,
   protocol, onProtocolChange,
@@ -580,18 +597,22 @@ const BotCombinedFilter = ({
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   const containerRef = useRef(null);
   const buttonRef = useRef(null);
+  const popupRef = useRef(null);
   const calcPosition = useCallback(() => {
-    if (!buttonRef.current) return;
+    if (!buttonRef.current || !popupRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
-    const dropdownWidth = 280;
-    const dropdownHeight = 380;
+    const popupRect = popupRef.current.getBoundingClientRect();
+    const dropdownWidth = popupRect.width;
+    const dropdownHeight = popupRect.height;
     const gap = 4;
     const spaceBelow = window.innerHeight - rect.bottom;
-    const spaceRight = window.innerWidth - rect.right;
-    let top = spaceBelow < dropdownHeight + gap ? rect.top - dropdownHeight - gap : rect.bottom + gap;
-    let left = spaceRight < dropdownWidth ? rect.right - dropdownWidth : rect.left;
-    if (left < 8) left = 8;
-    if (left + dropdownWidth > window.innerWidth - 8) left = window.innerWidth - dropdownWidth - 8;
+    const fitsAbove = rect.top >= dropdownHeight + gap + 8;
+    let top = spaceBelow < dropdownHeight + gap && fitsAbove
+      ? rect.top - dropdownHeight - gap
+      : rect.bottom + gap;
+    let left = window.innerWidth - rect.right < dropdownWidth ? rect.right - dropdownWidth : rect.left;
+    top = Math.max(8, Math.min(top, window.innerHeight - dropdownHeight - 8));
+    left = Math.max(8, Math.min(left, window.innerWidth - dropdownWidth - 8));
     setCoords({ top, left });
   }, []);
   useEffect(() => {
@@ -624,32 +645,32 @@ const BotCombinedFilter = ({
   };
   const activeCount = [behaviorType !== "all", protocol !== "all", minProbability !== "all", minPackets !== "all", agentFilter !== "all", srcIpFilter !== "all", dstIpFilter !== "all", Boolean(timelineFilterLabel)].filter(Boolean).length;
   const Section = ({ label, value, allLabel, options, onChange }) => (
-    <div className="px-3 py-2">
-      <div className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">{label}</div>
+    <div className="bot-filter-section px-3 py-2">
+      <div className="bot-filter-section-title text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">{label}</div>
       <div className="flex flex-wrap gap-1">
-        <button onClick={() => onChange("all")} className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${value === "all" ? "bg-sky-500/20 text-sky-300 border border-sky-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}>{allLabel}</button>
+        <button onClick={() => onChange("all")} className={`bot-filter-option px-2 py-1 rounded text-[10px] font-medium transition-colors ${value === "all" ? "bg-sky-500/20 text-sky-300 border border-sky-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}>{allLabel}</button>
         {options.map((opt) => (
-          <button key={opt.value} onClick={() => onChange(opt.value)} className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${value === opt.value ? "bg-sky-500/20 text-sky-300 border border-sky-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}>{opt.label}</button>
+          <button key={opt.value} onClick={() => onChange(opt.value)} className={`bot-filter-option px-2 py-1 rounded text-[10px] font-medium transition-colors ${value === opt.value ? "bg-sky-500/20 text-sky-300 border border-sky-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}>{opt.label}</button>
         ))}
       </div>
     </div>
   );
   return (
-    <div ref={containerRef} className="relative">
-      <button ref={buttonRef} type="button" onClick={() => setOpen((c) => !c)} className="flex items-center gap-2 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-2 pl-3 pr-2.5 text-[11px] text-[var(--soc-text-primary)] focus:outline-none focus:ring-1 focus:ring-sky-500/50 transition-colors hover:bg-[var(--soc-elevated)]">
+    <div ref={containerRef} className={`relative ${className}`}>
+            <button ref={buttonRef} type="button" onClick={() => setOpen((c) => !c)} className="bot-combined-filter-button flex items-center gap-1.5 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] py-1.5 pl-2.5 pr-2 text-[10px] text-[var(--soc-text-primary)] focus:outline-none focus:ring-1 focus:ring-sky-500/50 transition-colors hover:bg-[var(--soc-elevated)]">
         <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--soc-text-muted)]" />
         <span className="font-medium">Filters</span>
         {activeCount > 0 && <span className="flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-sky-500/20 text-sky-300 text-[9px] font-bold">{activeCount}</span>}
         <ChevronDown className={`h-3.5 w-3.5 text-[var(--soc-text-muted)] transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="fixed z-[9999] w-[280px] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] shadow-2xl" style={{ top: coords.top, left: coords.left }}>
+        <div ref={popupRef} className="bot-filter-popup fixed z-[9999] w-[min(280px,calc(100vw-1rem))] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] shadow-2xl" style={{ top: coords.top, left: coords.left }}>
           <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--soc-border)]">
             <span className="text-[10px] font-semibold text-[var(--soc-text-primary)]">Filter Options</span>
             {activeCount > 0 && <button onClick={clearAll} className="text-[9px] font-semibold text-sky-400 hover:text-sky-300 transition-colors">Clear all</button>}
           </div>
           {timelineFilterLabel && (
-            <div className="border-b border-[var(--soc-border)] px-3 py-2">
+            <div className="bot-filter-active-section border-b border-[var(--soc-border)] px-3 py-2">
               <div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--soc-text-muted)]">Timeline filter</div>
               <div className="mt-1.5 flex items-center gap-1.5 rounded border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-[10px] font-medium text-sky-300">
                 <Clock className="h-3.5 w-3.5 shrink-0 text-sky-400" />
@@ -659,11 +680,11 @@ const BotCombinedFilter = ({
             </div>
           )}
           <div className="divide-y divide-[var(--soc-border)] max-h-[360px] overflow-y-auto">
-            <div className="px-3 py-2">
-              <div className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">Detector</div>
+            <div className="bot-filter-section px-3 py-2">
+              <div className="bot-filter-section-title text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">Detector</div>
               <div className="flex flex-wrap gap-1">
                 {[{ value: "ml", label: "Botnet" }, { value: "behavior", label: "Behavior" }].map((opt) => (
-                  <button key={opt.value} onClick={() => onDetectorChange(opt.value)} className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${detector === opt.value ? "bg-sky-500/20 text-sky-300 border border-sky-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}>{opt.label}</button>
+                  <button key={opt.value} onClick={() => onDetectorChange(opt.value)} className={`bot-filter-option px-2 py-1 rounded text-[10px] font-medium transition-colors ${detector === opt.value ? "bg-sky-500/20 text-sky-300 border border-sky-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}>{opt.label}</button>
                 ))}
               </div>
             </div>
@@ -1070,7 +1091,12 @@ export default function BotDetection() {
     label: String(a.name), value: Number(a.count) || 0, color: ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6"][i % 5],
   })), [topAgents]);
 
-  const agentFilterOptions = useMemo(() => (topAgents?.agents || []).map((a) => ({ value: String(a.name), label: String(a.name) })), [topAgents]);
+  const agentFilterOptions = useMemo(() => getTopFilterValues(
+    topAgents?.agents,
+    (agent) => agent.name,
+    (agent) => agent.count,
+    agentFilter
+  ).map((name) => ({ value: name, label: name })), [topAgents, agentFilter]);
   // Opsi Source IP = gabungan top backend + IP yang benar-benar muncul di
   // log halaman ini, masing-masing berlabel jumlah log seperti halaman ML.
   const srcIpFilterOptions = useMemo(() => {
@@ -1086,12 +1112,24 @@ export default function BotDetection() {
       pageCounts.set(ip, (pageCounts.get(ip) || 0) + 1);
       if (!counts.has(ip)) counts.set(ip, 0);
     }
-    return Array.from(counts.entries()).slice(0, 10).map(([ip, count]) => ({
+    const ranked = Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 10);
+    if (srcIpFilter !== "all" && !ranked.some(([ip]) => ip === srcIpFilter)) {
+      ranked.splice(9, 1);
+      ranked.unshift([srcIpFilter, pageCounts.get(srcIpFilter) || 0]);
+    }
+    return ranked.map(([ip, count]) => ({
       value: ip,
       label: `${ip} (${count > 0 ? count : (pageCounts.get(ip) || 0)})`,
     }));
-  }, [topSources, alerts]);
-  const dstIpFilterOptions = useMemo(() => (topDestinations?.destinations || []).map((d) => ({ value: String(d.ip), label: String(d.ip) })), [topDestinations]);
+  }, [topSources, alerts, srcIpFilter]);
+  const dstIpFilterOptions = useMemo(() => getTopFilterValues(
+    topDestinations?.destinations,
+    (destination) => destination.ip,
+    (destination) => destination.count,
+    dstIpFilter
+  ).map((ip) => ({ value: ip, label: ip })), [topDestinations, dstIpFilter]);
 
   // Palet dipilih menyebar di roda hue (biru, oranye, hijau, ungu, pink)
   // agar tidak ada dua seri berdekatan yang mirip — sebelumnya oranye
@@ -1201,14 +1239,14 @@ export default function BotDetection() {
     : timeRange;
 
   return (
-    <div className="flex flex-col gap-4 w-full min-w-0">
+    <div className="bot-detection-page flex flex-col gap-4 w-full min-w-0">
       {/* Header */}
       <div className="flex flex-col min-[700px]:flex-row min-[700px]:items-center justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-lg min-[600px]:text-xl font-bold text-[var(--soc-text-primary)]">Bot Detection</h1>
-          <p className="text-[11px] text-[var(--soc-text-muted)] mt-0.5">Monitor machine-learning botnet detections and suspicious network behavior.</p>
+          <p className="text-[9px] min-[400px]:text-[10px] min-[600px]:text-[11px] text-[var(--soc-text-muted)] mt-0.5 leading-snug">Monitor machine-learning botnet detections and suspicious network behavior.</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="bot-page-controls flex items-center gap-1.5 min-[400px]:gap-2">
           <RangeFilter
             rangeKey={timeRange}
             onRangeChange={(nextRange) => {
@@ -1216,6 +1254,7 @@ export default function BotDetection() {
             }}
           />
           <DateRangeFilter
+            className="bot-date-range-filter"
             value={customDateRange}
             onChange={(range) => { setPage(1); setSelectedPoint(null); setCustomDateRange(range); setFilterMode("custom"); }}
             onClear={() => {
@@ -1230,7 +1269,7 @@ export default function BotDetection() {
               setCustomDateRange(createDefaultDateRange(1));
             }}
           />
-          <div className="relative flex items-center bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)]" title="Rows per page">
+          <div className="bot-page-size-control relative flex items-center bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)]" title="Rows per page">
             <select
               value={pageSize}
               onChange={(e) => {
@@ -1271,23 +1310,24 @@ export default function BotDetection() {
       </div>
 
       {/* Alert Trend + Top 5 Agents — komposisi seperti halaman lain */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-3">
         <div className="md:col-span-2 chart-card animate-fadeInUp stagger-1 flex flex-col" style={{ opacity: 0 }}>
-          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-violet-500/10"><BarChart3 className="h-3.5 w-3.5 text-violet-400" /></div>
-              <div>
-                <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Alert Trend</h3>
+          <div className="bot-trend-header flex items-center justify-between mb-2 sm:mb-3 flex-wrap gap-1.5 sm:gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+              <div className="p-1 sm:p-1.5 rounded-lg bg-violet-500/10 shrink-0"><BarChart3 className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-violet-400" /></div>
+              <div className="min-w-0">
+                <h3 className="text-[10px] sm:text-[11px] font-semibold text-[var(--soc-text-primary)]">Alert Trend</h3>
                 <p className="text-[9px] text-[var(--soc-text-muted)]">Detections over time by detector type</p>
               </div>
             </div>
-            <div className="text-right min-w-0">
-              <div className="text-[11px] text-[var(--soc-text-muted)]">{rangeLabel}</div>
-              <div className="text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatLiveTimestamp(lastUpdated)}</div>
+            <div className="bot-trend-meta text-right min-w-0">
+              <div className="text-[9px] sm:text-[11px] text-[var(--soc-text-muted)]">{rangeLabel}</div>
+              <div className="text-[8px] sm:text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatChartUpdatedTimestamp(lastUpdated)}</div>
             </div>
           </div>
-          <div className="h-[220px]" style={{ background: "transparent" }}>
+          <div className="bot-trend-chart-wrap h-[180px] sm:h-[220px]" style={{ background: "transparent" }}>
             <MultiWaveChart data={trend} series={trendDisplaySeries} rangeKey={trendRangeKey} height={220} logScale
+              compact
               onPointSelect={(point) => handlePointSelect(point, "trend")}
               activeColor={activeTrendColor}
               pointHint={(point) => {
@@ -1296,7 +1336,7 @@ export default function BotDetection() {
               }}
               activePointKey={selectedPoint?.source === "trend" ? selectedPoint.key : null} />
           </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 justify-center px-1 mt-2">
+          <div className="bot-trend-legend flex flex-wrap items-center gap-x-2 gap-y-1 justify-center px-1 mt-1.5 sm:mt-2">
             {trendLegendSeries.map((s) => {
               const total = (trend || []).reduce((sum, p) => sum + (Number(p[s.key]) || 0), 0);
               const isActive = isolatedTrend === s.key;
@@ -1307,10 +1347,10 @@ export default function BotDetection() {
                   type="button"
                   onClick={() => handleTrendLegendClick(s)}
                   title={isActive ? "Show all series" : `Show only ${s.label}`}
-                  className={`flex items-center gap-1.5 text-[11px] rounded px-1 py-0.5 transition-all ${isActive ? "font-bold text-slate-200 ring-1 ring-sky-500/40 bg-sky-500/10" : dimmed ? "text-slate-500 opacity-50 hover:opacity-80" : "text-slate-400 hover:text-slate-200"}`}
+                  className={`flex items-center gap-1 text-[9px] sm:text-[11px] rounded px-0.5 sm:px-1 py-0.5 transition-all ${isActive ? "font-bold text-slate-200 ring-1 ring-sky-500/40 bg-sky-500/10" : dimmed ? "text-slate-500 opacity-50 hover:opacity-80" : "text-slate-400 hover:text-slate-200"}`}
                 >
-                <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: s.color }} />
-                  <span>{s.label}</span>
+                <span className="w-1.5 h-1.5 rounded-sm shrink-0" style={{ background: s.color }} />
+                  <span className="truncate max-w-[90px] sm:max-w-none">{s.label}</span>
                   <span className="text-slate-500 font-mono">{formatNumber(total)}</span>
                 </button>
               );
@@ -1318,46 +1358,53 @@ export default function BotDetection() {
           </div>
         </div>
         <div className="chart-card animate-fadeInUp stagger-2 flex flex-col" style={{ opacity: 0 }}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-purple-500/10"><Users className="h-3.5 w-3.5 text-purple-400" /></div>
-              <div>
-                <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Top 5 Agents</h3>
+          <div className="flex items-center justify-between mb-2 sm:mb-3">
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+              <div className="p-1 sm:p-1.5 rounded-lg bg-purple-500/10 shrink-0"><Users className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-purple-400" /></div>
+              <div className="min-w-0">
+                <h3 className="text-[10px] sm:text-[11px] font-semibold text-[var(--soc-text-primary)]">Top 5 Agents</h3>
                 <p className="text-[9px] text-[var(--soc-text-muted)]">Most active reporting agents</p>
               </div>
             </div>
           </div>
-          <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-[9px] text-[var(--soc-text-muted)]">Unique agents</span>
-            <span className="text-[11px] font-bold text-[var(--soc-text-primary)]">{formatNumber(topAgents.uniqueAgents)}</span>
+          <div className="flex items-center justify-between mb-1.5 sm:mb-2 px-0.5 sm:px-1">
+            <span className="bot-agent-summary-label text-[9px] text-[var(--soc-text-muted)]">Unique agents</span>
+            <span className="bot-agent-summary-value text-[10px] sm:text-[11px] font-bold text-[var(--soc-text-primary)]">{formatNumber(topAgents.uniqueAgents)}</span>
           </div>
-          <BarList items={topAgentBarItems} emptyLabel="No agent data" onSelect={handleAgentSummaryClick} activeValue={agentFilter !== "all" ? agentFilter : null} />
+          <BarList
+            items={topAgentBarItems}
+            emptyLabel="No agent data"
+            onSelect={handleAgentSummaryClick}
+            activeValue={agentFilter !== "all" ? agentFilter : null}
+            listClassName={`bot-agent-list${topAgentBarItems.length === 5 ? " bot-agent-list--full" : ""}`}
+          />
         </div>
       </div>
 
       {/* Top VMs by Traffic — komposisi seperti Alert Trend (grafik + ranking) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-3">
         <div className="md:col-span-2 chart-card animate-fadeInUp stagger-4 flex flex-col" style={{ opacity: 0 }}>
-          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-sky-500/10"><Server className="h-3.5 w-3.5 text-sky-400" /></div>
-              <div>
-                <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Top VMs by Traffic</h3>
+          <div className="bot-vm-chart-header flex items-center justify-between mb-2 sm:mb-3 flex-wrap gap-1.5 sm:gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+              <div className="p-1 sm:p-1.5 rounded-lg bg-sky-500/10 shrink-0"><Server className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-sky-400" /></div>
+              <div className="min-w-0">
+                <h3 className="text-[10px] sm:text-[11px] font-semibold text-[var(--soc-text-primary)]">Top VMs by Traffic</h3>
                 <p className="text-[9px] text-[var(--soc-text-muted)]">Bytes over time per reporting agent</p>
               </div>
             </div>
-            <div className="text-right min-w-0">
-              <div className="text-[11px] text-[var(--soc-text-muted)]">{rangeLabel}</div>
-              <div className="text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatLiveTimestamp(lastUpdated)}</div>
+            <div className="bot-vm-chart-meta text-right min-w-0">
+              <div className="text-[9px] sm:text-[11px] text-[var(--soc-text-muted)]">{rangeLabel}</div>
+              <div className="text-[8px] sm:text-[10px] font-semibold text-[var(--soc-text-muted)]">Updated {formatChartUpdatedTimestamp(lastUpdated)}</div>
             </div>
           </div>
-        <div className="flex-1 min-h-[200px]" style={{ background: "transparent" }}>
+        <div className="bot-vm-chart-wrap flex-1 min-h-[160px] sm:min-h-[200px]" style={{ background: "transparent" }}>
           <MultiWaveChart data={trafficTimeline.points} series={vmDisplaySeries} rangeKey={trendRangeKey} height={280} formatValue={formatBytes} formatAxis={formatBytesCompact}
+            compact
             onPointSelect={(point) => handlePointSelect(point, "vms")}
             activeColor={activeVmColor}
             activePointKey={selectedPoint?.source === "vms" ? selectedPoint.key : null} />
         </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 justify-center px-1 mt-2">
+        <div className="bot-vm-chart-legend flex flex-wrap items-center gap-x-2 gap-y-1 justify-center px-1 mt-1.5 sm:mt-2">
           {vmSeries.map((s) => {
             const info = (traffic?.topVMs || []).find((v) => String(v.agent) === String(s.key));
             // Klik legend langsung memfilter tabel alert ke agent tersebut
@@ -1375,10 +1422,10 @@ export default function BotDetection() {
                   setIsolatedVm(activating ? s.key : null);
                 }}
                 title={isActive ? "Show all agents" : `Filter table: ${s.label}`}
-                className={`flex items-center gap-1.5 text-[11px] rounded px-1 py-0.5 transition-all ${isActive ? "font-bold text-slate-200 ring-1 ring-sky-500/40 bg-sky-500/10" : dimmed ? "text-slate-500 opacity-50 hover:opacity-80" : "text-slate-400 hover:text-slate-200"}`}
+                className={`flex items-center gap-1 text-[9px] sm:text-[11px] rounded px-0.5 sm:px-1 py-0.5 transition-all ${isActive ? "font-bold text-slate-200 ring-1 ring-sky-500/40 bg-sky-500/10" : dimmed ? "text-slate-500 opacity-50 hover:opacity-80" : "text-slate-400 hover:text-slate-200"}`}
               >
-                <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: s.color }} />
-                <span className="max-w-[200px] truncate" title={s.label}>{s.label}</span>
+                <span className="w-1.5 h-1.5 rounded-sm shrink-0" style={{ background: s.color }} />
+                <span className="max-w-[120px] sm:max-w-[200px] truncate" title={s.label}>{s.label}</span>
                 <span className="text-slate-500 font-mono">{formatBytes(info?.bytes || 0)}</span>
               </button>
             );
@@ -1386,17 +1433,17 @@ export default function BotDetection() {
         </div>
         </div>
         <div className="chart-card animate-fadeInUp stagger-5 flex flex-col" style={{ opacity: 0 }}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-emerald-500/10"><Globe className={`h-3.5 w-3.5 ${ipTab === "source" ? "text-emerald-400" : "text-sky-400"}`} /></div>
-              <div>
-                <h3 className="text-[11px] font-semibold text-[var(--soc-text-primary)]">Top 5 IPs</h3>
+          <div className="flex items-center justify-between mb-2 sm:mb-3">
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+              <div className="p-1 sm:p-1.5 rounded-lg bg-emerald-500/10 shrink-0"><Globe className={`h-3 w-3 sm:h-3.5 sm:w-3.5 ${ipTab === "source" ? "text-emerald-400" : "text-sky-400"}`} /></div>
+              <div className="min-w-0">
+                <h3 className="text-[10px] sm:text-[11px] font-semibold text-[var(--soc-text-primary)]">Top 5 IPs</h3>
                 <p className="text-[9px] text-[var(--soc-text-muted)]">Most frequent addresses</p>
               </div>
             </div>
-            <span className={`text-[10px] font-bold ${ipTab === "source" ? "text-emerald-400" : "text-sky-400"}`}>{(ipTab === "source" ? topSourceBarItems : topDestBarItems).length} IPs</span>
+            <span className={`bot-chart-summary-count text-[10px] font-bold ${ipTab === "source" ? "text-emerald-400" : "text-sky-400"}`}>{(ipTab === "source" ? topSourceBarItems : topDestBarItems).length} IPs</span>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5 mb-3">
+          <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 mb-2 sm:mb-3">
             {[
               { key: "source", label: "Source" },
               { key: "dest", label: "Destination" },
@@ -1404,7 +1451,7 @@ export default function BotDetection() {
               <button
                 key={option.key}
                 onClick={() => setIpTab(option.key)}
-                className={`px-2 py-1 text-[9px] rounded-md font-medium transition-all ${
+                className={`px-1.5 sm:px-2 py-0.5 sm:py-1 text-[8px] sm:text-[9px] rounded-md font-medium transition-all ${
                   ipTab === option.key
                     ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                     : "text-[var(--soc-text-muted)] hover:text-[var(--soc-text-secondary)] border border-transparent hover:bg-[var(--soc-elevated)]"
@@ -1419,6 +1466,7 @@ export default function BotDetection() {
           emptyLabel={ipTab === "source" ? "No source IP data" : "No destination IP data"}
           onSelect={handleIPSummaryClick}
           activeValue={(ipTab === "source" ? srcIpFilter : dstIpFilter) !== "all" ? (ipTab === "source" ? srcIpFilter : dstIpFilter) : null}
+          listClassName={`bot-ip-list${(ipTab === "source" ? topSourceBarItems : topDestBarItems).length === 5 ? " bot-ip-list--full" : ""}`}
         />
       </div>
       </div>
@@ -1426,14 +1474,15 @@ export default function BotDetection() {
       {/* Recent Alerts Table */}
       <div className="bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg md:rounded-xl shadow-lg h-auto overflow-hidden">
         <div ref={alertsTableRef} className="px-3 py-2.5 md:px-4 md:py-3 border-b border-[var(--soc-border)] bg-[var(--soc-card)]">
-          <div className="flex gap-2 flex-wrap attack-logs-search soc-filter-row items-center">
-            <div className="flex-1 min-w-0 basis-full sm:basis-0 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-500" />
+          <div className="bot-filter-toolbar flex gap-1.5 min-[400px]:gap-2 flex-nowrap attack-logs-search soc-filter-row items-center overflow-x-auto">
+            <div className="bot-search-container flex-1 min-w-0 basis-0 relative shrink">
+              <Search className="bot-search-icon absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-500" />
               <input type="text" value={searchQuery} onChange={(e) => { setPage(1); setSearchQuery(e.target.value); }}
                 placeholder="Search by agent, detection, source IP, or destination IP..."
-                className="w-full pl-10 pr-4 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500" />
+                className="bot-search-input w-full pl-10 pr-4 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500" />
             </div>
             <BotCombinedFilter
+              className="bot-table-filter"
               detector={detectorFilter} onDetectorChange={(v) => { setPage(1); setDetectorFilter(v); }}
               behaviorType={behaviorType} onBehaviorTypeChange={(v) => { setPage(1); setBehaviorType(v); }}
               protocol={protocol} onProtocolChange={(v) => { setPage(1); setProtocol(v); }}
@@ -1447,24 +1496,22 @@ export default function BotDetection() {
                 : ""}
               onClearTimelineFilter={() => {
                 setSelectedPoint(null);
-                // Filter detektor ikut dibersihkan: kalau tidak, tabel tetap
-                // terkunci ke satu detector meski chip waktu sudah dihapus.
                 setBehaviorType("all");
                 setPage(1);
               }}
             />
-            <ExportCsvButton accent="sky" onClick={handleExportCsv} />
+            <ExportCsvButton accent="sky" onClick={handleExportCsv} className="bot-export-csv-button" />
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[960px] text-[10px] md:text-[11px] text-left">
+          <table className="bot-alert-table w-full min-w-[970px] sm:min-w-[1010px] text-[9px] sm:text-[10px] md:text-[11px] text-left">
             <colgroup>
               <col />
               <col />
               <col />
-              <col />
-              <col />
+              <col style={{ width: "170px" }} />
+              <col style={{ width: "100px" }} />
               <col />
               <col />
               <col />
@@ -1474,7 +1521,7 @@ export default function BotDetection() {
             <thead>
               <tr className="border-b border-slate-800 bg-slate-800/70">
                 {["time", "agent", "detection", "source", "country", "destination", "protocol", "confidence", "packets", "traffic"].map((h) => (
-                  <th key={h} className="px-2 md:px-4 lg:px-3 py-2 md:py-3 lg:py-2 text-[9px] md:text-[11px] lg:text-[10px] font-semibold text-slate-400 uppercase whitespace-nowrap">{h}</th>
+                  <th key={h} className="px-1.5 sm:px-2 md:px-4 lg:px-3 py-2 md:py-3 lg:py-2 text-[9px] md:text-[11px] lg:text-[10px] font-semibold text-slate-400 uppercase whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -1503,19 +1550,19 @@ export default function BotDetection() {
                 return (
                   <tr key={a.id || idx}
                     className={`border-b border-slate-800/60 transition-all duration-150 hover:bg-purple-500/10 hover:shadow-[inset_3px_0_0_0_#a855f7] ${idx % 2 !== 0 ? 'bg-[var(--soc-zebra)]' : ''}`}>
-                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-slate-500 whitespace-nowrap" title={formatDetailedTimestamp(a.timestamp)}>{formatDetailedTimestamp(a.timestamp)}</td>
-                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-sky-400 font-medium" title={a.agent || "-"}><div className="truncate max-w-[140px] md:max-w-[200px]">{a.agent || "-"}</div></td>
-                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 whitespace-nowrap"><DetectionBadge alert={a} /></td>
-                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-emerald-400 font-mono" title={source}><div className="truncate max-w-[120px] md:max-w-[140px]">{source}</div></td>
-                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 whitespace-nowrap"><CountryFlag ip={a.sourceIp} entry={ipGeo.get(a.sourceIp)} /></td>
-                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-violet-400 font-mono" title={destination}><div className="truncate max-w-[150px] md:max-w-[200px]">{destination}</div></td>
-                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-slate-300 whitespace-nowrap">{protoMethod}</td>
-                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 whitespace-nowrap"><LevelBadge alert={a} label={activity} /></td>
-                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 whitespace-nowrap font-mono text-[10px] md:text-[11px] text-slate-300"
+                    <td className="px-1.5 sm:px-2 md:px-4 lg:px-3 py-3 md:py-5 lg:py-4 text-slate-500 whitespace-nowrap" title={formatDetailedTimestamp(a.timestamp)}>{formatDetailedTimestamp(a.timestamp)}</td>
+                    <td className="px-1.5 sm:px-2 md:px-4 lg:px-3 py-3 md:py-5 lg:py-4 text-sky-400 font-medium" title={a.agent || "-"}><div className="truncate max-w-[100px] sm:max-w-[140px] md:max-w-[200px]">{a.agent || "-"}</div></td>
+                    <td className="px-1.5 sm:px-2 md:px-4 lg:px-3 py-3 md:py-5 lg:py-4 whitespace-nowrap"><DetectionBadge alert={a} /></td>
+                    <td className="px-1.5 sm:px-2 md:px-4 lg:px-3 py-3 md:py-5 lg:py-4 text-emerald-400 font-mono" title={source}><div className="truncate max-w-[150px] sm:max-w-[160px] md:max-w-[170px]">{source}</div></td>
+                    <td className="px-1.5 sm:px-2 md:px-4 lg:px-3 py-3 md:py-5 lg:py-4 whitespace-nowrap"><CountryFlag ip={a.sourceIp} entry={ipGeo.get(a.sourceIp)} /></td>
+                    <td className="px-1.5 sm:px-2 md:px-4 lg:px-3 py-3 md:py-5 lg:py-4 text-violet-400 font-mono" title={destination}><div className="truncate max-w-[110px] sm:max-w-[150px] md:max-w-[200px]">{destination}</div></td>
+                    <td className="px-1.5 sm:px-2 md:px-4 lg:px-3 py-3 md:py-5 lg:py-4 text-slate-300 whitespace-nowrap">{protoMethod}</td>
+                    <td className="px-1.5 sm:px-2 md:px-4 lg:px-3 py-3 md:py-5 lg:py-4 whitespace-nowrap"><LevelBadge alert={a} label={activity} /></td>
+                    <td className="px-1.5 sm:px-2 md:px-4 lg:px-3 py-3 md:py-5 lg:py-4 whitespace-nowrap font-mono text-[9px] sm:text-[10px] md:text-[11px] text-slate-300"
                       title={a.detectorType === "ml" && a.rulePackets != null ? `${formatNumber(a.rulePackets)} packets` : undefined}>
                       {a.detectorType === "ml" && a.rulePackets != null ? `${formatNumber(a.rulePackets)} packets` : "-"}
                     </td>
-                    <td className="px-2 md:px-4 lg:px-3 py-1.5 md:py-3 lg:py-2 text-slate-300 whitespace-nowrap font-mono"
+                    <td className="px-1.5 sm:px-2 md:px-4 lg:px-3 py-3 md:py-5 lg:py-4 text-slate-300 whitespace-nowrap font-mono"
                       title={a.detectorType === "ml" && a.totalBytes != null ? `${formatNumber(a.totalBytes)} bytes (${formatNumber(a.origBytes)} orig / ${formatNumber(a.respBytes)} resp)` : undefined}>
                       {a.detectorType === "ml" && a.totalBytes != null ? formatBytes(a.totalBytes) : "-"}
                     </td>
@@ -1527,9 +1574,9 @@ export default function BotDetection() {
         </div>
 
         {(pagination?.total || 0) > 0 && (
-          <div className="border-t border-slate-800 bg-slate-900/50 px-2 md:px-4 py-3">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2 md:gap-0">
-              <div className="text-[10px] md:text-[11px] font-mono text-slate-500">
+          <div className="bot-pagination-footer border-t border-slate-800 bg-slate-900/50 px-2 md:px-4 py-3">
+            <div className="bot-pagination-layout flex flex-col md:flex-row items-start md:items-center justify-between gap-2 md:gap-0">
+              <div className="bot-pagination-summary text-[10px] md:text-[11px] font-mono text-slate-500">
                 <span className="hidden md:inline">SHOWING </span>
                 <span className="font-bold text-sky-400">{(activePage - 1) * pageSize + 1}</span>
                 <span className="hidden md:inline"> - </span><span className="md:hidden">-</span>
@@ -1538,7 +1585,7 @@ export default function BotDetection() {
                 <span className="font-bold text-sky-400">{formatNumber(pagination.total)}</span>
                 <span className="hidden md:inline"> ALERTS</span>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="bot-pagination-controls flex flex-wrap items-center gap-2">
                 <button disabled={activePage === 1 || loading} onClick={() => { setPage(1); scrollTableIntoView(); }} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">FIRST</button>
                 <button disabled={activePage === 1 || loading} onClick={() => { setPage(Math.max(1, activePage - 1)); scrollTableIntoView(); }} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">PREV</button>
                 <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400"><span className="hidden md:inline">PAGE </span><span className="text-[var(--soc-text-primary)]">{activePage}</span> / {totalPages}</span>

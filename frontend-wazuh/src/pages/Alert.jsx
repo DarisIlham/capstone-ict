@@ -17,6 +17,7 @@ import {
   mlSeverity,
   isMaliciousLabel,
 } from "../utils/alertSeverity";
+import { getTopFilterValues } from "../utils/topFilterValues";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -44,6 +45,29 @@ const SEVERITY_CONFIG = {
   high: { label: "High", color: "text-orange-400", bg: "bg-orange-500/15", border: "border-orange-500/30", dot: "bg-orange-400" },
   medium: { label: "Medium", color: "text-yellow-400", bg: "bg-yellow-500/15", border: "border-yellow-500/30", dot: "bg-yellow-400" },
   low: { label: "Low", color: "text-emerald-400", bg: "bg-emerald-500/15", border: "border-emerald-500/30", dot: "bg-emerald-400" },
+};
+
+const normalizeAlertText = (value) => String(value ?? "").trim().toLowerCase();
+
+const getDistinctAlertDetails = (alert) => {
+  const title = String(alert.title || "");
+  const asset = String(alert.asset || "");
+  const user = alert.user && alert.user !== "-" ? String(alert.user) : "";
+  const shownValues = [title, asset, user].map(normalizeAlertText).filter(Boolean);
+  const showAsset = Boolean(asset) && normalizeAlertText(asset) !== normalizeAlertText(title);
+  const showUser = Boolean(user) && !shownValues.slice(0, 2).includes(normalizeAlertText(user));
+  const reason = String(alert.reason || "")
+    .split(/\s+\|\s+/)
+    .filter((part) => {
+      const match = part.match(/^([^:]+):\s*(.*)$/);
+      if (!match) return true;
+      const [, label, value] = match;
+      if (label.trim().toLowerCase() === "user" && showUser) return false;
+      return !shownValues.includes(normalizeAlertText(value));
+    })
+    .join(" | ");
+
+  return { showAsset, showUser, reason };
 };
 
 export default function Alert() {
@@ -382,24 +406,15 @@ export default function Alert() {
   });
 
   const agentOptions = useMemo(() => {
-    const set = new Set();
-    for (const a of alerts) {
-      const v = String(a.agent || "").trim();
-      if (v && v !== "-") set.add(v);
-    }
-    return Array.from(set).sort();
-  }, [alerts]);
+    return getTopFilterValues(alerts, (alert) => alert.agent, undefined, agentFilter);
+  }, [alerts, agentFilter]);
 
   const userOptions = useMemo(() => {
-    const set = new Set();
-    for (const a of alerts) {
-      const v = String(a.user || "").trim();
-      if (v && v !== "-") set.add(v);
-    }
-    return Array.from(set).sort();
-  }, [alerts]);
+    return getTopFilterValues(alerts, (alert) => alert.user, undefined, userFilter);
+  }, [alerts, userFilter]);
 
   const activeFilterCount = [
+    filterSeverity !== "all",
     filterSource !== "all",
     agentFilter !== "all",
     userFilter !== "all",
@@ -436,23 +451,24 @@ export default function Alert() {
   );
 
   return (
-    <div className="flex flex-col w-full min-w-0 gap-4">
+    <div className="alert-page flex flex-col w-full min-w-0 gap-4">
       {/* Header */}
-      <div className="flex flex-col min-[700px]:flex-row min-[700px]:items-center justify-between gap-3">
+      <div className="alert-mobile-header flex flex-col min-[700px]:flex-row min-[700px]:items-center justify-between gap-3 shrink-0">
         <div>
-          <h1 className="text-lg min-[600px]:text-xl font-bold text-[var(--soc-text-primary)]">
+          <h1 className="alert-page-title text-lg min-[600px]:text-xl font-bold text-[var(--soc-text-primary)]">
             Security Alerts
           </h1>
-          <p className="text-[11px] text-[var(--soc-text-muted)] mt-0.5">
+          <p className="alert-page-subtitle text-[11px] text-[var(--soc-text-muted)] mt-0.5">
             Monitor and investigate security events across all sources
           </p>
         </div>
-        <div className="flex items-center gap-1.5 min-[420px]:gap-2">
+        <div className="alert-page-controls flex items-center gap-1.5 min-[420px]:gap-2">
           <RangeFilter
             rangeKey={rangeKey}
             onRangeChange={handleRangeChange}
           />
           <DateRangeFilter
+            className="alert-date-range-filter"
             value={customDateRange}
             onChange={handleCustomRangeChange}
             onClear={() => {
@@ -462,7 +478,7 @@ export default function Alert() {
               setCustomDateRange(createDefaultDateRange(1));
             }}
           />
-          <div className="relative flex items-center shrink-0 bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)] h-8">
+          <div className="alert-page-size-control relative flex items-center shrink-0 bg-[var(--soc-card)] rounded-lg border border-[var(--soc-border)] h-8">
             <select
               value={pageSize}
               onChange={(event) => {
@@ -485,7 +501,7 @@ export default function Alert() {
           {loadError}
         </div>
       )}
-      <div className="grid grid-cols-2 min-[700px]:grid-cols-4 gap-3">
+      <div className="alert-severity-grid grid grid-cols-2 min-[700px]:grid-cols-4 gap-3 shrink-0">
         {[
           { key: "critical", label: "Critical", count: severityCounts.critical, color: "text-red-400", icon: AlertTriangle },
           { key: "high", label: "High", count: severityCounts.high, color: "text-orange-400", icon: AlertTriangle },
@@ -495,7 +511,7 @@ export default function Alert() {
           <button
             key={s.key}
             onClick={() => { setPage(1); setFilterSeverity(filterSeverity === s.key ? "all" : s.key); }}
-            className={`kpi-modern animate-fadeInUp text-left ${filterSeverity === s.key ? "ring-1 ring-purple-500/30" : ""}`}
+            className={`alert-severity-card kpi-modern animate-fadeInUp text-left ${filterSeverity === s.key ? "ring-1 ring-purple-500/30" : ""}`}
             style={{ opacity: 0, animationDelay: `${i * 0.05}s` }}
           >
             <div className="flex items-center justify-between mb-2">
@@ -508,22 +524,22 @@ export default function Alert() {
       </div>
 
       {/* Search + Filters */}
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1 min-w-0">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--soc-text-muted)]" />
+      <div className="alert-filter-toolbar flex items-center gap-2 shrink-0">
+        <div className="alert-search-container relative flex-1 min-w-0">
+          <Search className="alert-search-icon absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--soc-text-muted)]" />
           <input
             type="text"
             value={search}
             onChange={(e) => { setPage(1); setSearch(e.target.value); }}
             placeholder="Search alerts..."
-            className="w-full h-8 pl-9 pr-3 bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg text-[10px] text-[var(--soc-text-primary)] placeholder-[var(--soc-text-muted)] focus:outline-none focus:border-purple-500/50 transition-colors"
+            className="alert-search-input w-full h-8 pl-9 pr-3 bg-[var(--soc-card)] border border-[var(--soc-border)] rounded-lg text-[10px] text-[var(--soc-text-primary)] placeholder-[var(--soc-text-muted)] focus:outline-none focus:border-purple-500/50 transition-colors"
           />
         </div>
-        <div ref={filtersRef} className="relative shrink-0">
+        <div ref={filtersRef} className="alert-filter-container relative shrink-0">
           <button
             type="button"
             onClick={() => setFiltersOpen((c) => !c)}
-            className="flex items-center gap-1.5 h-8 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] pl-2.5 pr-2 text-[10px] text-[var(--soc-text-primary)] focus:outline-none focus:ring-1 focus:ring-purple-500/50 transition-colors hover:bg-[var(--soc-elevated)]"
+            className="alert-filter-button flex items-center gap-1.5 h-8 rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] pl-2.5 pr-2 text-[10px] text-[var(--soc-text-primary)] focus:outline-none focus:ring-1 focus:ring-purple-500/50 transition-colors hover:bg-[var(--soc-elevated)]"
           >
             <SlidersHorizontal className="h-3 w-3 text-[var(--soc-text-muted)]" />
             <span className="font-medium">Filters</span>
@@ -535,39 +551,59 @@ export default function Alert() {
             <ChevronDown className={`h-3 w-3 text-[var(--soc-text-muted)] transition-transform ${filtersOpen ? "rotate-180" : ""}`} />
           </button>
           {filtersOpen && (
-            <div className="absolute right-0 top-full mt-1 z-[100] w-[220px] max-w-[calc(100vw-3rem)] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] shadow-2xl overflow-hidden">
-              <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--soc-border)]">
+            <div className="alert-filter-popup absolute right-0 top-full mt-1 z-[100] w-[220px] max-w-[calc(100vw-3rem)] rounded-lg border border-[var(--soc-border)] bg-[var(--soc-card)] shadow-2xl overflow-hidden">
+              <div className="alert-filter-popup-header flex items-center justify-between px-3 py-2 border-b border-[var(--soc-border)]">
                 <span className="text-[10px] font-semibold text-[var(--soc-text-primary)]">Filter Options</span>
                 {activeFilterCount > 0 && (
                   <button
-                    onClick={() => { setPage(1); setFilterSource("all"); setAgentFilter("all"); setUserFilter("all"); }}
+                    onClick={() => { setPage(1); setFilterSeverity("all"); setFilterSource("all"); setAgentFilter("all"); setUserFilter("all"); }}
                     className="text-[9px] font-semibold text-purple-400 hover:text-purple-300 transition-colors"
                   >
                     Clear all
                   </button>
                 )}
               </div>
-              <div className="divide-y divide-[var(--soc-border)] max-h-[300px] overflow-y-auto">
-                <div className="px-3 py-2">
-                  <div className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">Source</div>
+              <div className="alert-filter-options divide-y divide-[var(--soc-border)] max-h-[300px] overflow-y-auto">
+                <div className="alert-filter-section px-3 py-2">
+                  <div className="alert-filter-section-title text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">Severity</div>
+                  <div className="flex flex-wrap gap-1">
+                    {[
+                      { key: "all", label: "All" },
+                      { key: "critical", label: "Critical" },
+                      { key: "high", label: "High" },
+                      { key: "medium", label: "Medium" },
+                      { key: "low", label: "Low" },
+                    ].map((s) => (
+                      <button
+                        key={s.key}
+                        onClick={() => { setPage(1); setFilterSeverity(s.key); }}
+                        className={`alert-filter-option px-2 py-1 rounded text-[10px] font-medium transition-colors ${filterSeverity === s.key ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="alert-filter-section px-3 py-2">
+                  <div className="alert-filter-section-title text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">Source</div>
                   <div className="flex flex-wrap gap-1">
                     {["all", "Host Monitoring", "File Scanner", "FIM", "ML Predictions", "Bot Detection"].map((source) => (
                       <button
                         key={source}
                         onClick={() => { setPage(1); setFilterSource(filterSource === source ? "all" : source); }}
-                        className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${filterSource === source ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}
+                        className={`alert-filter-option px-2 py-1 rounded text-[10px] font-medium transition-colors ${filterSource === source ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}
                       >
                         {source === "all" ? "All Sources" : source}
                       </button>
                     ))}
                   </div>
                 </div>
-                <div className="px-3 py-2">
-                  <div className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">Agent</div>
+                <div className="alert-filter-section px-3 py-2">
+                  <div className="alert-filter-section-title text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">Agent</div>
                   <div className="flex flex-wrap gap-1">
                     <button
                       onClick={() => { setPage(1); setAgentFilter("all"); }}
-                      className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${agentFilter === "all" ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}
+                      className={`alert-filter-option px-2 py-1 rounded text-[10px] font-medium transition-colors ${agentFilter === "all" ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}
                     >
                       All agents
                     </button>
@@ -575,19 +611,19 @@ export default function Alert() {
                       <button
                         key={opt}
                         onClick={() => { setPage(1); setAgentFilter(agentFilter === opt ? "all" : opt); }}
-                        className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${agentFilter === opt ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}
+                        className={`alert-filter-option px-2 py-1 rounded text-[10px] font-medium transition-colors ${agentFilter === opt ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}
                       >
                         {opt}
                       </button>
                     ))}
                   </div>
                 </div>
-                <div className="px-3 py-2">
-                  <div className="text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">User</div>
+                <div className="alert-filter-section px-3 py-2">
+                  <div className="alert-filter-section-title text-[9px] font-semibold text-[var(--soc-text-muted)] uppercase tracking-wider mb-1.5">User</div>
                   <div className="flex flex-wrap gap-1">
                     <button
                       onClick={() => { setPage(1); setUserFilter("all"); }}
-                      className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${userFilter === "all" ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}
+                      className={`alert-filter-option px-2 py-1 rounded text-[10px] font-medium transition-colors ${userFilter === "all" ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}
                     >
                       All users
                     </button>
@@ -595,7 +631,7 @@ export default function Alert() {
                       <button
                         key={opt}
                         onClick={() => { setPage(1); setUserFilter(userFilter === opt ? "all" : opt); }}
-                        className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${userFilter === opt ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}
+                        className={`alert-filter-option px-2 py-1 rounded text-[10px] font-medium transition-colors ${userFilter === opt ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" : "bg-[var(--soc-elevated)] text-[var(--soc-text-secondary)] border border-transparent hover:border-[var(--soc-border)]"}`}
                       >
                         {opt}
                       </button>
@@ -608,12 +644,13 @@ export default function Alert() {
         </div>
       </div>
 
-      {/* Alert Feed */}
-      <div className="chart-card overflow-hidden">
+      {/* Alert Feed — flex-1 agar card memenuhi sisa tinggi viewport;
+          daftar alert scroll di dalam, footer pagination menempel di bawah. */}
+      <div className="alert-feed chart-card overflow-hidden flex flex-col flex-1 min-h-0 !p-0">
         {loading ? (
           <PageLoader message="Loading..." />
         ) : filteredAlerts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="flex flex-1 flex-col items-center justify-center py-16 text-center px-4">
             <div className="p-4 rounded-full bg-[var(--soc-elevated)] mb-4">
               <Shield className="h-8 w-8 text-[var(--soc-text-muted)]" />
             </div>
@@ -625,10 +662,12 @@ export default function Alert() {
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-[var(--soc-border)]">
+          <div className="alert-feed-list flex-1 min-h-0 overflow-y-auto divide-y divide-[var(--soc-border)] px-4 pt-4">
             {pagedAlerts.map((alert, idx) => {
               const severityKey = alert.severity || "medium";
               const sev = SEVERITY_CONFIG[severityKey] || SEVERITY_CONFIG.medium;
+              const details = getDistinctAlertDetails(alert);
+              const isHostMonitoringAlert = alert.source === "Host Monitoring";
 
               return (
                 <div
@@ -642,19 +681,19 @@ export default function Alert() {
                       navigate(alert.link);
                     }
                   }}
-                  className="cursor-pointer px-4 py-3 transition-all duration-150 hover:bg-purple-500/10 hover:shadow-[inset_3px_0_0_0_#a855f7] animate-fadeInUp"
+                  className="alert-feed-item relative cursor-pointer -mr-4 pl-4 pr-4 py-3 transition-all duration-150 hover:bg-purple-500/10 before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:bg-transparent hover:before:bg-purple-500 before:transition-colors animate-fadeInUp"
                   style={{ opacity: 0, animationDelay: `${idx * 0.03}s` }}
                   title="Open related log"
                 >
-                  <div className="flex items-start gap-3">
+                  <div className="alert-feed-item-content flex items-start gap-3 pl-1">
                     <div className={`mt-1 w-2 h-2 rounded-full shrink-0 ${sev.dot}`} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className={`inline-flex items-center px-2 py-0.5 text-[9px] font-semibold rounded-full border ${sev.bg} ${sev.color} ${sev.border}`}>
+                        <span className={`alert-feed-severity inline-flex items-center px-2 py-0.5 text-[9px] font-semibold rounded-full border ${sev.bg} ${sev.color} ${sev.border}`}>
                           {sev.label}
                         </span>
-                        <span className="text-[10px] text-[var(--soc-text-muted)] font-medium truncate min-w-0">{alert.source}</span>
-                        <span className="ml-auto text-[9px] text-[var(--soc-text-muted)] shrink-0 flex items-center gap-1 pl-2">
+                        <span className="alert-feed-source text-[10px] text-[var(--soc-text-muted)] font-medium truncate min-w-0">{alert.source}</span>
+                        <span className="alert-feed-time ml-auto text-[9px] text-[var(--soc-text-muted)] shrink-0 flex items-center gap-1 pl-2">
                           <Clock className="h-3 w-3" />
                           {new Date(alert.timestamp).toLocaleString("en-US", {
                             month: "short",
@@ -664,12 +703,21 @@ export default function Alert() {
                           })}
                         </span>
                       </div>
-                      <p className="text-[10px] text-[var(--soc-text-muted)] mt-1 break-all">{alert.asset}</p>
-                      {alert.user && alert.user !== "-" && (
-                        <p className="text-[10px] text-[var(--soc-text-muted)] break-all">User: {alert.user}</p>
+                      {details.showAsset && (
+                        <p className="alert-feed-asset text-[10px] text-[var(--soc-text-muted)] mt-1 break-all">{alert.asset}</p>
                       )}
-                      <p className="text-[12px] text-[var(--soc-text-primary)] mt-1 break-words font-medium">{alert.title}</p>
-                      <p className="text-[10px] text-[var(--soc-text-muted)] mt-0.5 break-words">{alert.reason}</p>
+                      {isHostMonitoringAlert && (
+                        <p className="alert-feed-title text-[12px] text-[var(--soc-text-primary)] mt-1 break-words font-medium">{alert.title}</p>
+                      )}
+                      {details.showUser && (
+                        <p className="alert-feed-user text-[10px] text-[var(--soc-text-muted)] break-all">User: {alert.user}</p>
+                      )}
+                      {!isHostMonitoringAlert && (
+                        <p className="alert-feed-title text-[12px] text-[var(--soc-text-primary)] mt-1 break-words font-medium">{alert.title}</p>
+                      )}
+                      {details.reason && (
+                        <p className="alert-feed-reason text-[10px] text-[var(--soc-text-muted)] mt-0.5 break-words">{details.reason}</p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -678,9 +726,9 @@ export default function Alert() {
           </div>
         )}
         {filteredAlerts.length > 0 && (
-          <div className="border-t border-slate-800 bg-slate-900/50 px-2 md:px-4 py-1.5">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-1 md:gap-0">
-              <div className="text-[10px] md:text-[11px] font-mono text-slate-500">
+          <div className="alert-pagination-footer shrink-0 border-t border-slate-800 bg-slate-900/50 px-4 py-2 md:py-2.5 rounded-b-[12px]">
+            <div className="alert-pagination-layout flex flex-col md:flex-row items-start md:items-center justify-between gap-1 md:gap-0">
+              <div className="alert-pagination-summary text-[10px] md:text-[11px] font-mono text-slate-500">
                 <span className="hidden md:inline">SHOWING </span>
                 <span className="font-bold text-sky-400">{(activePage - 1) * pageSize + 1}</span>
                 <span className="hidden md:inline"> - </span><span className="md:hidden">-</span>
@@ -689,7 +737,7 @@ export default function Alert() {
                 <span className="font-bold text-sky-400">{filteredAlerts.length}</span>
                 <span className="hidden md:inline"> ALERTS</span>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="alert-pagination-controls flex flex-wrap items-center gap-2">
                 <button disabled={activePage === 1 || loading} onClick={() => setPage(1)} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">FIRST</button>
                 <button disabled={activePage === 1 || loading} onClick={() => setPage(Math.max(1, activePage - 1))} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">PREV</button>
                 <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400 whitespace-nowrap"><span className="hidden md:inline">PAGE </span><span className="text-[var(--soc-text-primary)]">{activePage}</span> / {totalPages}</span>

@@ -472,43 +472,43 @@ const AlarmPopup = ({ popup, onDismiss }) => {
   };
 
   return (
-    <div className="fixed inset-x-0 top-0 z-[300] flex justify-center px-3 pt-3 pointer-events-none">
+    <div className="fixed inset-x-0 top-0 z-[300] flex justify-center px-2 pt-2 min-[400px]:px-3 min-[400px]:pt-3 pointer-events-none">
       <div
         key={batchKey}
         role="alertdialog"
         aria-label="Critical alert"
-        className="pointer-events-auto w-full max-w-md rounded-2xl border border-[var(--soc-border)] shadow-2xl overflow-hidden animate-fadeInUp"
+        className="pointer-events-auto w-full max-w-[calc(100vw-1rem)] min-[400px]:max-w-md rounded-xl min-[400px]:rounded-2xl border border-[var(--soc-border)] shadow-2xl overflow-hidden animate-fadeInUp"
         style={{ background: "var(--soc-card)" }}
       >
         <div className="h-1 bg-red-500" />
 
-        <div className="flex items-start gap-3 px-4 py-3.5">
-          <div className="p-2 rounded-xl bg-red-500/15 shrink-0">
-            <BellRing className="h-4 w-4 text-red-500" />
+        <div className="flex items-start gap-2 px-3 py-2.5 min-[400px]:gap-3 min-[400px]:px-4 min-[400px]:py-3.5">
+          <div className="p-1.5 min-[400px]:p-2 rounded-lg min-[400px]:rounded-xl bg-red-500/15 shrink-0">
+            <BellRing className="h-3.5 w-3.5 min-[400px]:h-4 min-[400px]:w-4 text-red-500" />
           </div>
           <div className="flex-1 min-w-0 leading-relaxed">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-[12px] font-bold text-[var(--soc-text-primary)] leading-relaxed">
+              <h3 className="text-[11px] min-[400px]:text-[12px] font-bold text-[var(--soc-text-primary)] leading-relaxed">
                 {popup.total} Critical Alert{popup.total > 1 ? "s" : ""} incoming
               </h3>
-              <span className="rounded-full bg-red-500 px-2 py-0.5 text-[9px] font-bold text-white leading-none">
+              <span className="rounded-full bg-red-500 px-1.5 min-[400px]:px-2 py-0.5 text-[8px] min-[400px]:text-[9px] font-bold text-white leading-none">
                 {popup.total} new
               </span>
             </div>
-            <p className="text-[10px] text-[var(--soc-text-muted)] leading-relaxed mt-1">
+            <p className="text-[9px] min-[400px]:text-[10px] text-[var(--soc-text-muted)] leading-relaxed mt-0.5 min-[400px]:mt-1">
               New detections require your attention
             </p>
           </div>
           <button
             onClick={onDismiss}
             aria-label="Dismiss alarm"
-            className="p-1.5 rounded-lg text-[var(--soc-text-muted)] hover:text-[var(--soc-text-primary)] hover:bg-[var(--soc-elevated)] transition-colors shrink-0"
+            className="p-1 rounded-lg text-[var(--soc-text-muted)] hover:text-[var(--soc-text-primary)] hover:bg-[var(--soc-elevated)] transition-colors shrink-0"
           >
-            <X className="h-3.5 w-3.5" />
+            <X className="h-3 w-3 min-[400px]:h-3.5 min-[400px]:w-3.5" />
           </button>
         </div>
 
-        <ul className="max-h-56 overflow-y-auto divide-y divide-[var(--soc-border)]/60 border-t border-[var(--soc-border)]/60">
+        <ul className="max-h-[160px] min-[400px]:max-h-56 overflow-y-auto divide-y divide-[var(--soc-border)]/60 border-t border-[var(--soc-border)]/60">
           {popup.items.map((item) => {
             const isBotnet = item.source === "Bot Detection";
             const Icon = isBotnet ? Bot : item.source === "FIM" ? ShieldAlert : AlertTriangle;
@@ -518,14 +518,14 @@ const AlarmPopup = ({ popup, onDismiss }) => {
                   type="button"
                   onClick={() => openItem(item.link)}
                   title={`Buka ${item.source}`}
-                  className="flex w-full items-start gap-3 px-4 py-3 text-left leading-relaxed hover:bg-[var(--soc-elevated)]/60 transition-colors cursor-pointer"
+                  className="flex w-full items-start gap-2 min-[400px]:gap-3 px-3 min-[400px]:px-4 py-2 min-[400px]:py-3 text-left leading-relaxed hover:bg-[var(--soc-elevated)]/60 transition-colors cursor-pointer"
                 >
-                  <div className="p-1.5 rounded-lg bg-red-500/10 shrink-0 mt-0.5">
-                    <Icon className="h-3.5 w-3.5 text-red-500" />
+                  <div className="p-1 rounded-lg bg-red-500/10 shrink-0 mt-0.5">
+                    <Icon className="h-3 w-3 min-[400px]:h-3.5 min-[400px]:w-3.5 text-red-500" />
                   </div>
                   <div className="min-w-0 flex-1 leading-relaxed">
-                    <p className="text-[11px] font-medium text-[var(--soc-text-primary)] break-words leading-relaxed">{item.title}</p>
-                    <p className="text-[9px] text-[var(--soc-text-muted)] mt-1 truncate leading-relaxed">
+                    <p className="text-[10px] min-[400px]:text-[11px] font-medium text-[var(--soc-text-primary)] break-words leading-relaxed">{item.title}</p>
+                    <p className="text-[8px] min-[400px]:text-[9px] text-[var(--soc-text-muted)] mt-0.5 min-[400px]:mt-1 truncate leading-relaxed">
                       {item.source} &middot; {item.asset}
                     </p>
                   </div>
@@ -534,7 +534,7 @@ const AlarmPopup = ({ popup, onDismiss }) => {
             );
           })}
           {popup.total > popup.items.length && (
-            <li className="px-4 py-2.5 text-[9px] text-[var(--soc-text-muted)] leading-relaxed">
+            <li className="px-3 min-[400px]:px-4 py-2 text-[8px] min-[400px]:text-[9px] text-[var(--soc-text-muted)] leading-relaxed">
               +{popup.total - popup.items.length} more alert{popup.total - popup.items.length > 1 ? "s" : ""} in the alarm history
             </li>
           )}
