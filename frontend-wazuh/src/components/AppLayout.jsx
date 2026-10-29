@@ -229,6 +229,9 @@ export default function AppLayout({ children }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState(() => NAV_GROUPS.map(g => g.label));
+  // Soft refresh: remount halaman aktif agar datanya diambil ulang tanpa
+  // full page reload (menghindari redirect server pada deep link SPA).
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     localStorage.setItem("sidebar-collapsed", collapsed ? "1" : "0");
@@ -485,7 +488,7 @@ export default function AppLayout({ children }) {
             </button>
             <button
               type="button"
-              onClick={() => window.location.reload()}
+              onClick={() => setRefreshKey((k) => k + 1)}
               title="Refresh page"
               aria-label="Refresh page"
               className="p-1.5 rounded-lg text-[var(--soc-text-muted)] hover:text-[var(--soc-text-primary)] hover:bg-[var(--soc-elevated)] transition-colors"
@@ -545,7 +548,7 @@ export default function AppLayout({ children }) {
 
         {/* Page Content */}
         <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden relative">
-          <div className="soc-container py-3 px-4">
+          <div key={refreshKey} className="soc-container py-3 px-4">
             {children}
           </div>
         </main>
