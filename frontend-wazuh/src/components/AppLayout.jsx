@@ -331,7 +331,7 @@ export default function AppLayout({ children }) {
           const visibleItems = group.items.filter(
             (item) => {
               if (item.adminOnly && user?.role !== "admin") return false;
-              if (demo && item.label === "User Management") return false;
+              if (demo && (item.label === "User Management" || item.label === "Bot Detection")) return false;
               return true;
             }
           );
