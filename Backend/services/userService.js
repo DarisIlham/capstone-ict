@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import pool from "../config/pg.js";
+import { assertSafeEmail, validatePassword } from "../utils/validation.js";
 
 // Helper to map DB row -> user object shape used by controllers
 const mapRowToUser = (row) => ({
@@ -22,8 +23,12 @@ export const addUser = async (name, email, password, role = "user") => {
     if (!name || !email || !password) throw new Error("Name, email, and password are required");
     if (!["admin", "user"].includes(role)) throw new Error("Role must be 'admin' or 'user'");
 
+    const safeEmail = assertSafeEmail(email, "email");
+    const passwordCheck = validatePassword(password);
+    if (!passwordCheck.ok) throw new Error(passwordCheck.message);
+
     // Check whether the email already exists
-    const exists = await pool.query('SELECT id FROM users WHERE email = $1 LIMIT 1', [email]);
+    const exists = await pool.query('SELECT id FROM users WHERE email = $1 LIMIT 1', [safeEmail]);
     if (exists.rows.length > 0) throw new Error('Email already registered');
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -34,7 +39,7 @@ export const addUser = async (name, email, password, role = "user") => {
       VALUES ($1,$2,$3,$4,$5,$6,$6)
       RETURNING *
     `;
-    const result = await pool.query(insertQ, [name, email, hashedPassword, role, 'active', now]);
+    const result = await pool.query(insertQ, [String(name).trim(), safeEmail, hashedPassword, role, 'active', now]);
     const row = result.rows[0];
 
     return {
@@ -98,13 +103,15 @@ export const unpendingUser = async (userId) => {
  */
 export const getAllUsers = async (page = 1, limit = 10) => {
   try {
-    const offset = (page - 1) * limit;
-    const res = await pool.query('SELECT id, name, email, role, status, pending_until, created_at, updated_at FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2', [limit, offset]);
+    const safePage = Math.max(1, Number(page) || 1);
+    const safeLimit = Math.min(100, Math.max(1, Number(limit) || 10));
+    const offset = (safePage - 1) * safeLimit;
+    const res = await pool.query('SELECT id, name, email, role, status, pending_until, created_at, updated_at FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2', [safeLimit, offset]);
     const countRes = await pool.query('SELECT COUNT(*) as cnt FROM users');
     const total = Number(countRes.rows[0].cnt || 0);
     return {
       success: true,
-      pagination: { total, page, limit, pages: Math.ceil(total / limit) },
+      pagination: { total, page: safePage, limit: safeLimit, pages: Math.ceil(total / safeLimit) },
       users: res.rows.map(mapRowToUser),
     };
   } catch (error) {

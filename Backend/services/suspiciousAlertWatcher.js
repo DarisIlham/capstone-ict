@@ -9,11 +9,11 @@
 // saat start, watermark = sekarang sehingga tidak ada backlog lama.
 
 import axios from "axios";
-import https from "node:https";
 import { listSuspiciousLinuxCommands } from "./linuxCommandService.js";
 import { listPredictions } from "./mlService.js";
 import { listAlerts as listBotAlerts } from "./botDetectionService.js";
 import { sendDangerousAlert, isAlertBotConfigured } from "./telegramAlertService.js";
+import { createIndexerHttpsAgent } from "../config/tls.js";
 
 function readConfig() {
   return {
@@ -24,7 +24,7 @@ function readConfig() {
   };
 }
 
-const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+const httpsAgent = createIndexerHttpsAgent();
 
 const tsOf = (v) => {
   const t = Date.parse(v);

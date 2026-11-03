@@ -3,7 +3,6 @@ import { useSearchParams } from "react-router-dom";
 import {
   Search,
   AlertTriangle,
-  Clock,
   Terminal,
   Activity,
   CalendarRange,
@@ -1157,7 +1156,6 @@ const HostMonitoring = () => {
   const [userFilter, setUserFilter] = useState("all");
   const [agentFilter, setAgentFilter] = useState(urlAgent || "all");
   const [sessionFilter, setSessionFilter] = useState("all");
-  const [selectedSession, setSelectedSession] = useState(null);
   const [selectedTimelinePoint, setSelectedTimelinePoint] = useState(null);
   const [rangeKey, setRangeKey] = useState(() =>
     urlRange && ["1h", "24h", "7d", "30d"].includes(urlRange) ? urlRange : "24h"
@@ -1783,14 +1781,6 @@ const HostMonitoring = () => {
     setPage(1);
   }, []);
 
-  const sessionCommands = useMemo(() => {
-    if (!selectedSession) return [];
-
-    return logs
-      .filter((l) => l.sessionId === selectedSession)
-      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  }, [selectedSession, logs]);
-
   const handleTimelinePointSelect = useCallback((point) => {
     setPage(1);
     setSelectedTimelinePoint((current) =>
@@ -2119,7 +2109,7 @@ const HostMonitoring = () => {
                   color="#f97316"
                   totalLabel="sessions"
                   onPointClick={handleSessionSummaryClick}
-                  activeLabel={sessionFilter !== "all" ? sessionFilter : selectedSession}
+                  activeLabel={sessionFilter !== "all" ? sessionFilter : undefined}
                 />
               </div>
             </div>
@@ -2295,7 +2285,7 @@ const HostMonitoring = () => {
           <div className="overflow-x-auto soc-table-scroll">
             <table className="host-log-table soc-logs-table w-full min-w-[720px] text-[11px] md:text-[12px] text-left soc-responsive-table">
               <colgroup>
-                <col style={{ width: "14%" }} />
+                <col style={{ width: "11%" }} />
                 <col style={{ width: "10%" }} />
                 <col style={{ width: "13%" }} />
                 <col style={{ width: "8%" }} />
@@ -2337,14 +2327,9 @@ const HostMonitoring = () => {
                       </td>
                       <td className="px-3 md:px-4 py-3 md:py-3.5 leading-relaxed text-[11px] md:text-[12px] text-slate-400">{log.agentName}</td>
                       <td className="px-3 md:px-4 py-3 md:py-3.5 leading-relaxed">
-                        <button
-                          onClick={() =>
-                            setSelectedSession(selectedSession === log.sessionId ? null : log.sessionId)
-                          }
-                          className="text-[11px] md:text-[12px] font-mono text-purple-300 hover:text-purple-200 transition-colors"
-                        >
+                        <span className="text-[11px] md:text-[12px] font-mono text-purple-300">
                           {log.sessionId}
-                        </button>
+                        </span>
                       </td>
                       <td className="soc-command-cell px-3 md:px-4 py-3 md:py-3.5 leading-relaxed align-top">
                         <div className="truncate overflow-hidden text-ellipsis whitespace-nowrap" title={log.command.cmd}>
@@ -2417,93 +2402,6 @@ const HostMonitoring = () => {
         </div>
       </div>
 
-      {/* ========== SESSION DETAIL MODAL ========== */}
-      {selectedSession && (
-        <div className="host-session-modal-backdrop fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="host-session-modal bg-slate-800 border border-slate-700 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            {/* Header */}
-            <div className="sticky top-0 bg-slate-800 border-b border-slate-700 px-6 py-4 flex justify-between items-center">
-              <div>
-                <h2 className="text-base font-bold text-slate-100">Session Playback</h2>
-                <p className="text-xs text-slate-500 mt-0.5">{selectedSession}</p>
-              </div>
-              <button
-                onClick={() => setSelectedSession(null)}
-                className="text-slate-400 hover:text-slate-200 text-2xl"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Session Commands */}
-            <div className="p-6 space-y-4">
-              <div className="text-xs font-semibold text-slate-300 mb-4 flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                Chronological Commands in This Session ({sessionCommands.length})
-              </div>
-
-              {sessionCommands.map((log, idx) => (
-                <div key={log.id} className="bg-slate-700/30 rounded-lg p-4 border border-slate-700">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <span className="text-xs font-bold text-slate-400 bg-slate-800 px-2 py-1 rounded">
-                          #{idx + 1}
-                        </span>
-                        <span className="text-xs text-slate-400">{new Date(log.timestamp).toLocaleString()}</span>
-                        {log.command.risk === "suspicious" && (
-                          <span className="text-xs font-bold text-red-400">⚠ SUSPICIOUS</span>
-                        )}
-                      </div>
-                      <div className="bg-slate-900 rounded p-3 mt-2">
-                        <CommandHighlighter command={log.command.cmd} />
-                      </div>
-
-                      {log.command.indicator.length > 0 && (
-                        <div className="mt-3">
-                          <p className="text-xs text-slate-400 font-semibold mb-2">Risk Indicators:</p>
-                          <div className="flex flex-wrap gap-2">
-                            {log.command.indicator.map((ind, i) => (
-                              <span
-                                key={i}
-                                className="text-xs font-bold px-2 py-1 rounded bg-red-500/20 text-red-300"
-                              >
-                                {ind}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-2 mt-3 text-xs text-slate-500">
-                        <span>Agent: {log.agentName}</span>
-                        <span>•</span>
-                        <span>Command Name: {log.commandName}</span>
-                        <span>•</span>
-                        <span>Path: {log.logFilePath}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              {sessionCommands.length === 0 && (
-                <div className="text-center py-8 text-xs text-slate-500">No commands found in this session</div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="sticky bottom-0 bg-slate-800 border-t border-slate-700 px-6 py-4 flex justify-end">
-              <button
-                onClick={() => setSelectedSession(null)}
-                className="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg hover:bg-slate-600 transition-colors text-xs font-medium"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 };

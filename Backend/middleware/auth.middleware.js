@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import pool from "../config/pg.js";
+import { JWT_SECRET } from "../config/security.js";
 
 // Awal hari WIB (00:00, UTC+7) untuk momen tertentu, dalam ms epoch.
 function wibDayStart(nowMs) {
@@ -21,7 +22,7 @@ export const verifyToken = async (req, res, next) => {
     const token = authHeader.replace("Bearer ", "");
 
     // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
+    const decoded = jwt.verify(token, JWT_SECRET);
     if (!decoded) {
       return res.status(401).json({ message: "Invalid token format" });
     }
@@ -48,12 +49,25 @@ export const verifyToken = async (req, res, next) => {
       return res.status(401).json({ message: "User not found" });
     }
     const row = r.rows[0];
+    const status = row.status || "active";
+    if (status !== "active") {
+      return res.status(403).json({ message: "Account is not active" });
+    }
+
+    // Password reset and administrator changes already update `updated_at`.
+    // Tokens issued by this version carry `loginAt`, so reject a token that
+    // predates a security-relevant account update without a schema migration.
+    const loginAt = Number(decoded.loginAt);
+    const updatedAt = new Date(row.updated_at).getTime();
+    if (Number.isFinite(loginAt) && Number.isFinite(updatedAt) && loginAt < updatedAt) {
+      return res.status(401).json({ message: "Session has been invalidated. Please login again" });
+    }
     const user = {
       id: row.id,
       email: row.email,
       name: row.name,
       role: row.role,
-      status: row.status,
+      status,
     };
     // Attach user to request
     req.user = user;

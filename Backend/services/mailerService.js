@@ -14,6 +14,8 @@ import tls from "tls";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { assertSafeEmail, assertSafeHeaderValue, escapeHtml } from "../utils/validation.js";
+import { SMTP_TLS } from "../config/tls.js";
 
 // Logo SOC untuk template email (dikirim sebagai attachment CID agar tampil di Gmail;
 // data: URI diblokir sebagian klien email).
@@ -44,6 +46,15 @@ const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
 const SMTP_SECURE = boolEnv(process.env.SMTP_SECURE, true);
 const SMTP_USER = process.env.SMTP_USER || "";
 const SMTP_PASS = process.env.SMTP_PASS || "";
+
+function senderEmail(value) {
+  const match = String(value || "").match(/<([^>]+)>/);
+  return match ? match[1].trim() : String(value || "").trim();
+}
+
+function displayName(value) {
+  return String(value || "User").replace(/[\r\n]+/g, " ").trim() || "User";
+}
 
 export function maskEmail(email) {
   const [local = "", domain = ""] = String(email).split("@");
@@ -140,6 +151,10 @@ async function sendCommand(socket, reader, command, expectedCodes = ["250"], lab
  * 587 + STARTTLS sesuai nilai SMTP_SECURE di .env.
  */
 async function sendRealSmtp({ to, from, subject, text, html, attachments = [] }) {
+  const safeTo = assertSafeEmail(to, "recipient email");
+  const safeFrom = assertSafeEmail(from, "sender email");
+  const safeSubject = assertSafeHeaderValue(subject, "subject");
+
   return withSessionTimeout(15000, async (setSocket) => {
     let socket;
     if (SMTP_SECURE) {
@@ -147,7 +162,8 @@ async function sendRealSmtp({ to, from, subject, text, html, attachments = [] })
         host: SMTP_HOST,
         port: SMTP_PORT,
         servername: SMTP_HOST,
-        rejectUnauthorized: false,
+        ca: SMTP_TLS.ca,
+        rejectUnauthorized: SMTP_TLS.rejectUnauthorized,
       });
     } else {
       socket = net.connect({ host: SMTP_HOST, port: SMTP_PORT });
@@ -175,7 +191,12 @@ async function sendRealSmtp({ to, from, subject, text, html, attachments = [] })
     // STARTTLS bila koneksi awal polos (587)
     if (!SMTP_SECURE) {
       await sendCommand(socket, reader, "STARTTLS", ["220"], "STARTTLS");
-      const upgraded = tls.connect({ socket, servername: SMTP_HOST, rejectUnauthorized: false });
+      const upgraded = tls.connect({
+        socket,
+        servername: SMTP_HOST,
+        ca: SMTP_TLS.ca,
+        rejectUnauthorized: SMTP_TLS.rejectUnauthorized,
+      });
       setSocket(upgraded);
       socket = upgraded;
       await new Promise((resolve, reject) => {
@@ -191,7 +212,7 @@ async function sendRealSmtp({ to, from, subject, text, html, attachments = [] })
     await sendCommand(socket, reader, "AUTH PLAIN " + b64, ["235"], "AUTH");
 
     await sendCommand(socket, reader, `MAIL FROM:<${SMTP_USER}>`, ["250"], "MAIL FROM");
-    await sendCommand(socket, reader, `RCPT TO:<${to}>`, ["250", "251"], "RCPT TO");
+    await sendCommand(socket, reader, `RCPT TO:<${safeTo}>`, ["250", "251"], "RCPT TO");
 
     const boundary = "socundip01boundary";
     const relBoundary = "socundip02related";
@@ -215,9 +236,9 @@ async function sendRealSmtp({ to, from, subject, text, html, attachments = [] })
     const rawMessage = hasAttachments
       ? crlf(
           [
-            `From: SOC UNDIP <${from}>`,
-            `To: <${to}>`,
-            `Subject: ${subject}`,
+            `From: SOC UNDIP <${safeFrom}>`,
+            `To: <${safeTo}>`,
+            `Subject: ${safeSubject}`,
             "MIME-Version: 1.0",
             `Content-Type: multipart/related; boundary="${relBoundary}"`,
             "",
@@ -240,9 +261,9 @@ async function sendRealSmtp({ to, from, subject, text, html, attachments = [] })
         )
       : crlf(
           [
-            `From: SOC UNDIP <${from}>`,
-            `To: <${to}>`,
-            `Subject: ${subject}`,
+            `From: SOC UNDIP <${safeFrom}>`,
+            `To: <${safeTo}>`,
+            `Subject: ${safeSubject}`,
             "MIME-Version: 1.0",
             `Content-Type: multipart/alternative; boundary="${boundary}"`,
             "",
@@ -285,11 +306,12 @@ export async function sendOtpEmail({ to, name, code, expiresMinutes }) {
     );
   }
 
-  const from = process.env.SMTP_FROM || user;
+  const from = senderEmail(process.env.SMTP_FROM || user);
+  const safeName = displayName(name);
 
   const subject = `Your SOC UNDIP Login Code: ${code}`;
   const text = [
-    `Hello ${name || "User"},`,
+    `Hello ${safeName},`,
     "",
     `Your OTP code to log in to SOC UNDIP: ${code}`,
     `The code is valid for ${expiresMinutes} minutes. Do not share it with anyone.`,
@@ -311,7 +333,7 @@ export async function sendOtpEmail({ to, name, code, expiresMinutes }) {
           </div>
           <h2 style="color: #F1F5F9; text-align: center; margin: 0 0 4px;">Your Login Code</h2>
           <p style="color: #94A3B8; text-align: center; font-size: 13px; margin: 0 0 20px;">Security Operation Center UNDIP</p>
-          <p style="color: #CBD5E1; font-size: 15px;">Hello <strong>${name || "User"}</strong>,</p>
+          <p style="color: #CBD5E1; font-size: 15px;">Hello <strong>${escapeHtml(safeName)}</strong>,</p>
           <p style="color: #94A3B8; font-size: 14px; line-height: 1.6;">Use the code below to complete your login verification:</p>
 
           <div style="text-align: center; margin: 28px 0;">
@@ -340,11 +362,13 @@ export async function sendPasswordResetEmail({ to, name, resetUrl, expiresMinute
     );
   }
 
-  const from = process.env.SMTP_FROM || user;
+  const from = senderEmail(process.env.SMTP_FROM || user);
+  const safeName = displayName(name);
+  const safeResetUrl = escapeHtml(resetUrl);
   const subject = "Reset Your SOC UNDIP Password";
 
   const text = [
-    `Hello ${name || "User"},`,
+    `Hello ${safeName},`,
     "",
     "We received a request to reset the password for your SOC UNDIP account.",
     `Click the link below (valid for ${expiresMinutes} minutes, one-time use):`,
@@ -367,12 +391,12 @@ export async function sendPasswordResetEmail({ to, name, resetUrl, expiresMinute
           </div>
           <h2 style="color: #F1F5F9; text-align: center; margin: 0 0 4px;">Reset Your Password</h2>
           <p style="color: #94A3B8; text-align: center; font-size: 13px; margin: 0 0 20px;">Security Operation Center UNDIP</p>
-          <p style="color: #CBD5E1; font-size: 15px;">Hello <strong>${name || "User"}</strong>,</p>
+          <p style="color: #CBD5E1; font-size: 15px;">Hello <strong>${escapeHtml(safeName)}</strong>,</p>
           <p style="color: #94A3B8; font-size: 14px; line-height: 1.6;">We received a request to reset the password for your account. Click the button below to create a new password. The link is valid for <strong style="color: #F1F5F9;">${expiresMinutes} minutes</strong> and can only be used <strong style="color: #F1F5F9;">once</strong>.</p>
           <div style="text-align: center; margin: 28px 0;">
-              <a href="${resetUrl}" style="display: inline-block; background: linear-gradient(135deg, #8B5CF6 0%, #A855F7 50%, #D946EF 100%); color: #ffffff; font-size: 15px; font-weight: bold; padding: 13px 36px; border-radius: 8px; text-decoration: none;">Reset Password</a>
+              <a href="${safeResetUrl}" style="display: inline-block; background: linear-gradient(135deg, #8B5CF6 0%, #A855F7 50%, #D946EF 100%); color: #ffffff; font-size: 15px; font-weight: bold; padding: 13px 36px; border-radius: 8px; text-decoration: none;">Reset Password</a>
           </div>
-          <p style="color: #64748B; font-size: 12px; text-align: center; word-break: break-all;">Or copy this link:<br><span style="color: #A78BFA;">${resetUrl}</span></p>
+          <p style="color: #64748B; font-size: 12px; text-align: center; word-break: break-all;">Or copy this link:<br><span style="color: #A78BFA;">${safeResetUrl}</span></p>
           <hr style="border: none; border-top: 1px solid #1E2A4A; margin: 24px 0 16px;">
           <p style="color: #64748B; font-size: 12px; text-align: center;">If you did not request this reset, please ignore this email.<br>&copy; 2026 SOC UNDIP. All rights reserved.</p>
       </div>

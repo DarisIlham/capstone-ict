@@ -1,7 +1,7 @@
 // config/elasticsearch.js
-import fs from "node:fs";
 import { Client } from "@elastic/elasticsearch";
 import { elastic } from "./env.js"; // Pastikan env.js juga sudah menggunakan export
+import { ELASTIC_TLS } from "./tls.js";
 
 const clientConfig = {
   node: elastic.node
@@ -14,18 +14,11 @@ if (elastic.username && elastic.password) {
   };
 }
 
-// ES 8.x default memakai HTTPS dengan self-signed certificate.
-// Tanpa opsi TLS, Node menolak chain ("self-signed certificate in
-// certificate chain") dan SEMUA query ES gagal total.
-// Prioritas: CA resmi via ELASTIC_CA_PATH; fallback dev: skip verifikasi
-// (konsisten dengan https.Agent rejectUnauthorized:false di server.js).
+// ES 8.x default memakai HTTPS. Verifikasi sertifikat aktif secara default
+// di production; set ELASTIC_CA_PATH untuk CA internal. Di development,
+// verifikasi hanya dimatikan bila CA tidak tersedia (dengan peringatan).
 if (typeof elastic.node === "string" && elastic.node.startsWith("https")) {
-  const caPath = process.env.ELASTIC_CA_PATH;
-  if (caPath && fs.existsSync(caPath)) {
-    clientConfig.tls = { ca: fs.readFileSync(caPath) };
-  } else {
-    clientConfig.tls = { rejectUnauthorized: false };
-  }
+  clientConfig.tls = ELASTIC_TLS;
 }
 
 // Ganti module.exports dengan export default

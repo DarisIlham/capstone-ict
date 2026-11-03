@@ -1,10 +1,6 @@
 // server.js
 import 'dotenv/config';
-import express from "express";
 import axios from "axios";
-import https from "https";
-import cors from "cors";
-import os from "os";
 import { Pool } from "pg";
 // MongoDB removed: no connectDB import
 import authRouter from "./routes/auth.routes.js";
@@ -12,11 +8,12 @@ import userRouter from "./routes/userRoutes.js";
 import notificationRouter from "./routes/notificationRoutes.js";
 import { startLoginBotPolling } from "./services/telegramLoginService.js";
 import { startSuspiciousAlertWatcher } from "./services/suspiciousAlertWatcher.js";
+import { verifyToken } from "./middleware/auth.middleware.js";
+import { dataLimiter } from "./middleware/rateLimiters.js";
+import { createIndexerHttpsAgent } from "./config/tls.js";
 import app from "./app.js";
 
 // Environment variables are loaded via `import 'dotenv/config'` above
-// Debug: show DB_PASS type to help diagnose startup auth issues
-console.log('DEBUG: DB_PASS typeof', typeof process.env.DB_PASS, 'present=', !!process.env.DB_PASS);
 
 // MongoDB connection removed (migrated to PostgreSQL)
 
@@ -95,8 +92,7 @@ async function saveToDatabase(event) {
   }
 }
 
-// Abaikan SSL self-signed
-const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+const httpsAgent = createIndexerHttpsAgent();
 
 // =======================
 // KONFIGURASI WAZUH INDEXER
@@ -326,7 +322,7 @@ async function handleEventsRequest(req, res) {
     console.error("❌ API ERROR:", error.message, indexerError || "");
     res.status(500).json({
       success: false,
-      message: indexerError?.reason || error.message,
+      message: "Failed to fetch events from Indexer",
     });
   }
 }
@@ -514,10 +510,11 @@ async function handleEventsTimelineRequest(req, res) {
     });
   } catch (error) {
     console.error("API ERROR (events timeline):", error.message);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: "Failed to fetch data from Indexer" });
   }
 }
 
+app.use("/api/events", dataLimiter);
 app.get("/api/events/timeline", handleEventsTimelineRequest);
 app.get("/api/events/:agent_id/timeline", handleEventsTimelineRequest);
 app.get("/api/events", handleEventsRequest);
@@ -590,7 +587,7 @@ async function handleEventsAgentsRequest(req, res) {
     });
   } catch (error) {
     console.error("❌ API ERROR (agents):", error.message);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: "Failed to fetch data from Indexer" });
   }
 }
 
@@ -660,7 +657,7 @@ async function handleEventsUsersRequest(req, res) {
     });
   } catch (error) {
     console.error("API ERROR (users):", error.message);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: "Failed to fetch data from Indexer" });
   }
 }
 
@@ -805,7 +802,7 @@ async function handleEventsDistributionRequest(req, res) {
     });
   } catch (error) {
     console.error("❌ API ERROR (distribution):", error.message);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: "Failed to fetch data from Indexer" });
   }
 }
 
@@ -906,18 +903,18 @@ async function handleDomainSummaryRequest(req, res) {
     console.error("Domain summary error:", error.message);
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: "Failed to fetch domain summary from Indexer",
     });
   }
 }
 
-app.get("/api/fim/domains", handleDomainSummaryRequest);
-app.get("/api/fim/:agent_id/domains", handleDomainSummaryRequest);
+app.get("/api/fim/domains", dataLimiter, verifyToken, handleDomainSummaryRequest);
+app.get("/api/fim/:agent_id/domains", dataLimiter, verifyToken, handleDomainSummaryRequest);
 
 // =======================
 // 3) Endpoint ambil riwayat dari DB
 // =======================
-app.get("/api/db/history", async (req, res) => {
+app.get("/api/db/history", dataLimiter, verifyToken, async (req, res) => {
   try {
     if (!pool || !DB_READY) {
       return res.json({ success: true, data: [], note: "DB not active on this machine" });
@@ -985,8 +982,11 @@ function buildPresetRange(rangeKey) {
   };
 }
 
+const MAX_HUNTING_RANGE_DAYS = Number(process.env.HUNTING_MAX_RANGE_DAYS || 366);
+const MAX_HUNTING_QUERY_LENGTH = Number(process.env.HUNTING_MAX_QUERY_LENGTH || 500);
+
 // GET /api/hunting?...
-app.get("/api/hunting", async (req, res) => {
+app.get("/api/hunting", dataLimiter, verifyToken, async (req, res) => {
   try {
     const {
       agent_id,
@@ -1008,6 +1008,26 @@ app.get("/api/hunting", async (req, res) => {
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
     const sizeNum = Math.min(Math.max(parseInt(size, 10) || 50, 1), 500);
     const fromNum = (pageNum - 1) * sizeNum;
+
+    if (q && String(q).trim().length > MAX_HUNTING_QUERY_LENGTH) {
+      return res.status(400).json({ success: false, message: "Search query is too long" });
+    }
+    if (desc && String(desc).trim().length > MAX_HUNTING_QUERY_LENGTH) {
+      return res.status(400).json({ success: false, message: "Description filter is too long" });
+    }
+
+    if (isValidDateValue(start) && isValidDateValue(end)) {
+      const startMs = new Date(toISOStringSafe(start)).getTime();
+      const endMs = new Date(toISOStringSafe(end)).getTime();
+      const spanMs = endMs - startMs;
+      const maxSpanMs = MAX_HUNTING_RANGE_DAYS * 24 * 60 * 60 * 1000;
+      if (spanMs < 0 || spanMs > maxSpanMs) {
+        return res.status(400).json({
+          success: false,
+          message: `Time range must be between 0 and ${MAX_HUNTING_RANGE_DAYS} days`,
+        });
+      }
+    }
 
     const must = [];
     const filter = [];
@@ -1107,6 +1127,7 @@ app.get("/api/hunting", async (req, res) => {
     const response = await axios.post(`${INDEXER_URL}/wazuh-alerts-*/_search`, queryPayload, {
       auth: { username: INDEXER_USER, password: INDEXER_PASS },
       httpsAgent,
+      timeout: 15000,
     });
 
     const hits = response?.data?.hits?.hits || [];
@@ -1138,7 +1159,6 @@ app.get("/api/hunting", async (req, res) => {
       size: sizeNum,
       total,
       data: rows,
-      debug: { query: queryPayload },
     });
   } catch (error) {
     const detail = error?.response?.data || null;
@@ -1150,7 +1170,6 @@ app.get("/api/hunting", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to fetch hunting data from Indexer",
-      error: error.message,
     });
   }
 });
@@ -1185,8 +1204,12 @@ app.use((req, res) => {
 
 // Global Error Handler (moved here)
 app.use((err, req, res, next) => {
+  const status = err.statusCode || err.status || 500;
   console.error("🔥 Server Error:", err.stack || err.message || err);
-  res.status(err.statusCode || 500).json({ success: false, message: err.message || "Internal server error" });
+  res.status(status).json({
+    success: false,
+    message: status >= 500 ? "Internal server error" : err.message || "Request failed",
+  });
 });
 
 const server = app.listen(PORT, "0.0.0.0", () => {

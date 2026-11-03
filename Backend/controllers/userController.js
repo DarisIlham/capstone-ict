@@ -7,13 +7,16 @@
   getUserById,
   updateUserRole,
 } from "../services/userService.js";
+import { isValidEmail, normalizeEmail, safeErrorMessage, validatePassword } from "../utils/validation.js";
+import { auditLog } from "../services/auditLogService.js";
 
 /**
  * Create new user (admin only)
  */
 export const createUser = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, password, role } = req.body || {};
+    const email = normalizeEmail(req.body?.email);
 
     // Validate input
     if (!name || !email || !password) {
@@ -23,13 +26,29 @@ export const createUser = async (req, res) => {
       });
     }
 
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ success: false, message: "Invalid email format" });
+    }
+
+    const passwordCheck = validatePassword(password);
+    if (!passwordCheck.ok) {
+      return res.status(400).json({ success: false, message: passwordCheck.message });
+    }
+
     const result = await addUser(name, email, password, role || "user");
+    auditLog({
+      action: "user.create",
+      actor: req.user,
+      target: { id: result.user?.id, email: result.user?.email },
+      ip: req.ip,
+      details: { role: result.user?.role },
+    });
     res.status(201).json(result);
   } catch (error) {
     console.error("Create user error:", error.message);
     res.status(400).json({
       success: false,
-      message: error.message,
+      message: safeErrorMessage(error, "Failed to create user"),
     });
   }
 };
@@ -39,14 +58,15 @@ export const createUser = async (req, res) => {
  */
 export const getUsers = async (req, res) => {
   try {
-    const { page = 1, limit = 10 } = req.query;
-    const result = await getAllUsers(parseInt(page), parseInt(limit));
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
+    const result = await getAllUsers(page, limit);
     res.status(200).json(result);
   } catch (error) {
     console.error("Get users error:", error.message);
     res.status(500).json({
       success: false,
-      message: error.message,
+      message: safeErrorMessage(error, "Failed to retrieve users"),
     });
   }
 };
@@ -63,7 +83,7 @@ export const getUserDetail = async (req, res) => {
     console.error("Get user detail error:", error.message);
     res.status(404).json({
       success: false,
-      message: error.message,
+      message: safeErrorMessage(error, "User not found"),
     });
   }
 };
@@ -83,12 +103,18 @@ export const removeUser = async (req, res) => {
     }
 
     const result = await deleteUser(userId);
+    auditLog({
+      action: "user.delete",
+      actor: req.user,
+      target: { id: userId },
+      ip: req.ip,
+    });
     res.status(200).json(result);
   } catch (error) {
     console.error("Delete user error:", error.message);
     res.status(400).json({
       success: false,
-      message: error.message,
+      message: safeErrorMessage(error, "Failed to delete user"),
     });
   }
 };
@@ -110,12 +136,19 @@ export const suspendUser = async (req, res) => {
     }
 
     const result = await pendingUser(userId, durationMinutes);
+    auditLog({
+      action: "user.suspend",
+      actor: req.user,
+      target: { id: userId },
+      ip: req.ip,
+      details: { durationMinutes },
+    });
     res.status(200).json(result);
   } catch (error) {
     console.error("Suspend user error:", error.message);
     res.status(400).json({
       success: false,
-      message: error.message,
+      message: safeErrorMessage(error, "Failed to suspend user"),
     });
   }
 };
@@ -135,12 +168,18 @@ export const restoreUser = async (req, res) => {
     }
 
     const result = await unpendingUser(userId);
+    auditLog({
+      action: "user.restore",
+      actor: req.user,
+      target: { id: userId },
+      ip: req.ip,
+    });
     res.status(200).json(result);
   } catch (error) {
     console.error("Restore user error:", error.message);
     res.status(400).json({
       success: false,
-      message: error.message,
+      message: safeErrorMessage(error, "Failed to restore user"),
     });
   }
 };
@@ -168,12 +207,19 @@ export const changeUserRole = async (req, res) => {
     }
 
     const result = await updateUserRole(userId, role);
+    auditLog({
+      action: "user.role_change",
+      actor: req.user,
+      target: { id: userId },
+      ip: req.ip,
+      details: { role },
+    });
     res.status(200).json(result);
   } catch (error) {
     console.error("Change user role error:", error.message);
     res.status(400).json({
       success: false,
-      message: error.message,
+      message: safeErrorMessage(error, "Failed to change user role"),
     });
   }
 };

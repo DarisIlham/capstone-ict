@@ -27,20 +27,11 @@ import {
   RESET_TOKEN_EXPIRES_MINUTES,
 } from "../services/passwordResetService.js";
 import { sendPasswordResetEmail } from "../services/mailerService.js";
+import { JWT_SECRET, RECAPTCHA_SECRET_KEY, FRONTEND_URL, FRONTEND_BASE_PATH, IS_PRODUCTION } from "../config/security.js";
+import { isValidEmail, normalizeEmail, safeErrorMessage, validatePassword } from "../utils/validation.js";
+import { auditLog } from "../services/auditLogService.js";
 
-// CAPTCHA Secret Key (dari Google reCAPTCHA)
-const RECAPTCHA_SECRET_KEY = process.env.RECAPTCHA_SECRET_KEY || "6Le7BYksAAAAALvjFetSf9GJ7xEy_r3BDux3rbly";
-
-/**
- * Verifikasi CAPTCHA dengan Google reCAPTCHA
- */
 const verifyCaptcha = async (captchaToken) => {
-  // Development MODE: bypass CAPTCHA if token is dummy/test
-  if (process.env.NODE_ENV === "development" || captchaToken === "skip-captcha") {
-    console.log("   CAPTCHA skipped (development mode)");
-    return true;
-  }
-
   if (!captchaToken) {
     throw new Error("CAPTCHA token not found");
   }
@@ -54,12 +45,12 @@ const verifyCaptcha = async (captchaToken) => {
           secret: RECAPTCHA_SECRET_KEY,
           response: captchaToken,
         },
+        timeout: 10000,
       }
     );
 
     const { success, score } = response.data;
 
-    // success=true dan score > 0.5 menandakan CAPTCHA valid
     if (!success || score < 0.5) {
       throw new Error("CAPTCHA verification failed. Possibly a bot was detected.");
     }
@@ -67,18 +58,19 @@ const verifyCaptcha = async (captchaToken) => {
     return true;
   } catch (error) {
     console.error("CAPTCHA verification error:", error.message);
-    throw new Error("Failed to verify CAPTCHA: " + error.message);
+    throw new Error("Failed to verify CAPTCHA");
   }
 };
 
 /**
- * Register: Membuat akun admin baru
+ * Register: Membuat akun user baru.
  */
 export const register = async (req, res) => {
   try {
-    const { email, password, name, captchaToken, role } = req.body;
+    const { email: rawEmail, password, name: rawName, captchaToken } = req.body || {};
+    const email = normalizeEmail(rawEmail);
+    const name = String(rawName ?? "").trim();
 
-    // Validasi input
     if (!email || !password || !name) {
       return res.status(400).json({
         success: false,
@@ -86,44 +78,59 @@ export const register = async (req, res) => {
       });
     }
 
-    // Verifikasi CAPTCHA
-    if (captchaToken) {
-      await verifyCaptcha(captchaToken);
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ success: false, message: "Invalid email format" });
     }
 
-    // Cek apakah user sudah ada (Postgres)
+    const passwordCheck = validatePassword(password);
+    if (!passwordCheck.ok) {
+      return res.status(400).json({ success: false, message: passwordCheck.message });
+    }
+
+    try {
+      await verifyCaptcha(captchaToken);
+    } catch {
+      return res.status(403).json({
+        success: false,
+        message: "CAPTCHA verification failed. Please try again.",
+        isCaptchaError: true,
+      });
+    }
+
     const qCheck = 'SELECT id FROM users WHERE email = $1 LIMIT 1';
     const rCheck = await pool.query(qCheck, [email]);
     if (rCheck && rCheck.rows && rCheck.rows.length > 0) {
       return res.status(409).json({ success: false, message: "Email already registered" });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
+    const userRole = "user";
 
-    // Set default role to "admin" untuk backward compatibility
-    const userRole = role && ["admin", "user"].includes(role) ? role : "admin";
-
-    // Buat user baru di PostgreSQL
     const qInsert = `INSERT INTO users (email, password, name, role, status, created_at, updated_at)
       VALUES ($1, $2, $3, $4, $5, NOW(), NOW()) RETURNING *`;
     const rInsert = await pool.query(qInsert, [email, hashedPassword, name, userRole, 'active']);
     const savedRow = rInsert.rows[0];
 
-    // Generate JWT Token
     const token = jwt.sign(
       {
         userId: savedRow.id,
         email: savedRow.email,
         role: savedRow.role,
+        loginAt: Date.now(),
       },
-      process.env.JWT_SECRET || "your-secret-key",
+      JWT_SECRET,
       {
         expiresIn: "7d",
       }
     );
 
-    // Akun baru di luar jam kerja / akhir pekan ikut antre approval.
+    auditLog({
+      action: "auth.register",
+      actor: { id: savedRow.id, email: savedRow.email },
+      target: { id: savedRow.id, email: savedRow.email },
+      ip: req.ip,
+    });
+
     if (shouldRequireLoginApproval()) {
       return finishLogin(req, res, savedRow, true);
     }
@@ -144,7 +151,7 @@ export const register = async (req, res) => {
     console.error("Register error:", error.message);
     res.status(500).json({
       success: false,
-      message: error.message || "An error occurred during registration",
+      message: safeErrorMessage(error, "An error occurred during registration"),
     });
   }
 };
@@ -154,7 +161,8 @@ export const register = async (req, res) => {
  */
 export const login = async (req, res) => {
   try {
-    const { email, password, captchaToken } = req.body;
+    const { password, captchaToken } = req.body || {};
+    const email = normalizeEmail(req.body?.email);
 
     // Validasi input
     if (!email || !password) {
@@ -164,10 +172,21 @@ export const login = async (req, res) => {
       });
     }
 
+    if (!isValidEmail(email)) {
+      return res.status(401).json({ success: false, message: "Incorrect email or password" });
+    }
+
     // Verifikasi CAPTCHA sebelum login
     try {
       await verifyCaptcha(captchaToken);
     } catch (captchaError) {
+      auditLog({
+        action: "auth.login",
+        outcome: "failure",
+        actor: { email },
+        ip: req.ip,
+        details: { reason: "captcha_failed" },
+      });
       return res.status(403).json({
         success: false,
         message: "CAPTCHA verification failed. Please try again.",
@@ -180,6 +199,13 @@ export const login = async (req, res) => {
     const q = 'SELECT * FROM users WHERE email = $1 LIMIT 1';
     const result = await pool.query(q, [email]);
     if (!result || !result.rows || result.rows.length === 0) {
+      auditLog({
+        action: "auth.login",
+        outcome: "failure",
+        actor: { email },
+        ip: req.ip,
+        details: { reason: "invalid_credentials" },
+      });
       return res.status(401).json({ success: false, message: "Incorrect email or password" });
     }
     // map row to user object
@@ -212,13 +238,27 @@ export const login = async (req, res) => {
         }
         user.password = newHash;
       } else {
-return res.status(401).json({ success: false, message: "Incorrect email or password" });
+        auditLog({
+          action: "auth.login",
+          outcome: "failure",
+          actor: { id: user.id, email: user.email },
+          ip: req.ip,
+          details: { reason: "invalid_credentials" },
+        });
+        return res.status(401).json({ success: false, message: "Incorrect email or password" });
       }
     }
 
     // Verifikasi password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
+      auditLog({
+        action: "auth.login",
+        outcome: "failure",
+        actor: { id: user.id, email: user.email },
+        ip: req.ip,
+        details: { reason: "invalid_credentials" },
+      });
       return res.status(401).json({
         success: false,
         message: "Incorrect email or password",
@@ -254,6 +294,19 @@ return res.status(401).json({ success: false, message: "Incorrect email or passw
       }
     }
 
+    // Do not issue a fresh token for suspended or otherwise inactive accounts.
+    // Pending accounts whose expiry has passed were converted to active above.
+    if (user.status !== "active") {
+      auditLog({
+        action: "auth.login",
+        outcome: "failure",
+        actor: { id: user.id, email: user.email },
+        ip: req.ip,
+        details: { reason: "inactive_account" },
+      });
+      return res.status(403).json({ success: false, message: "Account is not active" });
+    }
+
     // Login langsung (tanpa OTP): tetap lewat approval bila di luar jam
     // kerja / akhir pekan — tidak boleh jadi jalan pintas.
     return finishLogin(req, res, user, true);
@@ -261,7 +314,7 @@ return res.status(401).json({ success: false, message: "Incorrect email or passw
     console.error("Login error:", error.message);
     res.status(500).json({
       success: false,
-      message: error.message || "An error occurred during login",
+      message: safeErrorMessage(error, "An error occurred during login"),
     });
   }
 };
@@ -271,11 +324,7 @@ return res.status(401).json({ success: false, message: "Incorrect email or passw
  */
 export const verifyToken = (token) => {
   try {
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || "your-secret-key"
-    );
-    return decoded;
+    return jwt.verify(token, JWT_SECRET);
   } catch (error) {
     throw new Error("Invalid token");
   }
@@ -285,10 +334,16 @@ export const verifyToken = (token) => {
  * Validasi kredensial untuk alur OTP (captcha + user + password + pending).
  * Mengembalikan user bila valid, melempar Error {status, message} bila tidak.
  */
-async function validateCredentialsForOtp(email, password, captchaToken) {
+async function validateCredentialsForOtp(rawEmail, password, captchaToken) {
+  const email = normalizeEmail(rawEmail);
   if (!email || !password) {
     const err = new Error("Email and password are required");
     err.status = 400;
+    throw err;
+  }
+  if (!isValidEmail(email)) {
+    const err = new Error("Incorrect email or password");
+    err.status = 401;
     throw err;
   }
 
@@ -360,6 +415,12 @@ async function validateCredentialsForOtp(email, password, captchaToken) {
     }
   }
 
+  if (user.status !== "active") {
+    const err = new Error("Account is not active");
+    err.status = 403;
+    throw err;
+  }
+
   return user;
 }
 
@@ -370,7 +431,7 @@ async function validateCredentialsForOtp(email, password, captchaToken) {
 function signUserToken(row, rememberMe) {
   return jwt.sign(
     { userId: row.id, email: row.email, role: row.role || "user", loginAt: Date.now() },
-    process.env.JWT_SECRET || "your-secret-key",
+    JWT_SECRET,
     { expiresIn: rememberMe ? "7d" : "12h" }
   );
 }
@@ -420,7 +481,7 @@ async function finishLogin(req, res, row, rememberMe) {
   });
   try {
     await sendLoginApprovalMessage(approval);
-    console.log(`[otp] approval login dibuat id=${approval.id} email=${row.email} reason=${reason}`);
+    console.log(`[otp] approval login dibuat email=${maskEmail(row.email)} reason=${reason}`);
   } catch (tgErr) {
     // Telegram down tidak boleh mengunci user: login jalan normal.
     console.error("[otp] kirim approval Telegram gagal, login dilanjutkan:", tgErr.message);
@@ -449,8 +510,6 @@ export const requestLoginOtp = async (req, res) => {
 
     const { otpId, code } = await createOtp(user.id, user.email);
     console.log(`[otp] kode dibuat otpId=${otpId}, mengirim email...`);
-
-    const isDev = process.env.NODE_ENV === "development";
 
     // Kirim email OTP. Kode TIDAK pernah dikirim lewat API — verifikasi
     // wajib lewat email. Kalau SMTP gagal, langsung error jelas (tanpa
@@ -490,7 +549,9 @@ export const requestLoginOtp = async (req, res) => {
     console.error("Request OTP error:", error.message);
     res.status(error.status || 500).json({
       success: false,
-      message: error.message || "An error occurred while requesting OTP",
+      message: error.message?.includes("SMTP")
+        ? error.message
+        : safeErrorMessage(error, "An error occurred while requesting OTP"),
     });
   }
 };
@@ -503,9 +564,27 @@ export const requestLoginOtp = async (req, res) => {
  */
 export const requestPasswordResetLink = async (req, res) => {
   try {
-    const { email } = req.body || {};
+    const email = normalizeEmail(req.body?.email);
     if (!email) {
       return res.status(400).json({ success: false, message: "Email wajib diisi" });
+    }
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ success: false, message: "Format email tidak valid" });
+    }
+
+    if (!FRONTEND_URL) {
+      console.error("Password reset is unavailable: FRONTEND_URL is not configured");
+      return res.status(503).json({
+        success: false,
+        message: "Fitur reset password belum dikonfigurasi. Hubungi administrator.",
+      });
+    }
+    if (IS_PRODUCTION && !FRONTEND_URL.startsWith("https://")) {
+      console.error("Password reset is unavailable: FRONTEND_URL must use HTTPS in production");
+      return res.status(503).json({
+        success: false,
+        message: "Konfigurasi reset password tidak aman. Hubungi administrator.",
+      });
     }
 
     const result = await pool.query("SELECT * FROM users WHERE email = $1 LIMIT 1", [email]);
@@ -515,11 +594,9 @@ export const requestPasswordResetLink = async (req, res) => {
     const row = result.rows[0];
 
     const { token } = await createResetToken(row.id);
-    const frontendBase = (process.env.FRONTEND_URL || req.headers.origin || "").replace(/\/$/, "");
-    const frontendPath = `/${(process.env.FRONTEND_BASE_PATH || "project").replace(/^\/+|\/+$/g, "")}`;
-    const resetBase = frontendBase.endsWith(frontendPath)
-      ? frontendBase
-      : `${frontendBase}${frontendPath}`;
+    const resetBase = FRONTEND_URL.endsWith(FRONTEND_BASE_PATH)
+      ? FRONTEND_URL
+      : `${FRONTEND_URL}${FRONTEND_BASE_PATH}`;
     const resetUrl = `${resetBase}/reset-password?token=${token}`;
     try {
       await sendPasswordResetEmail({
@@ -536,6 +613,13 @@ export const requestPasswordResetLink = async (req, res) => {
       });
     }
 
+    auditLog({
+      action: "auth.password_reset_request",
+      actor: { id: row.id, email: row.email },
+      target: { id: row.id, email: row.email },
+      ip: req.ip,
+    });
+
     res.status(200).json({
       success: true,
       message: `Link reset telah dikirim ke ${maskEmail(row.email)}`,
@@ -545,7 +629,7 @@ export const requestPasswordResetLink = async (req, res) => {
     console.error("Request reset link error:", error.message);
     res.status(error.status || 500).json({
       success: false,
-      message: error.message || "An error occurred while requesting reset link",
+      message: safeErrorMessage(error, "An error occurred while requesting reset link"),
     });
   }
 };
@@ -561,7 +645,7 @@ export const verifyResetLinkToken = async (req, res) => {
   } catch (error) {
     res.status(error.status || 500).json({
       success: false,
-      message: error.message || "Link tidak valid",
+      message: safeErrorMessage(error, "Link tidak valid"),
     });
   }
 };
@@ -576,20 +660,30 @@ export const resetPasswordWithLink = async (req, res) => {
     if (!token) {
       return res.status(400).json({ success: false, message: "Token wajib diisi" });
     }
-    if (!newPassword || String(newPassword).length < 6) {
-      return res.status(400).json({ success: false, message: "Password baru minimal 6 karakter" });
+    if (!newPassword || String(newPassword).length < 8) {
+      return res.status(400).json({ success: false, message: "Password baru minimal 8 karakter" });
+    }
+    if (String(newPassword).length > 128) {
+      return res.status(400).json({ success: false, message: "Password baru maksimal 128 karakter" });
     }
 
     const { userId } = await consumeResetToken(token);
     const newHash = await bcrypt.hash(String(newPassword), 10);
     await pool.query("UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2", [newHash, userId]);
 
+    auditLog({
+      action: "auth.password_reset",
+      actor: { id: userId },
+      target: { id: userId },
+      ip: req.ip,
+    });
+
     res.status(200).json({ success: true, message: "Password berhasil diubah. Silakan login kembali." });
   } catch (error) {
     console.error("Reset password error:", error.message);
     res.status(error.status || 500).json({
       success: false,
-      message: error.message || "An error occurred while resetting password",
+      message: safeErrorMessage(error, "An error occurred while resetting password"),
     });
   }
 };
@@ -623,7 +717,7 @@ export const verifyLoginOtp = async (req, res) => {
     console.error("Verify OTP error:", error.message);
     res.status(error.status || 500).json({
       success: false,
-      message: error.message || "An error occurred while verifying OTP",
+      message: safeErrorMessage(error, "An error occurred while verifying OTP"),
     });
   }
 };
@@ -636,6 +730,13 @@ export const verifyLoginOtp = async (req, res) => {
  */
 function issueLoginSuccess(res, row, rememberMe, extra = {}, { notifyLogin = true } = {}) {
   const token = signUserToken(row, rememberMe);
+
+  auditLog({
+    action: "auth.login",
+    actor: { id: row.id, email: row.email },
+    target: { id: row.id, email: row.email },
+    ip: res.req?.ip,
+  });
 
   if ((row.role || "user") === "admin") {
     createAdminLoginNotification({ name: row.name, email: row.email }).catch((e) =>

@@ -25,7 +25,8 @@ export async function getFileReport(inputHash) {
       headers: {
         "x-apikey": virusTotalApiKey,
         Accept: "application/json"
-      }
+      },
+      signal: AbortSignal.timeout(15000)
     });
     const payload = await response.json().catch(() => ({}));
 
@@ -74,6 +75,7 @@ export async function getFileReport(inputHash) {
       status: "completed"
     };
   } catch (error) {
-    return { error: "network_error", message: error.message || "Gagal menghubungi VirusTotal." };
+    console.error("[virustotal] request failed:", error.message);
+    return { error: "network_error", message: "Gagal menghubungi VirusTotal." };
   }
 }

@@ -73,8 +73,15 @@ function formatPrediction(hit) {
 
 // 2. Gunakan 'export' di depan setiap fungsi utama
 export async function listPredictions(query) {
-  // Use maxLimit: 0 to indicate "no cap" so callers can request larger result windows.
-  const { page, limit, from } = normalizePagination(query, { maxLimit: 0 });
+  const maxLimit = Number(process.env.ML_MAX_LIMIT || 10000);
+  const maxResultWindow = Number(process.env.ML_MAX_RESULT_WINDOW || 10000);
+  const { page, limit, from } = normalizePagination(query, { maxLimit });
+
+  if (from + limit > maxResultWindow) {
+    const error = new Error(`Requested result window exceeds ${maxResultWindow} documents`);
+    error.status = 400;
+    throw error;
+  }
 
   const { label, sourceIp, destinationIp, service, start, end } = query;
 

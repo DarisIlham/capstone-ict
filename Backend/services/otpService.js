@@ -4,6 +4,9 @@
 // tidak perlu migrasi manual.
 import crypto from "crypto";
 import pool from "../config/pg.js";
+import { JWT_SECRET } from "../config/security.js";
+
+const OTP_HASH_SECRET = process.env.OTP_HASH_SECRET || JWT_SECRET;
 
 export const OTP_DIGITS = 6;
 export const OTP_EXPIRES_MINUTES = Number(process.env.OTP_EXPIRES_MINUTES || 5);
@@ -26,7 +29,7 @@ export async function ensureOtpTable() {
 }
 
 function hashCode(code) {
-  return crypto.createHash("sha256").update(String(code)).digest("hex");
+  return crypto.createHmac("sha256", OTP_HASH_SECRET).update(String(code)).digest("hex");
 }
 
 export function generateOtpCode(digits = OTP_DIGITS) {
