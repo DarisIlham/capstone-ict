@@ -7,7 +7,6 @@ import FilterSelect from "../components/FilterSelect";
 import ExportCsvButton from "../components/ExportCsvButton";
 import PageLoader from "../components/PageLoader";
 import { useTheme } from "../hooks/useTheme";
-import { fetchAllEvents } from "../utils/fetchAllEvents";
 import { exportCsv } from "../utils/exportCsv";
 import {
   createDefaultDateRange,
@@ -20,6 +19,17 @@ import { getTopFilterValues } from "../utils/topFilterValues";
 import { InlineEmptyState } from "../components/EmptyState";
 
 const API_BASE = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
+
+async function fetchEventsJson(url) {
+  const response = await fetch(url);
+  const body = await response.json();
+  if (!response.ok) {
+    const error = new Error(body?.message || `Request failed: ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+  return body;
+}
 
 // ── SVG chart helpers ───────────────────────────────────────────────────────
 const clamp = (n, a, b) => Math.min(Math.max(n, a), b);
@@ -568,7 +578,7 @@ const CopyablePath = ({ value }) => {
   };
   return (
     <div className="group/path relative min-w-0">
-      <div className="truncate max-w-[140px] sm:max-w-[180px] md:max-w-[220px] lg:max-w-[260px] 2xl:max-w-[385px] overflow-hidden text-ellipsis whitespace-nowrap">
+      <div className="truncate max-w-[170px] sm:max-w-[230px] md:max-w-[280px] lg:max-w-[340px] 2xl:max-w-[460px] overflow-hidden text-ellipsis whitespace-nowrap">
         {value}
       </div>
       <div className="absolute left-0 top-full z-50 mt-1 hidden w-max max-w-[min(420px,60vw)] group-hover/path:block rounded-lg border border-[var(--soc-border)] bg-[var(--soc-elevated)] p-2 shadow-xl">
@@ -630,21 +640,6 @@ const EVENT_TYPE_OPTIONS = [
 
 const SEVERITY_LABELS = ["Critical", "High", "Medium", "Low"];
 
-const severityForLevel = (level) => {
-  if (level >= 12) return "Critical";
-  if (level >= 8) return "High";
-  if (level >= 5) return "Medium";
-  return "Low";
-};
-
-const matchesGridFilters = (event, agentFilter, userFilter, eventFilter, severityFilter) => {
-  if (agentFilter !== "all" && String(event.agentName || "Unknown").trim() !== agentFilter) return false;
-  if (userFilter !== "all" && String(event.username || "-") !== userFilter) return false;
-  if (eventFilter !== "all" && (event.syscheckEvent || "unknown").toLowerCase() !== eventFilter.toLowerCase()) return false;
-  if (severityFilter !== "all" && severityForLevel(Number(event.ruleLevel) || 0) !== severityFilter) return false;
-  return true;
-};
-
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════════
@@ -663,6 +658,9 @@ const FimEvents = ({ agentId = "all" }) => {
   const [distData, setDistData] = useState(null);
   const [agentsStats, setAgentsStats] = useState(null);
   const [usersStats, setUsersStats] = useState(null);
+  const [timelineData, setTimelineData] = useState([]);
+  const [filesStats, setFilesStats] = useState(null);
+  const [payloadWordsData, setPayloadWordsData] = useState([]);
   const [rangeKey, setRangeKey] = useState(() => (urlRange && ["1h", "24h", "7d", "30d"].includes(urlRange) ? urlRange : "24h"));
   const [filterMode, setFilterMode] = useState(() => (urlStart && urlEnd ? "custom" : "range"));
   const [customDateRange, setCustomDateRange] = useState(() => {
@@ -683,15 +681,23 @@ const FimEvents = ({ agentId = "all" }) => {
   const [selectedPayloadPattern, setSelectedPayloadPattern] = useState(null);
   const [clientPage, setClientPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [cursorStack, setCursorStack] = useState([null]);
   const topAgentsPanelRef = useRef(null);
   const logsTableRef = useRef(null);
+  const requestIdRef = useRef(0);
+  const lastPageRequestRef = useRef(0);
+  const rangeSnapshotRef = useRef(null);
   // Tinggi cloud mengikuti tinggi aktual kartu Top 5 Changed Files
   const topFilesCardRef = useRef(null);
   const payloadHeaderRef = useRef(null);
   const [payloadCloudH, setPayloadCloudH] = useState(260);
+  const isLastNavigationRef = useRef(false);
 
   const focusLogs = useCallback(() => {
     setClientPage(1);
+    setCursorStack([null]);
+    setNextCursor(null);
     setTimeout(() => {
       if (logsTableRef.current?.scrollIntoView) {
         try { logsTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); } catch {}
@@ -772,7 +778,11 @@ const FimEvents = ({ agentId = "all" }) => {
     updateTimelineHeight();
   }, [isMobile, viewportWidth]);
 
-  React.useEffect(() => { setClientPage(1); }, [searchQuery, eventFilter, agentFilter, userFilter, severityFilter, selectedPayloadPattern]);
+  React.useEffect(() => {
+    setClientPage(1);
+    setCursorStack([null]);
+    setNextCursor(null);
+  }, [searchQuery, eventFilter, agentFilter, userFilter, severityFilter, selectedPayloadPattern, pathFilter, selectedTimelinePoint]);
 
   React.useEffect(() => {
     if (!pathFilter && !urlAgent && urlFocus !== "logs") return;
@@ -798,259 +808,127 @@ const FimEvents = ({ agentId = "all" }) => {
     return { start: start.toISOString(), end: end.toISOString() };
   }, [filterMode, customDateRange, rangeKey]);
 
+  const getEventsRoute = useCallback(() => {
+    const agentPath = agentId && agentId !== "all" ? `/${encodeURIComponent(agentId)}` : "";
+    return `${API_BASE}/events${agentPath}`;
+  }, [agentId]);
+
+  const buildTableParams = useCallback(({ pageNum = clientPage, cursor = cursorStack[pageNum - 1], size = pageSize } = {}) => {
+    const range = cursor && rangeSnapshotRef.current ? rangeSnapshotRef.current : getEffectiveRange();
+    if (!cursor) rangeSnapshotRef.current = range;
+    const params = new URLSearchParams({
+      page: String(pageNum),
+      size: String(size),
+      start: selectedTimelinePoint?.start || range.start,
+      end: selectedTimelinePoint?.end || range.end,
+    });
+    if (severityFilter !== "all") params.set("severity", severityFilter.toLowerCase());
+    if (agentFilter !== "all") params.set("agentName", agentFilter);
+    if (userFilter !== "all") params.set("user", userFilter);
+    if (eventFilter !== "all") params.set("event", eventFilter.toLowerCase());
+    if (pathFilter) params.set("path", pathFilter);
+    if (searchQuery.trim()) params.set("search", searchQuery.trim());
+    if (selectedPayloadPattern) params.set("payloadPattern", selectedPayloadPattern);
+    if (cursor) params.set("search_after", JSON.stringify(cursor));
+    return params;
+  }, [clientPage, cursorStack, pageSize, getEffectiveRange, selectedTimelinePoint, severityFilter, agentFilter, userFilter, eventFilter, pathFilter, searchQuery, selectedPayloadPattern]);
+
   const fetchRealData = useCallback(async () => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     try {
       setLoading(true);
       setFetchError("");
-      const isCustom = filterMode === "custom";
-      const baseEvents = agentId && agentId !== "all" ? `${API_BASE}/events/${encodeURIComponent(agentId)}` : `${API_BASE}/events`;
-      const baseDist = agentId && agentId !== "all" ? `${API_BASE}/events/${encodeURIComponent(agentId)}/distribution/stats` : `${API_BASE}/events/distribution/stats`;
-      const baseAgents = agentId && agentId !== "all" ? `${API_BASE}/events/${encodeURIComponent(agentId)}/agents/stats` : `${API_BASE}/events/agents/stats`;
-      let distUrl, agentsUrl, usersUrl;
-      if (isCustom) {
-        const { start, end } = getIsoDateRange(normalizeDateRange(customDateRange));
-        const qs = `start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}${severityFilter !== "all" ? `&severity=${encodeURIComponent(severityFilter.toLowerCase())}` : ""}`;
-        distUrl = `${baseDist}?${qs}`;
-        agentsUrl = `${baseAgents}?${qs}`;
-        usersUrl = `${baseEvents.replace(/\/events(?:\/[^/]+)?$/, "/events/users/stats")}?${qs}`;
-      } else {
-        distUrl = `${baseDist}?range=${encodeURIComponent(rangeKey)}`;
-        agentsUrl = `${baseAgents}?range=${encodeURIComponent(rangeKey)}`;
-        usersUrl = `${baseEvents.replace(/\/events(?:\/[^/]+)?$/, "/events/users/stats")}?range=${encodeURIComponent(rangeKey)}`;
-      }
-      // Ambil SEMUA events via search_after paralel per slice waktu (tanpa batas)
-      const fetchJson = (url) => fetch(url).then(async (r) => {
-        if (!r.ok) throw new Error(`events ${r.status}`);
-        return r.json();
-      });
-      const effRange = getEffectiveRange();
-      const [eventsRes, distRes, agentsRes, usersRes] = await Promise.all([
-        fetchAllEvents(fetchJson, {
-          baseUrl: baseEvents,
-          start: effRange.start,
-          end: effRange.end,
-          severity: severityFilter,
-          slices: 2,
-          pageSize: 500,
-        }),
-        fetch(distUrl).then(async (r) => {
-          if (!r.ok) throw new Error(`distribution ${r.status}`);
-          return r.json();
-        }).catch(() => null),
-        fetch(agentsUrl).then(async (r) => {
-          if (!r.ok) throw new Error(`agents ${r.status}`);
-          return r.json();
-        }).catch(() => null),
-        fetch(usersUrl).then(async (r) => {
-          if (!r.ok) throw new Error(`users ${r.status}`);
-          return r.json();
-        }).catch(() => null),
+      const baseEvents = getEventsRoute();
+      const range = getEffectiveRange();
+      const statsParams = new URLSearchParams({ start: range.start, end: range.end });
+      if (severityFilter !== "all") statsParams.set("severity", severityFilter.toLowerCase());
+      const statsQuery = statsParams.toString();
+      const tableParams = buildTableParams();
+      const [eventsRes, distRes, agentsRes, usersRes, timelineRes, filesRes, payloadRes] = await Promise.all([
+        fetchEventsJson(`${baseEvents}?${tableParams.toString()}`),
+        fetchEventsJson(`${baseEvents}/distribution/stats?${statsQuery}`).catch(() => null),
+        fetchEventsJson(`${baseEvents}/agents/stats?${statsQuery}`).catch(() => null),
+        fetchEventsJson(`${baseEvents}/users/stats?${statsQuery}`).catch(() => null),
+        fetchEventsJson(`${baseEvents}/timeline?${statsQuery}`).catch(() => null),
+        fetchEventsJson(`${baseEvents}/files/stats?${statsQuery}`).catch(() => null),
+        fetchEventsJson(`${baseEvents}/payload/stats?${statsQuery}`).catch(() => null),
       ]);
-      const eventsData = Array.isArray(eventsRes?.rows) ? eventsRes.rows : [];
+      if (requestId !== requestIdRef.current) return;
+      const eventsData = Array.isArray(eventsRes?.data) ? eventsRes.data : [];
       setEvents(eventsData);
-      setTotalEventHits(Number(eventsRes?.totalHits ?? eventsData.length));
+      if (clientPage === 1) {
+        setTotalEventHits(Number(eventsRes?.total_hits ?? eventsData.length));
+      }
+      setNextCursor(eventsRes?.next_search_after || null);
       setDistData(distRes || null);
       setAgentsStats(agentsRes || null);
       setUsersStats(usersRes || null);
+      setTimelineData(Array.isArray(timelineRes?.data) ? timelineRes.data : []);
+      setFilesStats(filesRes?.data || null);
+      setPayloadWordsData(Array.isArray(payloadRes?.data) ? payloadRes.data : []);
       setLastUpdated(new Date().toISOString());
     } catch (e) {
+      if (requestId !== requestIdRef.current) return;
       setFetchError(e?.message || "Failed to load FIM events");
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, [rangeKey, filterMode, customDateRange, agentId, severityFilter, getEffectiveRange]);
+  }, [getEventsRoute, getEffectiveRange, buildTableParams, severityFilter, clientPage]);
 
   useEffect(() => {
     fetchRealData();
   }, [fetchRealData]);
 
   useEffect(() => {
-    const id = setInterval(() => fetchRealData(), 30000);
+    const id = setInterval(() => {
+      if (!isLastNavigationRef.current) fetchRealData();
+    }, 30000);
     return () => clearInterval(id);
   }, [fetchRealData]);
 
-  // ── Derived data from real events + dist/agents aggregates ────────────────
+  // ── Dashboard summaries are aggregated server-side; events contains one table page. ──
   const derived = useMemo(() => {
+    const palette = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6"];
     const rangeMsMap = { "1h": 3600000, "24h": 86400000, "7d": 604800000, "30d": 2592000000 };
-    const now = Date.now();
-    let rangeMs, startMs, endMs;
-
-    if (filterMode === "custom") {
-      const { start, end } = getIsoDateRange(normalizeDateRange(customDateRange));
-      startMs = new Date(start).getTime();
-      endMs = new Date(end).getTime();
-      rangeMs = Math.max(endMs - startMs, 1);
-    } else {
-      rangeMs = rangeMsMap[rangeKey] ?? 86400000;
-      startMs = now - rangeMs;
-      endMs = now;
-    }
-
-    const filtered = events
-      .map((e) => ({ ...e, _ms: e.timestamp ? new Date(e.timestamp).getTime() : NaN }))
-      .filter((e) => Number.isFinite(e._ms) && e._ms >= startMs && e._ms <= endMs)
-      .sort((a, b) => b._ms - a._ms);
-
-    // Timeline buckets from filtered (real). Lebar bucket mengikuti DURNASI
-    // rentang (selaras backend & ML): 1 tahun → 7 harian.
+    const range = getEffectiveRange();
+    const rangeMs = Math.max(new Date(range.end).getTime() - new Date(range.start).getTime(), 1);
     const DAY = 86400000;
-    const stepMs =
-      rangeMs <= 3600000 ? 300000
-      : rangeMs <= DAY ? 3600000
-      : rangeMs <= 7 * DAY ? 21600000
-      : rangeMs <= 90 * DAY ? DAY
-      : rangeMs <= 366 * DAY ? 7 * DAY
-      : 30 * DAY;
-    const bucketStart = (ms) => Math.floor(ms / stepMs) * stepMs;
-    const buckets = new Map();
-    for (const e of filtered) {
-      const b = bucketStart(e._ms);
-      buckets.set(b, (buckets.get(b) || 0) + 1);
-    }
-    const series = [];
-    for (let t = bucketStart(startMs); t <= bucketStart(endMs); t += stepMs) {
-      series.push({ t, v: buckets.get(t) || 0, bucketMs: stepMs });
-    }
+    const stepMs = rangeMs <= 3600000 ? 300000 : rangeMs <= DAY ? 3600000 : rangeMs <= 7 * DAY ? 21600000 : rangeMs <= 90 * DAY ? DAY : rangeMs <= 366 * DAY ? 7 * DAY : 30 * DAY;
+    const series = (timelineData || []).map((item) => {
+      const t = Number(item.timestamp) || new Date(item.timestamp).getTime();
+      return { key: String(t), t, v: Number(item.total) || 0, bucketMs: stepMs, start: new Date(t).toISOString(), end: new Date(t + stepMs - 1).toISOString() };
+    }).filter((item) => Number.isFinite(item.t));
 
-    // Event type donut — hanya 3 syscheck (added/modified/deleted), yang lain buang
     const allowedEvents = new Set(["added", "modified", "deleted"]);
-    let eventItems;
-    if (distData?.eventTypes && Array.isArray(distData.eventTypes) && distData.eventTypes.length) {
-      const palette = { added: "#38bdf8", modified: "#34D399", deleted: "#FBBF24" };
-      eventItems = distData.eventTypes
-        .filter((it) => allowedEvents.has(String(it.label).toLowerCase()))
-        .slice(0, 3)
-        .map((it) => ({ label: String(it.label).toLowerCase(), value: Number(it.value) || 0, color: palette[String(it.label).toLowerCase()] || "#64748b" }))
-        .sort((a, b) => b.value - a.value);
-    } else {
-      const byEvent = new Map();
-      for (const e of filtered) {
-        const raw = String(e.syscheckEvent || "").toLowerCase().trim();
-        if (!allowedEvents.has(raw)) continue;
-        byEvent.set(raw, (byEvent.get(raw) || 0) + 1);
-      }
-      const colorMap = { added: "#38bdf8", modified: "#34D399", deleted: "#FBBF24" };
-      eventItems = Array.from(byEvent.entries())
-        .map(([label, value]) => ({ label, value, color: colorMap[label] || "#64748b" }))
-        .sort((a, b) => b.value - a.value)
-        .slice(0, 3);
-    }
-
-    // Severity donut — prefer distData.severity (full-range agg)
-    let severityItems;
-    if (distData?.severity && Array.isArray(distData.severity) && distData.severity.length) {
-      const severityColorMap = { "Critical": "#ef4444", "High": "#f97316", "Medium": "#eab308", "Low": "#3b82f6" };
-      severityItems = distData.severity.map((it) => ({ label: it.label, value: Number(it.value) || 0, color: severityColorMap[it.label] || "#64748b" })).filter((it) => it.value >= 0).sort((a, b) => b.value - a.value);
-    } else {
-      const bySeverity = new Map();
-      for (const e of filtered) {
-        const level = e.ruleLevel || 0;
-        let sev = "Low";
-        if (level >= 12) sev = "Critical";
-        else if (level >= 8) sev = "High";
-        else if (level >= 5) sev = "Medium";
-        bySeverity.set(sev, (bySeverity.get(sev) || 0) + 1);
-      }
-      const severityColorMap = { "Critical": "#ef4444", "High": "#f97316", "Medium": "#eab308", "Low": "#3b82f6" };
-      severityItems = Array.from(bySeverity.entries())
-        .map(([label, value]) => ({ label, value, color: severityColorMap[label] || "#64748b" }))
-        .sort((a, b) => b.value - a.value);
-    }
-
-    // Top agents — prefer agentsStats.data (full-range agg)
-    let topAgents;
-    if (agentsStats?.data && Array.isArray(agentsStats.data) && agentsStats.data.length) {
-      const byAgentLastSeen = new Map();
-      for (const e of filtered) {
-        const k = String(e.agentName || "").trim();
-        if (!k) continue;
-        byAgentLastSeen.set(k, Math.max(byAgentLastSeen.get(k) || 0, e._ms || 0));
-      }
-      topAgents = agentsStats.data.slice(0, 5).map((a) => ({ name: a.agent || a.label || "Unknown", count: Number(a.count ?? a.doc_count ?? 0), lastSeen: byAgentLastSeen.get(a.agent || a.label) || 0 }));
-    } else {
-      const byAgent = new Map();
-      for (const e of filtered) {
-        const agentLabel = String(e.agentName || "Unknown agent").trim() || "Unknown agent";
-        const existing = byAgent.get(agentLabel) || { name: agentLabel, count: 0, lastSeen: 0 };
-        existing.count += 1;
-        existing.lastSeen = Math.max(existing.lastSeen, e._ms || 0);
-        byAgent.set(agentLabel, existing);
-      }
-      topAgents = Array.from(byAgent.values())
-        .sort((a, b) => b.count - a.count || b.lastSeen - a.lastSeen)
-        .slice(0, 5);
-    }
-
-    // Payload words — from filtered real fileDiff/full_log
-    const STOP = new Set(["", "---", "@@", "+", "-", "//", "#", "the", "is", "to", "and", "file", "mode", "old", "new", "was", "now", "sum", "changed", "attributes", "realtime"]);
-    const byPayload = new Map();
-    for (const e of filtered) {
-      const raw = e.fileDiff || e.fullLog;
-      if (!raw) continue;
-      const lines = String(raw).replace(/\\n/g, "\n").split("\n").map((l) => l.trim()).filter(Boolean);
-      const diffLines = lines.filter((l) => l.startsWith(">") || l.startsWith("<"));
-      const payloadLines = diffLines.length ? diffLines.map((l) => l.substring(1)) : lines;
-      for (const line of payloadLines) {
-        const tokens = line.split(/[\s/=:;,'"(){}[\]<>|&!?@#%^*`~]+/).map((t) => t.toLowerCase()).filter((t) => t.length >= 2 && !STOP.has(t) && !/^\d+$/.test(t));
-        for (const token of tokens) byPayload.set(token, (byPayload.get(token) || 0) + 1);
-      }
-    }
-    const payloadWords = Array.from(byPayload.entries()).map(([text, count]) => ({ text, count })).sort((a, b) => b.count - a.count).slice(0, 40);
-
-    // Keep the headline total aligned with the dashboard's /events total_hits.
-    // Distribution is enrichment and may be unavailable while event pagination
-    // is still usable.
-    const totalForUI = totalEventHits > 0
-      ? totalEventHits
-      : (distData?.total != null ? Number(distData.total) : filtered.length);
-    const criticalFromDist = distData?.severity?.find((s) => s.label === "Critical")?.value;
-    const criticalCount = criticalFromDist != null ? Number(criticalFromDist) : filtered.filter((e) => (e.ruleLevel || 0) >= 12).length;
-    const byFile = new Map();
-    for (const e of filtered) {
-      const key = String(e.syscheckPath || "unknown").trim() || "unknown";
-      byFile.set(key, (byFile.get(key) || 0) + 1);
-    }
-    const fileUserCounts = new Map();
-    for (const e of filtered) {
-      const key = String(e.syscheckPath || "unknown").trim() || "unknown";
-      const user = String(e.username || "").trim() || "unknown";
-      if (!fileUserCounts.has(key)) fileUserCounts.set(key, new Map());
-      const umap = fileUserCounts.get(key);
-      umap.set(user, (umap.get(user) || 0) + 1);
-    }
-    const topFiles = Array.from(byFile.entries())
-      .map(([label, value], i) => {
-        const umap = fileUserCounts.get(label);
-        let sub = "";
-        if (umap) {
-          let maxUser = "";
-          let maxCount = 0;
-          for (const [u, c] of umap.entries()) {
-            if (c > maxCount) { maxCount = c; maxUser = u; }
-          }
-          sub = maxUser;
-        }
-        return { label, value, sub, color: ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6"][i % 5] };
-      })
+    const eventColors = { added: "#38bdf8", modified: "#34D399", deleted: "#FBBF24" };
+    const eventItems = (distData?.eventTypes || [])
+      .filter((item) => allowedEvents.has(String(item.label).toLowerCase()))
+      .map((item) => ({ label: String(item.label).toLowerCase(), value: Number(item.value) || 0, color: eventColors[String(item.label).toLowerCase()] }))
       .sort((a, b) => b.value - a.value)
-      .slice(0, 5);
-    const topUsers = Array.isArray(usersStats?.data)
-      ? usersStats.data.slice(0, 5).map((item, i) => ({ label: item.user || item.label, value: Number(item.count ?? item.value ?? 0), color: ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6"][i % 5] }))
-      : [];
-    const mostSevere = filtered.reduce((acc, e) => {
-      const level = e.ruleLevel || 0;
-      if (!acc || level > (acc.ruleLevel || 0)) return { ruleLevel: level, description: e.ruleDescription || "-" };
-      return acc;
-    }, null);
-
-    const uniqueAgentsCount = agentsStats?.data?.length ?? (() => { const s = new Set(filtered.map((e) => String(e.agentName || "").trim()).filter(Boolean)); return s.size || (filtered.length ? 1 : 0); })();
+      .slice(0, 3);
+    const severityColors = { Critical: "#ef4444", High: "#f97316", Medium: "#eab308", Low: "#3b82f6" };
+    const severityItems = (distData?.severity || []).map((item) => ({ label: item.label, value: Number(item.value) || 0, color: severityColors[item.label] || "#64748b" })).sort((a, b) => b.value - a.value);
+    const topAgents = (agentsStats?.data || []).slice(0, 5).map((item) => ({ name: item.agent || item.label || "Unknown", count: Number(item.count ?? item.doc_count ?? 0), lastSeen: item.lastSeen ? new Date(item.lastSeen).getTime() : 0 }));
+    const topUsers = (usersStats?.data || []).slice(0, 5).map((item, index) => ({ label: item.user || item.label, value: Number(item.count ?? item.value ?? 0), color: palette[index % palette.length] }));
+    const topFiles = (filesStats?.topFiles || []).slice(0, 5).map((item, index) => ({ ...item, color: palette[index % palette.length] }));
+    const criticalCount = Number(distData?.severity?.find((item) => item.label === "Critical")?.value || 0);
 
     return {
-      filtered, series, eventItems, topAgents, severityItems, payloadWords, topUsers, topFiles,
-      total: totalForUI, startMs, endMs, uniqueAgents: uniqueAgentsCount,
-      criticalCount, uniqueFiles: byFile.size, mostSevereEvent: mostSevere,
+      series,
+      eventItems,
+      severityItems,
+      topAgents,
+      topUsers,
+      topFiles,
+      payloadWords: payloadWordsData,
+      total: Number(distData?.total ?? totalEventHits),
+      uniqueAgents: Number(agentsStats?.uniqueAgents ?? agentsStats?.data?.length ?? 0),
+      uniqueFiles: Number(filesStats?.uniqueFiles || 0),
+      criticalCount,
+      mostSevereEvent: filesStats?.mostSevereEvent || null,
     };
-  }, [events, totalEventHits, distData, agentsStats, usersStats, rangeKey, filterMode, customDateRange]);
+  }, [timelineData, distData, agentsStats, usersStats, filesStats, payloadWordsData, totalEventHits, getEffectiveRange]);
 
   // Tinggi cloud mengikuti tinggi aktual kartu Top 5 Changed Files (diukur,
   // bukan dipaksa stretch) sehingga tidak ada space kosong di kartu mana pun.
@@ -1079,60 +957,100 @@ const FimEvents = ({ agentId = "all" }) => {
 
   const filterOptions = useMemo(() => {
     return {
-      agents: getTopFilterValues(events, (event) => String(event.agentName || "Unknown").trim() || "Unknown", undefined, agentFilter),
-      users: getTopFilterValues(events, (event) => event.username, undefined, userFilter),
+      agents: getTopFilterValues(agentsStats?.data, (item) => item.agent, (item) => item.count, agentFilter),
+      users: getTopFilterValues(usersStats?.data, (item) => item.user, (item) => item.count, userFilter),
     };
-  }, [events, agentFilter, userFilter]);
+  }, [agentsStats, usersStats, agentFilter, userFilter]);
 
-  const tableEvents = useMemo(() => {
-    return events
-      .filter((e) => {
-        if (selectedTimelinePoint?.start && selectedTimelinePoint?.end) {
-          const ms = new Date(e.timestamp).getTime();
-          const s = new Date(selectedTimelinePoint.start).getTime();
-          const en = new Date(selectedTimelinePoint.end).getTime();
-          if (!(Number.isFinite(ms) && ms >= s && ms <= en)) return false;
-        }
-        return true;
-      })
-      .filter((e) => {
-        if (pathFilter && String(e.syscheckPath || "").toLowerCase() !== String(pathFilter).toLowerCase()) return false;
-        const q = searchQuery.trim().toLowerCase();
-        if (!q) return true;
-        return [e.agentName, e.username, e.syscheckPath, e.syscheckEvent, e.ruleDescription].filter(Boolean).some((f) => String(f).toLowerCase().includes(q));
-      })
-      .filter((e) => matchesGridFilters(e, agentFilter, userFilter, eventFilter, severityFilter))
-      // Keyword dari Payload Pattern Cloud: hanya event yang payload-nya
-      // mengandung keyword tersebut.
-      .filter((e) => {
-        if (!selectedPayloadPattern) return true;
-        const hay = [e.fileDiff, e.ruleDescription, e.syscheckPath].filter(Boolean).join("\n").toLowerCase();
-        return hay.includes(String(selectedPayloadPattern).toLowerCase());
-      })
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  }, [events, searchQuery, agentFilter, userFilter, eventFilter, severityFilter, pathFilter, selectedTimelinePoint, selectedPayloadPattern]);
+  const tableEvents = events;
+  const visibleEvents = events;
+  const totalPages = Math.max(1, Math.ceil(totalEventHits / pageSize));
 
-  const visibleEvents = useMemo(() => {
-    return tableEvents.slice((clientPage - 1) * pageSize, clientPage * pageSize);
-  }, [tableEvents, clientPage, pageSize]);
+  const handleFirstPage = useCallback(() => {
+    setClientPage(1);
+    setCursorStack([null]);
+    setNextCursor(null);
+  }, []);
 
-  const totalPages = Math.max(1, Math.ceil(tableEvents.length / pageSize));
+  const handlePrevPage = useCallback(() => {
+    if (clientPage <= 1) return;
+    const targetPage = clientPage - 1;
+    setCursorStack((current) => current.slice(0, targetPage));
+    setClientPage(targetPage);
+  }, [clientPage]);
+
+  const handleNextPage = useCallback(() => {
+    if (clientPage >= totalPages || !nextCursor) return;
+    setCursorStack((current) => [...current.slice(0, clientPage), nextCursor]);
+    setClientPage(clientPage + 1);
+  }, [clientPage, totalPages, nextCursor]);
+
+  const handleLastPage = useCallback(async () => {
+    if (loading || clientPage >= totalPages || !nextCursor) return;
+    const requestId = requestIdRef.current;
+    const lastRequestId = lastPageRequestRef.current + 1;
+    lastPageRequestRef.current = lastRequestId;
+    isLastNavigationRef.current = true;
+    setLoading(true);
+
+    try {
+      let cursor = nextCursor;
+      let targetPage = clientPage;
+      const nextStack = cursorStack.slice(0, clientPage);
+      const route = getEventsRoute();
+      while (targetPage < totalPages && cursor) {
+        const pageNum = targetPage + 1;
+        const params = buildTableParams({ pageNum, cursor });
+        const response = await fetchEventsJson(`${route}?${params.toString()}`);
+        if (requestId !== requestIdRef.current || lastRequestId !== lastPageRequestRef.current) return;
+        if (!Array.isArray(response?.data) || response.data.length === 0) break;
+        nextStack.push(cursor);
+        targetPage = pageNum;
+        cursor = response.next_search_after || null;
+      }
+      if (requestId === requestIdRef.current && targetPage > clientPage) {
+        setCursorStack(nextStack);
+        setClientPage(targetPage);
+      }
+    } catch (error) {
+      if (lastRequestId === lastPageRequestRef.current) setFetchError(error.message || "Failed to navigate to the last page");
+    } finally {
+      isLastNavigationRef.current = false;
+      if (requestId === requestIdRef.current) setLoading(false);
+    }
+  }, [loading, clientPage, totalPages, nextCursor, cursorStack, getEventsRoute, buildTableParams]);
 
   const formatTime = (isoString) => {
     if (!isoString) return "-";
     return new Date(isoString).toLocaleString("en-US", { month: "short", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
   };
 
-  const handleExportCsv = () => {
-    const rows = tableEvents.map((evt) => [
-      formatTime(evt.timestamp), evt.agentName || "-", evt.username || "-", evt.syscheckPath || "-",
-      evt.syscheckEvent || "-", evt.ruleDescription || "-", evt.ruleLevel ?? "-", evt.fileDiff || "-",
-    ]);
-    exportCsv({
-      filename: `fim-events-${new Date().toISOString().slice(0, 10)}.csv`,
-      header: ["Timestamp", "Agent", "User", "Path", "Event", "Rule", "Severity", "Diff"],
-      rows,
-    });
+  const handleExportCsv = async () => {
+    try {
+      const rows = [];
+      const route = getEventsRoute();
+      let cursor = null;
+      let pageNum = 1;
+      while (true) {
+        const params = buildTableParams({ pageNum, cursor, size: 500 });
+        const response = await fetchEventsJson(`${route}?${params.toString()}`);
+        const batch = Array.isArray(response?.data) ? response.data : [];
+        rows.push(...batch.map((evt) => [
+          formatTime(evt.timestamp), evt.agentName || "-", evt.username || "-", evt.syscheckPath || "-",
+          evt.syscheckEvent || "-", evt.ruleDescription || "-", evt.ruleLevel ?? "-", evt.fileDiff || "-",
+        ]));
+        cursor = response?.next_search_after || null;
+        if (!cursor || batch.length === 0) break;
+        pageNum += 1;
+      }
+      exportCsv({
+        filename: `fim-events-${new Date().toISOString().slice(0, 10)}.csv`,
+        header: ["Timestamp", "Agent", "User", "Path", "Event", "Rule", "Severity", "Diff"],
+        rows,
+      });
+    } catch (error) {
+      setFetchError(error?.message || "Failed to export FIM events");
+    }
   };
 
   const renderSeverityBadge = (level) => {
@@ -1204,6 +1122,8 @@ const FimEvents = ({ agentId = "all" }) => {
               value={pageSize}
               onChange={(event) => {
                 setClientPage(1);
+                setCursorStack([null]);
+                setNextCursor(null);
                 setPageSize(Number(event.target.value));
                 setTimeout(() => {
                   if (logsTableRef.current && typeof logsTableRef.current.scrollIntoView === "function") {
@@ -1547,7 +1467,7 @@ const FimEvents = ({ agentId = "all" }) => {
                 setCustomDateRange(createDefaultDateRange(1));
               }}
               pathFilter={pathFilter}
-              matchingEventsCount={tableEvents.length}
+              matchingEventsCount={totalEventHits}
               onClearPathFilter={() => { setPathFilter(null); setClientPage(1); }}
               timelineFilterLabel={selectedTimelinePoint
                 ? `${formatDetailedTimestamp(selectedTimelinePoint.start)}${selectedTimelinePoint.end ? ` - ${formatDetailedTimestamp(selectedTimelinePoint.end)}` : ""}`
@@ -1580,9 +1500,9 @@ const FimEvents = ({ agentId = "all" }) => {
               ) : visibleEvents.map((evt, idx) => (
                 <tr key={evt.id} className={`border-b border-slate-800/60 transition-all duration-150 hover:bg-purple-500/10 hover:shadow-[inset_3px_0_0_0_#a855f7] ${idx % 2 !== 0 ? "bg-[var(--soc-zebra)]" : ""}`}>
                   <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 whitespace-nowrap 2xl:w-[190px] 2xl:min-w-[190px] 2xl:max-w-[190px] text-slate-500 text-[10px] md:text-[11px] lg:text-[10px]">{formatTime(evt.timestamp)}</td>
-                  <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 whitespace-nowrap 2xl:w-[190px] 2xl:min-w-[190px] 2xl:max-w-[190px] text-sky-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]">{evt.agentName}</td>
-                  <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 whitespace-nowrap 2xl:w-[140px] 2xl:min-w-[140px] 2xl:max-w-[140px] text-violet-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]">{evt.username}</td>
-                  <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 text-emerald-400 font-mono text-[10px] md:text-[11px] lg:text-[10px] max-w-[110px] sm:max-w-[140px] md:max-w-[180px] lg:max-w-[220px] 2xl:w-[240px] 2xl:min-w-[240px] 2xl:max-w-[240px]">
+                  <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 whitespace-nowrap 2xl:w-[160px] 2xl:min-w-[160px] 2xl:max-w-[160px] text-sky-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]">{evt.agentName}</td>
+                  <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 whitespace-nowrap 2xl:w-[115px] 2xl:min-w-[115px] 2xl:max-w-[115px] text-violet-400 font-medium text-[10px] md:text-[11px] lg:text-[10px]">{evt.username}</td>
+                  <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 text-emerald-400 font-mono text-[10px] md:text-[11px] lg:text-[10px] max-w-[170px] sm:max-w-[230px] md:max-w-[280px] lg:max-w-[340px] 2xl:w-[460px] 2xl:min-w-[460px] 2xl:max-w-[460px]">
                     <CopyablePath value={evt.syscheckPath} />
                   </td>
                   <td className="px-3 md:px-5 lg:px-4 py-1.5 md:py-3 lg:py-2 2xl:w-[130px] 2xl:min-w-[130px] 2xl:max-w-[130px]">
@@ -1616,30 +1536,30 @@ ${evt.syscheckEvent}${evt.fileDiff ? `\n${String(evt.fileDiff).replace(/\\n/g, "
           <div className="fim-pagination-layout flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="fim-pagination-summary text-[10px] md:text-[11px] font-mono text-slate-500">
               <span className="hidden md:inline">SHOWING </span>
-              <span className="font-bold text-sky-400">{tableEvents.length === 0 ? 0 : (clientPage - 1) * pageSize + 1}</span>
+              <span className="font-bold text-sky-400">{totalEventHits === 0 ? 0 : (clientPage - 1) * pageSize + 1}</span>
               <span className="hidden md:inline"> - </span>
               <span className="md:hidden">-</span>
-              <span className="font-bold text-sky-400">{Math.min(clientPage * pageSize, tableEvents.length)}</span>
+              <span className="font-bold text-sky-400">{Math.min(clientPage * pageSize, totalEventHits)}</span>
               <span className="hidden md:inline"> OF </span>
               <span className="md:hidden"> / </span>
               <span className="font-bold text-sky-400">{totalEventHits.toLocaleString()}</span>
               <span className="hidden md:inline"> EVENTS</span>
             </div>
             <div className="fim-pagination-controls flex flex-wrap items-center gap-2">
-              <button disabled={clientPage === 1} onClick={() => setClientPage(1)} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 hover:border-sky-500/50 hover:bg-sky-900/20 disabled:opacity-20">
+              <button disabled={clientPage === 1 || loading} onClick={handleFirstPage} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 hover:border-sky-500/50 hover:bg-sky-900/20 disabled:opacity-20">
                 FIRST
               </button>
-              <button disabled={clientPage === 1} onClick={() => setClientPage(Math.max(clientPage - 1, 1))} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 hover:border-sky-500/50 hover:bg-sky-900/20 disabled:opacity-20">
+              <button disabled={clientPage === 1 || loading} onClick={handlePrevPage} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 hover:border-sky-500/50 hover:bg-sky-900/20 disabled:opacity-20">
                 <span className="hidden md:inline">← PREV</span><span className="md:hidden">PREV</span>
               </button>
               <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400">
                 <span className="hidden md:inline">PAGE </span>
                 <span className="text-[var(--soc-text-primary)]">{clientPage}</span> / {totalPages}
               </span>
-              <button disabled={clientPage === totalPages} onClick={() => setClientPage(Math.min(clientPage + 1, totalPages))} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 hover:border-sky-500/50 hover:bg-sky-900/20 disabled:opacity-20">
+              <button disabled={!nextCursor || clientPage >= totalPages || loading} onClick={handleNextPage} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 hover:border-sky-500/50 hover:bg-sky-900/20 disabled:opacity-20">
                 <span className="hidden md:inline">NEXT →</span><span className="md:hidden">NEXT</span>
               </button>
-              <button disabled={clientPage === totalPages} onClick={() => setClientPage(totalPages)} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 hover:border-sky-500/50 hover:bg-sky-900/20 disabled:opacity-20">
+              <button disabled={!nextCursor || clientPage >= totalPages || loading} onClick={handleLastPage} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 hover:border-sky-500/50 hover:bg-sky-900/20 disabled:opacity-20">
                 LAST
               </button>
             </div>

@@ -15,6 +15,11 @@ import {
   normalizePagination,
   getHistogramInterval
 } from "../utils/esHelpers.js";
+import {
+  SEARCH_AFTER_KEEP_ALIVE,
+  createExpiredPointInTimeError,
+  isExpiredPointInTime
+} from "../utils/searchAfter.js";
 
 export const ML_ALERTS_INDEX = "capstone-zeek-botnet-alerts-*";
 export const BEHAVIOR_ALERTS_INDEX = "capstone-zeek-behavior-alerts-*";
@@ -913,11 +918,112 @@ export async function listAlerts(query = {}) {
   const sort = [{ "@timestamp": { order } }];
 
   const targets = [];
-  if (detector !== "behavior") targets.push({ index: ML_ALERTS_INDEX, forMl: true });
-  if (detector !== "ml") targets.push({ index: BEHAVIOR_ALERTS_INDEX, forMl: false });
+  if (detector !== "behavior") targets.push({ key: "ml", index: ML_ALERTS_INDEX, forMl: true });
+  if (detector !== "ml") targets.push({ key: "behavior", index: BEHAVIOR_ALERTS_INDEX, forMl: false });
 
   const mlFilter = buildFilter(query, { forMl: true });
   const behaviorFilter = buildFilter(query, { forMl: false });
+
+  if (query.cursor === "1" || query.cursor === "true" || (query.cursor && query.cursor !== "false")) {
+    let cursorState = null;
+    if (query.cursor !== "1" && query.cursor !== "true") {
+      try {
+        cursorState = typeof query.cursor === "string" ? JSON.parse(query.cursor) : query.cursor;
+        if (!cursorState || typeof cursorState !== "object" || !cursorState.pits || !cursorState.afters) throw new Error("invalid");
+      } catch {
+        const error = new Error("Invalid alert pagination cursor");
+        error.status = 400;
+        throw error;
+      }
+    }
+
+    if (cursorState && cursorState.targets?.join(",") !== targets.map((target) => target.key).join(",")) {
+      const error = new Error("Alert pagination cursor does not match the selected detector");
+      error.status = 400;
+      throw error;
+    }
+
+    const results = await Promise.all(targets.map(async (target) => {
+      const pitKey = target.key;
+      let pitId = cursorState?.pits?.[pitKey] || null;
+      let missing = Boolean(cursorState?.missing?.[pitKey]);
+
+      if (!cursorState) {
+        try {
+          const pit = unwrapEsResponse(await es.openPointInTime({
+            index: target.index,
+            keep_alive: SEARCH_AFTER_KEEP_ALIVE
+          }));
+          pitId = pit?.id || null;
+          if (!pitId) throw new Error("Failed to open alert pagination snapshot");
+        } catch (error) {
+          if (isIndexNotFound(error)) missing = true;
+          else throw error;
+        }
+      }
+
+      if (missing || !pitId) {
+        return { target, pitId: null, missing: true, response: { hits: { total: { value: 0 }, hits: [] } } };
+      }
+
+      const searchBody = {
+        size: limit,
+        track_total_hits: !cursorState,
+        sort: [
+          { "@timestamp": { order, unmapped_type: "date" } },
+          { _shard_doc: { order: "asc" } }
+        ],
+        pit: { id: pitId, keep_alive: SEARCH_AFTER_KEEP_ALIVE },
+        query: { bool: { filter: target.forMl ? mlFilter : behaviorFilter } }
+      };
+      if (cursorState?.afters?.[pitKey]) searchBody.search_after = cursorState.afters[pitKey];
+
+      try {
+        const response = unwrapEsResponse(await es.search(searchBody));
+        return { target, pitId: response.pit_id || pitId, missing: false, response };
+      } catch (error) {
+        if (isExpiredPointInTime(error)) throw createExpiredPointInTimeError();
+        if (isIndexNotFound(error)) {
+          return { target, pitId: null, missing: true, response: { hits: { total: { value: 0 }, hits: [] } } };
+        }
+        throw error;
+      }
+    }));
+
+    const entries = results.flatMap(({ target, response }) =>
+      getHits(response).map((hit) => ({ target, hit }))
+    );
+    const targetOrder = new Map(targets.map((target, index) => [target.key, index]));
+    entries.sort((a, b) => {
+      const aTime = new Date(getField(a.hit._source, "@timestamp") || 0).getTime();
+      const bTime = new Date(getField(b.hit._source, "@timestamp") || 0).getTime();
+      if (aTime !== bTime) return order === "asc" ? aTime - bTime : bTime - aTime;
+      const targetDifference = targetOrder.get(a.target.key) - targetOrder.get(b.target.key);
+      if (targetDifference) return targetDifference;
+      return Number(a.hit.sort?.[1] || 0) - Number(b.hit.sort?.[1] || 0);
+    });
+
+    const selected = entries.slice(0, limit);
+    const afters = { ...(cursorState?.afters || {}) };
+    for (const entry of selected) afters[entry.target.key] = entry.hit.sort;
+
+    const total = cursorState?.total ?? results.reduce((sum, item) => sum + getTotalHits(item.response), 0);
+    const hasMore = selected.length > 0 && page * limit < total;
+    const nextCursor = hasMore ? {
+      targets: targets.map((target) => target.key),
+      pits: Object.fromEntries(results.map((item) => [item.target.key, item.pitId])),
+      missing: Object.fromEntries(results.map((item) => [item.target.key, item.missing])),
+      afters,
+      total
+    } : null;
+
+    return {
+      pagination: { page, limit, total, totalPages: Math.max(Math.ceil(total / limit) || 1, 1) },
+      data: selected.map(({ hit }) => normalizeAlert(hit)),
+      next_cursor: nextCursor,
+      has_more: hasMore
+    };
+  }
 
   // Indices have different mappings: query each with its own filter, then
   // merge + sort in memory. Slices always start at from=0 on the ES side

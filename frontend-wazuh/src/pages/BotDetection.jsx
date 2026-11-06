@@ -82,6 +82,14 @@ const formatDetailedTimestamp = (timestamp) => {
   if (!date) return '-';
   return date.toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 };
+const formatDetailedTimestampParts = (timestamp) => {
+  const date = getValidDate(timestamp);
+  if (!date) return { date: '-', time: '' };
+  return {
+    date: date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+    time: date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+  };
+};
 const formatLiveTimestamp = (isoString) => {
   const date = getValidDate(isoString);
   if (!date) return '-';
@@ -722,6 +730,8 @@ export default function BotDetection() {
   const [topAgents, setTopAgents] = useState({ agents: [], uniqueAgents: 0 });
   const [alerts, setAlerts] = useState([]);
   const [pagination, setPagination] = useState(null);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [cursorStack, setCursorStack] = useState([null]);
   const [lastUpdated, setLastUpdated] = useState(null);
 
   const [detectorTab] = useState("all");
@@ -743,6 +753,7 @@ export default function BotDetection() {
   const [pageSize, setPageSize] = useState(25);
 
   const alertsTableRef = useRef(null);
+  const isLastNavigationRef = useRef(false);
 
   const scrollTableIntoView = useCallback(() => {
     if (alertsTableRef.current?.scrollIntoView) {
@@ -850,6 +861,21 @@ export default function BotDetection() {
     return params;
   }, [filterMode, customDateRange, timeRange, detectorTab, behaviorType, protocol, minProbability, minPackets, searchQuery]);
 
+  const buildAlertParams = useCallback((pageNum) => {
+    const alertParams = {
+      ...buildParams({ page: pageNum, limit: pageSize }),
+      detector: behaviorType !== "all" ? "behavior" : detectorFilter,
+      ...(agentFilter !== "all" ? { agent: agentFilter } : {}),
+      ...(srcIpFilter !== "all" ? { srcIp: srcIpFilter } : {}),
+      ...(dstIpFilter !== "all" ? { dstIp: dstIpFilter } : {}),
+    };
+    if (selectedPoint) {
+      alertParams.start = selectedPoint.start;
+      alertParams.end = selectedPoint.end;
+    }
+    return alertParams;
+  }, [buildParams, pageSize, behaviorType, detectorFilter, agentFilter, srcIpFilter, dstIpFilter, selectedPoint]);
+
   const loadAll = useCallback(async (isRefresh = false, signal = null) => {
     if (signal?.aborted) return;
     if (isRefresh) setRefreshing(true);
@@ -868,18 +894,9 @@ export default function BotDetection() {
       // alert table — cards, charts, and top lists keep showing all data.
       // Tabel selalu terkunci ke satu detector: pilihan Detector (default
       // botnet), kecuali behaviorType spesifik memaksa behavior-only.
-      const alertParams = {
-        ...buildParams({ page, limit: pageSize }),
-        detector: behaviorType !== "all" ? "behavior" : detectorFilter,
-        ...(agentFilter !== "all" ? { agent: agentFilter } : {}),
-        ...(srcIpFilter !== "all" ? { srcIp: srcIpFilter } : {}),
-        ...(dstIpFilter !== "all" ? { dstIp: dstIpFilter } : {}),
-      };
-      // A clicked chart point narrows the alert table to that bucket window.
-      if (selectedPoint) {
-        alertParams.start = selectedPoint.start;
-        alertParams.end = selectedPoint.end;
-      }
+      const alertParams = buildAlertParams(page);
+      const pageCursor = cursorStack[page - 1];
+      alertParams.cursor = pageCursor ? JSON.stringify(pageCursor) : "1";
       const opts = signal ? { signal } : {};
       const [
         summaryRes, trendRes, sourcesRes, destsRes, trafficRes, trafficTimelineRes, agentsRes, alertsRes,
@@ -911,7 +928,14 @@ export default function BotDetection() {
       if (alertsRes.status === 'fulfilled') {
         setAlerts(Array.isArray(alertsRes.value?.data) ? alertsRes.value.data : []);
         setPagination(alertsRes.value?.pagination || null);
+        setNextCursor(alertsRes.value?.next_cursor || null);
       } else {
+        if (alertsRes.reason?.status === 409) {
+          setCursorStack([null]);
+          setPage(1);
+          setNextCursor(null);
+          notices.push('Pagination snapshot expired. Restarted from the first page.');
+        }
         notices.push('Alert list failed to load.');
       }
 
@@ -939,13 +963,15 @@ export default function BotDetection() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [buildParams, page, pageSize, selectedPoint, agentFilter, srcIpFilter, dstIpFilter, detectorFilter, behaviorType]);
+  }, [buildParams, buildAlertParams, page, pageSize, cursorStack, selectedPoint, agentFilter, srcIpFilter, dstIpFilter, detectorFilter, behaviorType]);
 
   useEffect(() => {
     const controller = new AbortController();
     const run = () => { void loadAll(false, controller.signal); };
     const timer = setTimeout(run, 0);
-    const interval = setInterval(() => { void loadAll(true, controller.signal); }, 60_000);
+    const interval = setInterval(() => {
+      if (!isLastNavigationRef.current) void loadAll(true, controller.signal);
+    }, 60_000);
     return () => { clearTimeout(timer); clearInterval(interval); controller.abort(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buildParams, page, pageSize, selectedPoint, agentFilter, srcIpFilter, dstIpFilter, detectorFilter, behaviorType]);
@@ -1206,6 +1232,78 @@ export default function BotDetection() {
   const avgProbability = summary?.averageBotnetProbability;
   const totalPages = pagination?.totalPages || 1;
   const activePage = pagination ? page : 1;
+  const lastPageRequestRef = useRef(0);
+
+  useEffect(() => {
+    lastPageRequestRef.current += 1;
+  }, [buildAlertParams]);
+
+  const handleFirstPage = useCallback(() => {
+    setCursorStack([null]);
+    setPage(1);
+    scrollTableIntoView();
+  }, [scrollTableIntoView]);
+
+  const handlePrevPage = useCallback(() => {
+    if (activePage <= 1) return;
+    const targetPage = activePage - 1;
+    setCursorStack((current) => current.slice(0, targetPage));
+    setPage(targetPage);
+    scrollTableIntoView();
+  }, [activePage, scrollTableIntoView]);
+
+  const handleNextPage = useCallback(() => {
+    if (!nextCursor || activePage >= totalPages) return;
+    setCursorStack((current) => [...current.slice(0, activePage), nextCursor]);
+    setPage(activePage + 1);
+    scrollTableIntoView();
+  }, [nextCursor, activePage, totalPages, scrollTableIntoView]);
+
+  const handleLastPage = useCallback(async () => {
+    if (loading || !nextCursor || activePage >= totalPages) return;
+    const requestId = lastPageRequestRef.current + 1;
+    lastPageRequestRef.current = requestId;
+    isLastNavigationRef.current = true;
+    setLoading(true);
+    setDataNotice('');
+
+    try {
+      let cursor = nextCursor;
+      let targetPage = activePage;
+      const nextStack = cursorStack.slice(0, activePage);
+      while (targetPage < totalPages && cursor) {
+        const pageNum = targetPage + 1;
+        const response = await botDetectionApi.getAlerts({
+          ...buildAlertParams(pageNum),
+          cursor: JSON.stringify(cursor),
+        });
+        if (requestId !== lastPageRequestRef.current) return;
+        if (!Array.isArray(response?.data) || response.data.length === 0) break;
+        nextStack.push(cursor);
+        targetPage = pageNum;
+        cursor = response.next_cursor || null;
+      }
+
+      if (requestId === lastPageRequestRef.current && targetPage > activePage) {
+        setCursorStack(nextStack);
+        setPage(targetPage);
+        scrollTableIntoView();
+      }
+    } catch (err) {
+      if (requestId !== lastPageRequestRef.current) return;
+      if (err?.status === 409) {
+        setCursorStack([null]);
+        setNextCursor(null);
+        setPage(1);
+        setDataNotice('Pagination snapshot expired. Restarted from the first page.');
+      } else {
+        setError(err);
+      }
+    } finally {
+      isLastNavigationRef.current = false;
+      if (requestId === lastPageRequestRef.current) setLoading(false);
+    }
+  }, [loading, nextCursor, activePage, totalPages, cursorStack, buildAlertParams, scrollTableIntoView]);
 
   // Negara asal source IP. Hook ini yang mengurus cache, rate limit, dan
   // IP privat, halaman ini hanya membacanya per baris.
@@ -1505,15 +1603,14 @@ export default function BotDetection() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="bot-alert-table w-full min-w-[970px] sm:min-w-[1010px] text-[9px] sm:text-[10px] md:text-[11px] text-left">
+          <table className="bot-alert-table w-full min-w-[1010px] sm:min-w-[1050px] text-[9px] sm:text-[10px] md:text-[11px] text-left">
             <colgroup>
-              <col />
-              <col />
-              <col />
+              <col style={{ width: "190px" }} />
+              <col style={{ width: "190px" }} />
               <col style={{ width: "170px" }} />
-              <col style={{ width: "100px" }} />
+              <col style={{ width: "230px" }} />
               <col />
-              <col />
+               <col style={{ width: "220px" }} />
               <col />
               <col style={{ minWidth: "70px" }} />
               <col />
@@ -1547,10 +1644,16 @@ export default function BotDetection() {
                 } else if (a.primaryValue != null) {
                   activity = `${a.primaryValue} ${a.primaryLabel || "events"} / ${a.windowSeconds || 60}s`;
                 }
+                const timeParts = formatDetailedTimestampParts(a.timestamp);
                 return (
                   <tr key={a.id || idx}
                     className={`border-b border-slate-800/60 transition-all duration-150 hover:bg-purple-500/10 hover:shadow-[inset_3px_0_0_0_#a855f7] ${idx % 2 !== 0 ? 'bg-[var(--soc-zebra)]' : ''}`}>
-                    <td className="px-1.5 sm:px-2 md:px-4 lg:px-3 py-3 md:py-5 lg:py-4 text-slate-500 whitespace-nowrap" title={formatDetailedTimestamp(a.timestamp)}>{formatDetailedTimestamp(a.timestamp)}</td>
+                    <td className="px-1.5 sm:px-2 md:px-4 lg:px-3 py-3 md:py-5 lg:py-4 text-slate-500 whitespace-nowrap" title={formatDetailedTimestamp(a.timestamp)}>
+                      <div className="flex items-center gap-1.5 leading-tight">
+                        <span>{timeParts.date}</span>
+                        <span>{timeParts.time}</span>
+                      </div>
+                    </td>
                     <td className="px-1.5 sm:px-2 md:px-4 lg:px-3 py-3 md:py-5 lg:py-4 text-sky-400 font-medium" title={a.agent || "-"}><div className="truncate max-w-[100px] sm:max-w-[140px] md:max-w-[200px]">{a.agent || "-"}</div></td>
                     <td className="px-1.5 sm:px-2 md:px-4 lg:px-3 py-3 md:py-5 lg:py-4 whitespace-nowrap"><DetectionBadge alert={a} /></td>
                     <td className="px-1.5 sm:px-2 md:px-4 lg:px-3 py-3 md:py-5 lg:py-4 text-emerald-400 font-mono" title={source}><div className="truncate max-w-[150px] sm:max-w-[160px] md:max-w-[170px]">{source}</div></td>
@@ -1586,11 +1689,11 @@ export default function BotDetection() {
                 <span className="hidden md:inline"> ALERTS</span>
               </div>
               <div className="bot-pagination-controls flex flex-wrap items-center gap-2">
-                <button disabled={activePage === 1 || loading} onClick={() => { setPage(1); scrollTableIntoView(); }} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">FIRST</button>
-                <button disabled={activePage === 1 || loading} onClick={() => { setPage(Math.max(1, activePage - 1)); scrollTableIntoView(); }} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">PREV</button>
+                <button disabled={activePage === 1 || loading} onClick={handleFirstPage} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">FIRST</button>
+                <button disabled={activePage === 1 || loading} onClick={handlePrevPage} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">PREV</button>
                 <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400"><span className="hidden md:inline">PAGE </span><span className="text-[var(--soc-text-primary)]">{activePage}</span> / {totalPages}</span>
-                <button disabled={activePage >= totalPages || loading} onClick={() => { setPage(Math.min(totalPages, activePage + 1)); scrollTableIntoView(); }} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">NEXT</button>
-                <button disabled={activePage >= totalPages || loading} onClick={() => { setPage(totalPages); scrollTableIntoView(); }} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">LAST</button>
+                <button disabled={!nextCursor || activePage >= totalPages || loading} onClick={handleNextPage} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">NEXT</button>
+                <button disabled={!nextCursor || activePage >= totalPages || loading} onClick={handleLastPage} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">LAST</button>
               </div>
             </div>
           </div>

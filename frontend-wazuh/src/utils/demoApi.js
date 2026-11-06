@@ -788,11 +788,58 @@ function buildResponse(pathname, q) {
   // — FIM events —
   if (pathname.includes("/api/events")) {
     const fim = buildFimEvents(startMs, endMs);
+    if (pathname.endsWith("/files/stats")) {
+      const byPath = new Map();
+      for (const event of fim) {
+        const key = String(event.syscheckPath || "unknown");
+        const item = byPath.get(key) || { label: key, value: 0, users: new Map() };
+        item.value += 1;
+        item.users.set(event.username, (item.users.get(event.username) || 0) + 1);
+        byPath.set(key, item);
+      }
+      const topFiles = Array.from(byPath.values())
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 5)
+        .map(({ label, value, users }) => ({
+          label,
+          value,
+          sub: Array.from(users.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || "",
+        }));
+      const mostSevere = [...fim].sort((a, b) => Number(b.ruleLevel) - Number(a.ruleLevel))[0];
+      return ok({ data: {
+        uniqueFiles: byPath.size,
+        topFiles,
+        mostSevereEvent: mostSevere ? { ruleLevel: mostSevere.ruleLevel, description: mostSevere.ruleDescription } : null,
+      } });
+    }
+    if (pathname.endsWith("/payload/stats")) {
+      const stopWords = new Set(["---", "@@", "+", "-", "//", "#", "the", "is", "to", "and", "file", "mode", "old", "new", "was", "now", "sum", "changed", "attributes", "realtime"]);
+      const counts = new Map();
+      for (const event of fim) {
+        const raw = event.fileDiff || "";
+        const lines = String(raw).replace(/\\n/g, "\n").split("\n").map((line) => line.trim()).filter(Boolean);
+        const diffLines = lines.filter((line) => line.startsWith(">") || line.startsWith("<"));
+        const payloadLines = diffLines.length ? diffLines.map((line) => line.substring(1)) : lines;
+        for (const line of payloadLines) {
+          const tokens = line.split(/[\s/=:;,'"(){}[\]<>|&!?@#%^*`~]+/).map((token) => token.toLowerCase());
+          for (const token of tokens) {
+            if (token.length < 2 || stopWords.has(token) || /^\d+$/.test(token)) continue;
+            counts.set(token, (counts.get(token) || 0) + 1);
+          }
+        }
+      }
+      return ok({ data: Array.from(counts.entries()).map(([text, count]) => ({ text, count })).sort((a, b) => b.count - a.count).slice(0, 40) });
+    }
     if (pathname.endsWith("/events/users/stats")) {
       return ok({ data: countBy(fim, (e) => e.username).slice(0, 100).map((r) => ({ user: r.key, count: r.count })) });
     }
     if (pathname.endsWith("/events/agents/stats")) {
-      return ok({ data: countBy(fim, (e) => e.agentName).slice(0, 20).map((r) => ({ agent: r.key, count: r.count })) });
+      const data = countBy(fim, (e) => e.agentName).slice(0, 20).map((r) => ({
+        agent: r.key,
+        count: r.count,
+        lastSeen: fim.filter((event) => event.agentName === r.key).reduce((latest, event) => Math.max(latest, new Date(event.timestamp).getTime()), 0),
+      }));
+      return ok({ data, uniqueAgents: new Set(fim.map((event) => event.agentName)).size });
     }
     if (pathname.endsWith("/events/distribution/stats")) {
       const sevMap = { Critical: 0, High: 0, Medium: 0, Low: 0 };
@@ -827,16 +874,40 @@ function buildResponse(pathname, q) {
     else if (sev === "high") rows = rows.filter((e) => Number(e.ruleLevel) >= 8 && Number(e.ruleLevel) < 12);
     else if (sev === "medium") rows = rows.filter((e) => Number(e.ruleLevel) >= 5 && Number(e.ruleLevel) < 8);
     else if (sev === "low") rows = rows.filter((e) => Number(e.ruleLevel) < 5);
+    const filterValue = (key) => String(q.get(key) || "").toLowerCase();
+    const agentName = filterValue("agentName");
+    const username = filterValue("user");
+    const eventType = filterValue("event");
+    const filePath = filterValue("path");
+    const search = filterValue("search");
+    const payloadPattern = filterValue("payloadPattern");
+    if (agentName) rows = rows.filter((event) => String(event.agentName).toLowerCase() === agentName);
+    if (username) rows = rows.filter((event) => String(event.username).toLowerCase() === username);
+    if (eventType) rows = rows.filter((event) => String(event.syscheckEvent).toLowerCase() === eventType);
+    if (filePath) rows = rows.filter((event) => String(event.syscheckPath).toLowerCase() === filePath);
+    if (search) rows = rows.filter((event) => [event.agentName, event.username, event.syscheckPath, event.syscheckEvent, event.ruleDescription].some((value) => String(value || "").toLowerCase().includes(search)));
+    if (payloadPattern) rows = rows.filter((event) => [event.fileDiff, event.ruleDescription, event.syscheckPath].some((value) => String(value || "").toLowerCase().includes(payloadPattern)));
+    const searchAfter = q.get("search_after");
+    if (searchAfter) {
+      try {
+        const [timestamp, id] = JSON.parse(searchAfter);
+        const cursorIndex = rows.findIndex((event) => event.timestamp === timestamp && event.id === id);
+        if (cursorIndex >= 0) rows = rows.slice(cursorIndex + 1);
+      } catch {
+        // Ignore invalid cursors in demo mode and start at the first page.
+      }
+    }
     const size = Math.min(Math.max(parseInt(q.get("size") || "100", 10) || 100, 1), 5000);
     const limited = rows.slice(0, size);
+    const last = limited[limited.length - 1];
     return {
       success: true,
       data: limited,
       total_hits: rows.length,
-      current_page: 1,
-      total_pages: 1,
+      current_page: parseInt(q.get("page") || "1", 10) || 1,
+      total_pages: Math.max(1, Math.ceil(rows.length / size)),
       page_size: size,
-      next_search_after: null,
+      next_search_after: last && rows.length > size ? [last.timestamp, last.id] : null,
     };
   }
 

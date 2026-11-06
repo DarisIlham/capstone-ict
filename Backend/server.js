@@ -12,6 +12,7 @@ import { verifyToken } from "./middleware/auth.middleware.js";
 import { dataLimiter } from "./middleware/rateLimiters.js";
 import { createIndexerHttpsAgent } from "./config/tls.js";
 import app from "./app.js";
+import { getAlertFeed } from "./services/alertFeedService.js";
 
 // Environment variables are loaded via `import 'dotenv/config'` above
 
@@ -227,6 +228,50 @@ async function handleEventsRequest(req, res) {
       } else {
         queryFilters.push({ range: { "rule.level": severityRanges[severity] } });
       }
+    }
+
+    const agentName = String(req.query.agentName || "").trim();
+    const username = String(req.query.user || "").trim();
+    const eventType = String(req.query.event || "").trim();
+    const filePath = String(req.query.path || "").trim();
+    if (agentName) queryFilters.push({ term: { "agent.name": agentName } });
+    if (username) {
+      queryFilters.push({
+        bool: {
+          should: [
+            { term: { "syscheck.audit.login_user.name": username } },
+            { term: { "syscheck.uname_after": username } },
+            { term: { "syscheck.uname": username } },
+          ],
+          minimum_should_match: 1,
+        },
+      });
+    }
+    if (eventType) queryFilters.push({ term: { "syscheck.event": eventType } });
+    if (filePath) queryFilters.push({ term: { "syscheck.path": filePath } });
+
+    const keywordQuery = String(req.query.search || "").trim();
+    if (keywordQuery) {
+      queryFilters.push({
+        simple_query_string: {
+          query: keywordQuery,
+          fields: ["agent.name", "syscheck.path", "syscheck.event", "rule.description", "syscheck.audit.login_user.name", "syscheck.uname_after", "full_log"],
+          default_operator: "and",
+          lenient: true,
+        },
+      });
+    }
+
+    const payloadPattern = String(req.query.payloadPattern || "").trim();
+    if (payloadPattern) {
+      queryFilters.push({
+        simple_query_string: {
+          query: payloadPattern,
+          fields: ["syscheck.diff", "full_log", "rule.description", "syscheck.path"],
+          default_operator: "and",
+          lenient: true,
+        },
+      });
     }
 
     console.log(
@@ -570,7 +615,11 @@ async function handleEventsAgentsRequest(req, res) {
           },
         },
         aggs: {
-          by_agent: { terms: { field: "agent.name", size: 20 } },
+          by_agent: {
+            terms: { field: "agent.name", size: 20 },
+            aggs: { last_seen: { max: { field: "@timestamp" } } },
+          },
+          unique_agents: { cardinality: { field: "agent.name" } },
         },
       },
       {
@@ -582,7 +631,8 @@ async function handleEventsAgentsRequest(req, res) {
     const buckets = response?.data?.aggregations?.by_agent?.buckets || [];
     return res.json({
       success: true,
-      data: buckets.map((b) => ({ agent: b.key, count: b.doc_count })),
+      data: buckets.map((b) => ({ agent: b.key, count: b.doc_count, lastSeen: b.last_seen?.value_as_string || null })),
+      uniqueAgents: Number(response?.data?.aggregations?.unique_agents?.value || 0),
       applied_range: { rangeKey, start, end },
     });
   } catch (error) {
@@ -808,6 +858,172 @@ async function handleEventsDistributionRequest(req, res) {
 
 app.get("/api/events/distribution/stats", handleEventsDistributionRequest);
 app.get("/api/events/:agent_id/distribution/stats", handleEventsDistributionRequest);
+
+function buildFimAggregateFilters(req, start, end, agentId) {
+  const filters = [{
+    bool: {
+      should: [
+        { term: { "rule.groups": "syscheck" } },
+        { term: { location: "syscheck" } },
+        { exists: { field: "syscheck.path" } },
+      ],
+      minimum_should_match: 1,
+    },
+  }];
+  const timeRange = buildTimeRange(start, end);
+  if (agentId) filters.push({ term: { "agent.id": agentId } });
+  if (timeRange) filters.push(timeRange);
+  const severityRanges = {
+    critical: { gte: 12 },
+    high: { gte: 8, lt: 12 },
+    medium: { gte: 5, lt: 8 },
+    low: { lt: 5 },
+  };
+  const severity = String(req.query.severity || "").toLowerCase();
+  if (severityRanges[severity]) filters.push({ range: { "rule.level": severityRanges[severity] } });
+  return filters;
+}
+
+async function handleEventsFilesRequest(req, res) {
+  try {
+    const agentId = req.params.agent_id && req.params.agent_id !== "all"
+      ? String(req.params.agent_id).padStart(3, "0")
+      : undefined;
+    const rangeKey = String(req.query.range || "30d").trim();
+    let { start, end } = req.query;
+    if (!start && !end) {
+      const preset = buildPresetRange(rangeKey);
+      start = preset.start;
+      end = preset.end;
+    }
+    const response = await axios.post(
+      `${INDEXER_URL}/wazuh-alerts-*/_search`,
+      {
+        size: 0,
+        track_total_hits: true,
+        query: { bool: { filter: buildFimAggregateFilters(req, start, end, agentId), must_not: [{ terms: { "agent.id": EXCLUDED_AGENT_IDS } }] } },
+        aggs: {
+          unique_files: { cardinality: { field: "syscheck.path" } },
+          by_path: {
+            terms: { field: "syscheck.path", size: 5, order: { _count: "desc" } },
+            aggs: {
+              by_user: {
+                terms: {
+                  size: 20,
+                  script: {
+                    lang: "painless",
+                    source:
+                      "def u = '';" +
+                      "try { if (doc.containsKey('syscheck.audit.login_user.name') && doc['syscheck.audit.login_user.name'].size() > 0) { u = doc['syscheck.audit.login_user.name'].value; } } catch (Exception e) {}" +
+                      "if (u == '') { try { if (doc.containsKey('syscheck.uname_after') && doc['syscheck.uname_after'].size() > 0) { u = doc['syscheck.uname_after'].value; } } catch (Exception e) {} }" +
+                      "if (u == '') { try { if (doc.containsKey('syscheck.uname') && doc['syscheck.uname'].size() > 0) { u = doc['syscheck.uname'].value; } } catch (Exception e) {} }" +
+                      "return u == '' ? '-' : u;",
+                  },
+                },
+              },
+              by_agent: { terms: { field: "agent.name", size: 20 } },
+            },
+          },
+          most_severe: {
+            top_hits: {
+              size: 1,
+              sort: [
+                { "rule.level": { order: "desc", unmapped_type: "long" } },
+                { "@timestamp": { order: "desc", unmapped_type: "date" } },
+              ],
+              _source: ["rule.level", "rule.description"],
+            },
+          },
+        },
+      },
+      { auth: { username: INDEXER_USER, password: INDEXER_PASS }, httpsAgent }
+    );
+
+    const aggs = response?.data?.aggregations || {};
+    const severeHit = aggs.most_severe?.hits?.hits?.[0]?._source;
+    return res.json({
+      success: true,
+      data: {
+        total: typeof response?.data?.hits?.total === "object" ? response.data.hits.total.value : Number(response?.data?.hits?.total || 0),
+        uniqueFiles: Number(aggs.unique_files?.value || 0),
+        topFiles: (aggs.by_path?.buckets || []).map((bucket) => ({
+          label: bucket.key,
+          value: bucket.doc_count,
+          sub: (bucket.by_user?.buckets || []).find((user) => user.key !== "-")?.key || "",
+          agent: bucket.by_agent?.buckets?.[0]?.key || "",
+        })),
+        mostSevereEvent: severeHit ? {
+          ruleLevel: severeHit.rule?.level || 0,
+          description: severeHit.rule?.description || "-",
+        } : null,
+      },
+      applied_range: { rangeKey, start, end },
+    });
+  } catch (error) {
+    console.error("API ERROR (FIM files stats):", error.message);
+    res.status(500).json({ success: false, message: "Failed to fetch file statistics from Indexer" });
+  }
+}
+
+async function handleEventsPayloadRequest(req, res) {
+  try {
+    const agentId = req.params.agent_id && req.params.agent_id !== "all"
+      ? String(req.params.agent_id).padStart(3, "0")
+      : undefined;
+    const rangeKey = String(req.query.range || "30d").trim();
+    let { start, end } = req.query;
+    if (!start && !end) {
+      const preset = buildPresetRange(rangeKey);
+      start = preset.start;
+      end = preset.end;
+    }
+    const fetchPayloadTerms = async (field, extraFilter = null) => {
+      try {
+        const filters = buildFimAggregateFilters(req, start, end, agentId);
+        if (extraFilter) filters.push(extraFilter);
+        const response = await axios.post(
+          `${INDEXER_URL}/wazuh-alerts-*/_search`,
+          {
+            size: 0,
+            query: { bool: { filter: filters, must_not: [{ terms: { "agent.id": EXCLUDED_AGENT_IDS } }] } },
+            aggs: { payload_terms: { significant_text: { field, size: 80, filter_duplicate_text: true } } },
+          },
+          { auth: { username: INDEXER_USER, password: INDEXER_PASS }, httpsAgent }
+        );
+        return response?.data?.aggregations?.payload_terms?.buckets || [];
+      } catch (error) {
+        console.warn(`FIM payload token aggregation failed for ${field}:`, error.message);
+        return [];
+      }
+    };
+    const [diffBuckets, logBuckets] = await Promise.all([
+      fetchPayloadTerms("syscheck.diff", { exists: { field: "syscheck.diff" } }),
+      fetchPayloadTerms("full_log", { bool: { must_not: [{ exists: { field: "syscheck.diff" } }] } }),
+    ]);
+    const counts = new Map();
+    const buckets = [...diffBuckets, ...logBuckets];
+    for (const bucket of buckets) {
+      const token = String(bucket.key || "").toLowerCase();
+      if (token.length < 2 || /^\d+$/.test(token)) continue;
+      counts.set(token, (counts.get(token) || 0) + Number(bucket.doc_count || 0));
+    }
+    const stopWords = new Set(["---", "@@", "the", "is", "to", "and", "file", "mode", "old", "new", "was", "now", "sum", "changed", "attributes", "realtime"]);
+    const data = Array.from(counts.entries())
+      .filter(([token]) => !stopWords.has(token))
+      .map(([text, count]) => ({ text, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 40);
+    return res.json({ success: true, data, applied_range: { rangeKey, start, end } });
+  } catch (error) {
+    console.error("API ERROR (FIM payload stats):", error.message);
+    res.status(500).json({ success: false, message: "Failed to fetch payload statistics from Indexer" });
+  }
+}
+
+app.get("/api/events/files/stats", handleEventsFilesRequest);
+app.get("/api/events/:agent_id/files/stats", handleEventsFilesRequest);
+app.get("/api/events/payload/stats", handleEventsPayloadRequest);
+app.get("/api/events/:agent_id/payload/stats", handleEventsPayloadRequest);
 
 
 async function handleDomainSummaryRequest(req, res) {
@@ -1196,6 +1412,15 @@ async function autoPullEvents() {
 // jalan sekali + interval
 autoPullEvents();
 setInterval(autoPullEvents, AUTO_PULL_INTERVAL_MS);
+
+app.get("/api/alerts/feed", dataLimiter, verifyToken, async (req, res, next) => {
+  try {
+    const result = await getAlertFeed(req.query);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+});
 
 // 404 Handler (moved here so routes added in server.js are reachable)
 app.use((req, res) => {

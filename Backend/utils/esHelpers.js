@@ -88,6 +88,25 @@ function escapeWildcard(value = "") {
   return String(value).replace(/([\\*?])/g, "\\$1");
 }
 
+// Substring search untuk field bertipe keyword (agent.name, network.service, dll).
+export function buildKeywordContainsClause(field, value) {
+  if (!value || !String(value).trim()) {
+    return null;
+  }
+
+  const trimmed = String(value).trim();
+  const safe = escapeWildcard(trimmed);
+
+  return {
+    wildcard: {
+      [field]: {
+        value: `*${safe}*`,
+        case_insensitive: true
+      }
+    }
+  };
+}
+
 export function buildContainsClause(field, value) {
   if (!value || !String(value).trim()) {
     return null;

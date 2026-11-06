@@ -128,12 +128,14 @@ const fetchCriticalFeed = async ({ base, token, start, end, signal }) => {
   const collect = async (url, pageSize) => {
     const out = [];
     for (let page = 1; ; page += 1) {
+      // Jangan meminta halaman yang melewati result window Elasticsearch;
+      // request seperti itu dijawab 400 oleh backend.
+      if (page * pageSize > ES_MAX_WINDOW) break;
       const body = await get(`${url}&page=${page}&limit=${pageSize}`);
       const batch = rows(body);
       out.push(...batch);
       const pages = totalPages(body);
       if (!pages || page >= pages || batch.length === 0) break;
-      if (page * pageSize > ES_MAX_WINDOW) break;
     }
     return out;
   };

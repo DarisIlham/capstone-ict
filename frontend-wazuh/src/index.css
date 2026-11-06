@@ -8612,7 +8612,7 @@ aside.w-60 {
   }
 
   .ml-predictions-page .ml-predictions-log-table colgroup col:nth-child(9) {
-    width: 21% !important;
+    width: 26% !important;
   }
 
   .ml-predictions-page .ml-kpi-label,
@@ -9414,7 +9414,7 @@ aside.w-60 {
   }
 
   .ml-predictions-page .ml-predictions-log-table {
-    min-width: 1320px !important;
+    min-width: 1380px !important;
   }
 
   .ml-predictions-page .ml-predictions-log-table colgroup col:nth-child(1) {
@@ -9441,7 +9441,7 @@ aside.w-60 {
   }
 
   .ml-predictions-page .ml-predictions-log-table colgroup col:nth-child(9) {
-    width: 220px !important;
+    width: 280px !important;
   }
 
   .ml-predictions-page .ml-predictions-log-table colgroup col:nth-child(10) {
@@ -10916,7 +10916,7 @@ aside.w-60 {
   }
 
   .ml-predictions-page .ml-predictions-log-table {
-    min-width: 1525px !important;
+    min-width: 1585px !important;
     table-layout: fixed !important;
   }
 
@@ -10947,7 +10947,7 @@ aside.w-60 {
   }
 
   .ml-predictions-page .ml-predictions-log-table colgroup col:nth-child(9) {
-    width: 240px !important;
+    width: 300px !important;
   }
 
   .ml-predictions-page .ml-predictions-log-table colgroup col:nth-child(10) {
@@ -10957,7 +10957,7 @@ aside.w-60 {
 
 @media (min-width: 850px) {
   .ml-predictions-page .ml-predictions-log-table {
-    min-width: 1700px !important;
+    min-width: 1760px !important;
     table-layout: fixed !important;
   }
 
@@ -10985,7 +10985,7 @@ aside.w-60 {
   }
 
   .ml-predictions-page .ml-predictions-log-table colgroup col:nth-child(9) {
-    width: 280px !important;
+    width: 340px !important;
   }
 
   .ml-predictions-page .ml-predictions-log-table colgroup col:nth-child(10) {
@@ -11103,9 +11103,9 @@ aside.w-60 {
   .host-monitoring-page .host-command-keywords-card,
   .host-monitoring-page .host-dangerous-commands-card {
     box-sizing: border-box !important;
-    height: 280px !important;
-    min-height: 280px !important;
-    max-height: 280px !important;
+    height: 360px !important;
+    min-height: 360px !important;
+    max-height: 360px !important;
   }
 
   .host-monitoring-page .host-command-keywords-card .host-command-keywords-canvas {
@@ -11113,6 +11113,21 @@ aside.w-60 {
     min-height: 0 !important;
     flex: 1 1 0% !important;
   }
+}
+
+/* Top 5 Dangerous Commands: setiap baris punya sub-line (actor + last seen)
+   sehingga butuh ruang lebih dari budget tetap 206px / 5 baris. Biarkan
+   list tumbuh mengikuti konten agar baris terakhir tidak terpotong. */
+.host-monitoring-page .host-dangerous-commands-card .host-compact-list,
+.host-monitoring-page .host-dangerous-commands-card .host-compact-list--full {
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+
+.host-monitoring-page .host-dangerous-commands-card .host-compact-list--full {
+  grid-template-rows: none !important;
+  grid-auto-rows: auto !important;
 }
 
 @media (min-width: 640px) and (max-width: 649px) {
@@ -11527,7 +11542,7 @@ aside.w-60 {
   }
 
   .ml-predictions-page .ml-predictions-log-table {
-    min-width: 1320px !important;
+    min-width: 1380px !important;
     table-layout: fixed !important;
   }
 
@@ -11555,7 +11570,7 @@ aside.w-60 {
   }
 
   .ml-predictions-page .ml-predictions-log-table colgroup col:nth-child(9) {
-    width: 220px !important;
+    width: 280px !important;
   }
 
   .ml-predictions-page .ml-predictions-log-table colgroup col:nth-child(10) {

@@ -16,6 +16,13 @@ import {
   normalizePagination,
   getHistogramInterval
 } from "../utils/esHelpers.js";
+import {
+  SEARCH_AFTER_KEEP_ALIVE,
+  SEARCH_AFTER_SORT,
+  createExpiredPointInTimeError,
+  isExpiredPointInTime,
+  parseSearchAfter
+} from "../utils/searchAfter.js";
 
 // Fungsi pembantu internal (tidak perlu diekspor)
 function buildFileScanMustClauses(status = "success") {
@@ -257,6 +264,57 @@ export async function listSuspiciousFileScans(query, options = {}) {
 
   addDateRange(must, start, end);
 
+  const cursorMode = query.cursor === "1" || query.cursor === "true" || Boolean(query.search_after);
+  if (cursorMode) {
+    const searchAfter = parseSearchAfter(query.search_after);
+    let pitId = query.pit_id ? String(query.pit_id) : null;
+
+    if (searchAfter && !pitId) {
+      const error = new Error("search_after requires a pit_id");
+      error.status = 400;
+      throw error;
+    }
+
+    if (!pitId) {
+      const pit = unwrapEsResponse(await es.openPointInTime({
+        index: elastic.index,
+        keep_alive: SEARCH_AFTER_KEEP_ALIVE
+      }));
+      pitId = pit?.id || null;
+      if (!pitId) throw new Error("Failed to open pagination snapshot");
+    }
+
+    const searchBody = {
+      size: limit,
+      track_total_hits: true,
+      sort: SEARCH_AFTER_SORT,
+      pit: { id: pitId, keep_alive: SEARCH_AFTER_KEEP_ALIVE },
+      query: { bool: { must } }
+    };
+    if (searchAfter) searchBody.search_after = searchAfter;
+
+    let response;
+    try {
+      response = unwrapEsResponse(await es.search(searchBody));
+    } catch (error) {
+      if (isExpiredPointInTime(error)) throw createExpiredPointInTimeError();
+      throw error;
+    }
+
+    const hits = getHits(response);
+    const total = getTotalHits(response);
+    const lastSort = hits.length ? hits[hits.length - 1].sort : null;
+    const hasMore = Boolean(lastSort) && page * limit < total;
+
+    return {
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      data: hits.map(formatFileScan),
+      next_search_after: hasMore ? lastSort : null,
+      pit_id: response.pit_id || pitId,
+      has_more: hasMore
+    };
+  }
+
   const response = unwrapEsResponse(
     await es.search({
       index: elastic.index,
@@ -360,6 +418,56 @@ export async function getFileScanStats(query) {
                 }
               }
             },
+            suspicious_severity_counts: {
+              filter: {
+                range: { findings_count: { gt: 0 } }
+              },
+              aggs: {
+                critical: {
+                  filter: exactMatchClause("findings.severity", "CRITICAL")
+                },
+                high: {
+                  filter: {
+                    bool: {
+                      must_not: [exactMatchClause("findings.severity", "CRITICAL")],
+                      should: [
+                        exactMatchClause("findings.severity", "HIGH"),
+                        { bool: { must_not: [
+                          exactMatchClause("findings.severity", "CRITICAL"),
+                          exactMatchClause("findings.severity", "HIGH"),
+                          exactMatchClause("findings.severity", "MEDIUM"),
+                          exactMatchClause("findings.severity", "LOW")
+                        ] } }
+                      ],
+                      minimum_should_match: 1
+                    }
+                  }
+                },
+                medium: {
+                  filter: {
+                    bool: {
+                      must_not: [
+                        exactMatchClause("findings.severity", "CRITICAL"),
+                        exactMatchClause("findings.severity", "HIGH")
+                      ],
+                      must: [exactMatchClause("findings.severity", "MEDIUM")]
+                    }
+                  }
+                },
+                low: {
+                  filter: {
+                    bool: {
+                      must_not: [
+                        exactMatchClause("findings.severity", "CRITICAL"),
+                        exactMatchClause("findings.severity", "HIGH"),
+                        exactMatchClause("findings.severity", "MEDIUM")
+                      ],
+                      must: [exactMatchClause("findings.severity", "LOW")]
+                    }
+                  }
+                }
+              }
+            },
             suspicious_agents: {
               filter: {
                 range: {
@@ -422,6 +530,7 @@ export async function getFileScanStats(query) {
   const successAgg = response.aggregations?.success_scans;
   const errorAgg = response.aggregations?.error_scans;
   const suspiciousAgg = successAgg?.suspicious_agents;
+  const suspiciousSeverityAgg = successAgg?.suspicious_severity_counts;
 
   // If aggregations did not produce useful agent names (mapping may lack keyword fields),
   // fallback to fetching hits and compute top agents from _source (same logic as formatFileScan).
@@ -471,6 +580,12 @@ export async function getFileScanStats(query) {
     totalSuccessScans: successAgg?.doc_count ?? 0,
     totalErrorScans: errorAgg?.doc_count ?? 0,
     suspiciousScans: successAgg?.suspicious_count?.doc_count ?? 0,
+    suspiciousSeverityCounts: {
+      CRITICAL: suspiciousSeverityAgg?.critical?.doc_count ?? 0,
+      HIGH: suspiciousSeverityAgg?.high?.doc_count ?? 0,
+      MEDIUM: suspiciousSeverityAgg?.medium?.doc_count ?? 0,
+      LOW: suspiciousSeverityAgg?.low?.doc_count ?? 0
+    },
     cleanScans: successAgg?.clean_count?.doc_count ?? 0,
     averageFindings: successAgg?.avg_findings?.value ?? 0,
     maxFindings: successAgg?.max_findings?.value ?? 0,

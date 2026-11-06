@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+﻿import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, ChevronDown, Clock, Shield, Search, AlertTriangle, CalendarRange, SlidersHorizontal } from "lucide-react";
 import DateRangeFilter from "../components/DateRangeFilter";
@@ -17,7 +17,6 @@ import {
   mlSeverity,
   isMaliciousLabel,
 } from "../utils/alertSeverity";
-import { getTopFilterValues } from "../utils/topFilterValues";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -73,9 +72,14 @@ const getDistinctAlertDetails = (alert) => {
 export default function Alert() {
   const navigate = useNavigate();
   const [alerts, setAlerts] = useState([]);
+  const [pagination, setPagination] = useState({ page: 1, limit: 25, total: 0, totalPages: 1 });
+  const [severityCounts, setSeverityCounts] = useState({ critical: 0, high: 0, medium: 0, low: 0 });
+  const [agentOptions, setAgentOptions] = useState([]);
+  const [userOptions, setUserOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterSeverity, setFilterSeverity] = useState("all");
   const [rangeKey, setRangeKey] = useState("24h");
   const [filterMode, setFilterMode] = useState("range");
@@ -89,11 +93,45 @@ export default function Alert() {
   const [userFilter, setUserFilter] = useState("all");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersRef = useRef(null);
+  const rangeSnapshotRef = useRef(null);
 
   const loadAlerts = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
     if (!silent) setLoadError("");
     try {
+      const feedBasePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const feedApiBase = `${window.location.origin}${feedBasePath}`;
+      const feedToken = localStorage.getItem("token") || sessionStorage.getItem("token");
+      const feedRange = rangeSnapshotRef.current || (filterMode === "custom"
+        ? getIsoDateRange(normalizeDateRange(customDateRange))
+        : rangeKeyToDateRange(rangeKey));
+      rangeSnapshotRef.current = feedRange;
+      const feedParams = new URLSearchParams({
+        start: feedRange.start,
+        end: feedRange.end,
+        page: String(page),
+        limit: String(pageSize),
+      });
+      if (debouncedSearch.trim()) feedParams.set("search", debouncedSearch.trim());
+      if (filterSeverity !== "all") feedParams.set("severity", filterSeverity);
+      if (filterSource !== "all") feedParams.set("source", filterSource);
+      if (agentFilter !== "all") feedParams.set("agent", agentFilter);
+      if (userFilter !== "all") feedParams.set("user", userFilter);
+      const feedResponse = await fetch(`${feedApiBase}/api/alerts/feed?${feedParams.toString()}`, {
+        headers: { Authorization: `Bearer ${feedToken}` },
+      });
+      const feedBody = await feedResponse.json();
+      if (!feedResponse.ok) throw new Error(feedBody?.message || `Alerts returned ${feedResponse.status}`);
+      if (feedBody?.success) {
+        setAlerts(Array.isArray(feedBody.data) ? feedBody.data : []);
+        setPagination(feedBody.pagination || { page: 1, limit: pageSize, total: 0, totalPages: 1 });
+        setSeverityCounts(feedBody.severityCounts || { critical: 0, high: 0, medium: 0, low: 0 });
+        setAgentOptions(Array.isArray(feedBody.agentOptions) ? feedBody.agentOptions : []);
+        setUserOptions(Array.isArray(feedBody.userOptions) ? feedBody.userOptions : []);
+        setLoadError("");
+        return;
+      }
+
       const APP_BASE_PATH = import.meta.env.BASE_URL.replace(/\/$/, "");
       const API_BASE = `${window.location.origin}${APP_BASE_PATH}`;
       const token = localStorage.getItem("token") || sessionStorage.getItem("token");
@@ -358,7 +396,12 @@ export default function Alert() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [rangeKey, filterMode, customDateRange]);
+  }, [rangeKey, filterMode, customDateRange, page, pageSize, debouncedSearch, filterSeverity, filterSource, agentFilter, userFilter]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
     loadAlerts();
@@ -369,49 +412,27 @@ export default function Alert() {
   // supaya tidak berbunyi dua kali.
   useEffect(() => {
     const id = setInterval(() => {
+      if (filterMode !== "custom") rangeSnapshotRef.current = null;
       loadAlerts({ silent: true });
     }, 30000);
     return () => clearInterval(id);
-  }, [loadAlerts]);
+  }, [loadAlerts, filterMode]);
 
   const handleRangeChange = (key) => {
     setPage(1);
+    rangeSnapshotRef.current = null;
     setRangeKey(key);
     setFilterMode("range");
   };
 
   const handleCustomRangeChange = (range) => {
     setPage(1);
+    rangeSnapshotRef.current = null;
     setCustomDateRange(range);
     setFilterMode("custom");
   };
 
-  const filteredAlerts = alerts.filter((alert) => {
-    const matchesSearch =
-      !search ||
-      alert.title.toLowerCase().includes(search.toLowerCase()) ||
-      alert.source.toLowerCase().includes(search.toLowerCase()) ||
-      alert.asset.toLowerCase().includes(search.toLowerCase()) ||
-      String(alert.user || "").toLowerCase().includes(search.toLowerCase()) ||
-      alert.reason.toLowerCase().includes(search.toLowerCase());
-    const matchesSeverity =
-      filterSeverity === "all" || alert.severity === filterSeverity;
-    const matchesSource =
-      filterSource === "all" || alert.source === filterSource;
-    const matchesAgent =
-      agentFilter === "all" || alert.agent === agentFilter;
-    const matchesUser =
-      userFilter === "all" || alert.user === userFilter;
-    return matchesSearch && matchesSeverity && matchesSource && matchesAgent && matchesUser;
-  });
-
-  const agentOptions = useMemo(() => {
-    return getTopFilterValues(alerts, (alert) => alert.agent, undefined, agentFilter);
-  }, [alerts, agentFilter]);
-
-  const userOptions = useMemo(() => {
-    return getTopFilterValues(alerts, (alert) => alert.user, undefined, userFilter);
-  }, [alerts, userFilter]);
+  const filteredAlerts = alerts;
 
   const activeFilterCount = [
     filterSeverity !== "all",
@@ -434,21 +455,9 @@ export default function Alert() {
     };
   }, [filtersOpen]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredAlerts.length / pageSize));
-  const activePage = page > totalPages ? 1 : page;
-  const pagedAlerts = filteredAlerts.slice(
-    (activePage - 1) * pageSize,
-    activePage * pageSize
-  );
-
-  const severityCounts = alerts.reduce(
-    (acc, alert) => {
-      const key = alert.severity || "medium";
-      acc[key] = (acc[key] || 0) + 1;
-      return acc;
-    },
-    { critical: 0, high: 0, medium: 0, low: 0 }
-  );
+  const totalPages = pagination.totalPages || 1;
+  const activePage = pagination.page || page;
+  const pagedAlerts = alerts;
 
   return (
     <div className="alert-page flex flex-col w-full min-w-0 gap-4">
@@ -473,6 +482,7 @@ export default function Alert() {
             onChange={handleCustomRangeChange}
             onClear={() => {
               setPage(1);
+              rangeSnapshotRef.current = null;
               setFilterMode("range");
               setRangeKey("24h");
               setCustomDateRange(createDefaultDateRange(1));
@@ -730,11 +740,11 @@ export default function Alert() {
             <div className="alert-pagination-layout flex flex-col md:flex-row items-start md:items-center justify-between gap-1 md:gap-0">
               <div className="alert-pagination-summary text-[10px] md:text-[11px] font-mono text-slate-500">
                 <span className="hidden md:inline">SHOWING </span>
-                <span className="font-bold text-sky-400">{(activePage - 1) * pageSize + 1}</span>
+                <span className="font-bold text-sky-400">{pagination.total === 0 ? 0 : (activePage - 1) * pageSize + 1}</span>
                 <span className="hidden md:inline"> - </span><span className="md:hidden">-</span>
-                <span className="font-bold text-sky-400">{Math.min(activePage * pageSize, filteredAlerts.length)}</span>
+                <span className="font-bold text-sky-400">{Math.min(activePage * pageSize, pagination.total)}</span>
                 <span className="hidden md:inline"> OF </span><span className="md:hidden"> / </span>
-                <span className="font-bold text-sky-400">{filteredAlerts.length}</span>
+                <span className="font-bold text-sky-400">{pagination.total}</span>
                 <span className="hidden md:inline"> ALERTS</span>
               </div>
               <div className="alert-pagination-controls flex flex-wrap items-center gap-2">

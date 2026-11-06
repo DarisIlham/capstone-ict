@@ -625,9 +625,9 @@ const CompactBarChart = ({ items, emptyLabel = "No data available", onItemClick 
         const isActive = activeValue != null && String(label) === String(activeValue);
         return (
           <div key={label} onClick={() => onItemClick?.(item)} className={`w-full min-w-0 max-w-full list-item-interactive px-2 py-1 rounded-lg ${onItemClick ? "cursor-pointer" : ""} ${isActive ? "bg-orange-500/10 ring-1 ring-orange-500/30" : ""}`} title={onItemClick ? `Filter logs for ${label}` : undefined}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="host-list-rank w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <span className="host-list-rank shrink-0 w-5 h-5 rounded-md bg-[var(--soc-elevated)] flex items-center justify-center text-[8px] font-bold" style={{ color }}>
                   {i + 1}
                 </span>
                 <span className="host-list-label min-w-0 max-w-full truncate text-[10px] font-medium text-[var(--soc-text-secondary)]" title={label}>
@@ -638,6 +638,13 @@ const CompactBarChart = ({ items, emptyLabel = "No data available", onItemClick 
                 {new Intl.NumberFormat("en-US").format(value)}
               </span>
             </div>
+            {item.sub && (
+              <div className="mt-0.5 ml-7 min-w-0">
+                <span className="host-list-sub block truncate text-[9px] leading-3 text-[var(--soc-text-muted)]" title={item.sub}>
+                  {item.sub}
+                </span>
+              </div>
+            )}
             <div className="host-list-progress mt-0.5 ml-7 h-1.5 bg-[var(--soc-elevated)] rounded-full overflow-hidden progress-bar">
               <div
                 className="h-full rounded-full transition-all duration-500"
@@ -710,6 +717,7 @@ const PaginationControls = ({
   pageSize,
   loading,
   onPageChange,
+  onLastPage,
   onPageSizeChange,
   showPageSizeSelector = true,
 }) => {
@@ -785,7 +793,7 @@ const PaginationControls = ({
           </button>
           <button
             disabled={page === totalPages || loading}
-            onClick={() => onPageChange(totalPages)}
+            onClick={onLastPage || (() => onPageChange(totalPages))}
             className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20"
           >
             <span className="hidden md:inline">LAST</span>
@@ -876,8 +884,9 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
   const W = Math.max(size.width || 300, 140);
   const H = Math.max(size.height || 160, 120);
 
-  const maxCount = words[0].count;
-  const minCount = words[words.length - 1].count;
+  const visibleWords = words.slice(0, 40);
+  const maxCount = visibleWords[0].count;
+  const minCount = visibleWords[visibleWords.length - 1].count;
   const range = Math.max(1, maxCount - minCount);
 
   const measureTextWidth = (() => {
@@ -890,110 +899,49 @@ const PayloadWordCloud = ({ words, activeWord = null, onWordClick = null }) => {
     };
   })();
 
+  const fontSize = (index) => {
+    const rank = 1 - index / Math.max(visibleWords.length - 1, 1);
+    return Math.round((isCompact ? 8 : 11) + Math.pow(rank, 1.6) * (isCompact ? 24 : 31));
+  };
   const toWeight = (fs) => (fs > 26 ? "800" : fs > 18 ? "700" : "500");
-  const minFontSize = isCompact ? 7 : 10;
   const SAFE_X = 18;
   const SAFE_Y = 14;
-  const prominence = (count) => (
-    maxCount === minCount ? 0.62 : (count - minCount) / range
-  );
-
-  // Try a complete layout at a given scale. The same layout is calculated
-  // repeatedly below, allowing the cloud to select the largest scale that
-  // still fits every keyword in the measured payload area.
-  const layoutAtScale = (scale) => {
-    const placed = [];
-    const rects = [];
-    const overlaps = (nx, ny, nw, nh) => {
-      const pad = 3;
-      return rects.some((r) =>
-        nx - nw / 2 - pad < r.x + r.w / 2 &&
-        nx + nw / 2 + pad > r.x - r.w / 2 &&
-        ny - nh / 2 - pad < r.y + r.h / 2 &&
-        ny + nh / 2 + pad > r.y - r.h / 2
-      );
-    };
-    const zoneW = (W - 2 * SAFE_X) * 0.94;
-    const zoneH = (H - 2 * SAFE_Y) * 0.94;
-    const zoneX = (W - zoneW) / 2;
-    const zoneY = (H - zoneH) / 2;
-
-    for (let i = 0; i < words.length; i++) {
-      const { text, count } = words[i];
-      // Ranking changes the relative font size; `scale` is the shared
-      // auto-fit multiplier found below.
-      let fs = Math.max(minFontSize, Math.round((13 + prominence(count) * 21) * scale));
-      let weight = toWeight(fs);
-      let tw = measureTextWidth(text, fs, weight);
-      let th = Math.ceil(fs * 1.4);
-
-      // A single long path/token may be reduced just enough to stay within
-      // the canvas, while the other words retain the shared auto-fit scale.
-      while (fs > minFontSize && (tw > W - 2 * SAFE_X || th > H - 2 * SAFE_Y)) {
-        fs -= 1;
-        weight = toWeight(fs);
-        tw = measureTextWidth(text, fs, weight);
-        th = Math.ceil(fs * 1.4);
-      }
-      if (tw > W - 2 * SAFE_X || th > H - 2 * SAFE_Y) return { placed, complete: false };
-
-      const targetX = zoneX + (((i * 0.61803398875 + 0.17) % 1) * zoneW);
-      const targetY = zoneY + (((i * 0.41421356237 + 0.23) % 1) * zoneH);
-      let found = false;
-      for (let step = 0; step < 1200; step++) {
-        const angle = step * 0.35;
-        const radius = step * 0.45;
-        const x = targetX + radius * Math.cos(angle);
-        const y = targetY + radius * Math.sin(angle) * 0.6;
-        if (x - tw / 2 >= SAFE_X && x + tw / 2 <= W - SAFE_X && y - th / 2 >= SAFE_Y && y + th / 2 <= H - SAFE_Y && !overlaps(x, y, tw, th)) {
-          rects.push({ x, y, w: tw, h: th });
-          placed.push({ text, fs, weight, color: palette[i % palette.length], opacity: 0.65 + prominence(count) * 0.35, x, y, count });
-          found = true;
-          break;
-        }
-      }
-      if (!found) return { placed, complete: false };
-    }
-    return { placed, complete: true };
+  const placed = [];
+  const rects = [];
+  const overlaps = (nx, ny, nw, nh) => {
+    const pad = 4;
+    return rects.some((r) =>
+      nx - nw / 2 - pad < r.x + r.w / 2 &&
+      nx + nw / 2 + pad > r.x - r.w / 2 &&
+      ny - nh / 2 - pad < r.y + r.h / 2 &&
+      ny + nh / 2 + pad > r.y - r.h / 2
+    );
   };
 
-  // Binary-search the maximum usable scale. This removes fixed "10/16 word"
-  // thresholds: sparse clouds grow until their words nearly fill the box,
-  // while dense clouds shrink only as much as needed to fit all words.
-  let bestLayout = layoutAtScale(isCompact ? 0.15 : 0.25);
-  let bestScale = isCompact ? 0.15 : 0.25;
-  if (bestLayout.complete) {
-    let low = isCompact ? 0.15 : 0.25;
-    let high = 1;
-    while (high < 8) {
-      const candidate = layoutAtScale(high);
-      if (!candidate.complete) break;
-      bestLayout = candidate;
-      low = high;
-      bestScale = low;
-      high *= 2;
-    }
-    for (let attempt = 0; attempt < 9; attempt++) {
-      const middle = (low + high) / 2;
-      const candidate = layoutAtScale(middle);
-      if (candidate.complete) {
-        bestLayout = candidate;
-        low = middle;
-        bestScale = low;
-      } else {
-        high = middle;
+  for (let i = 0; i < visibleWords.length; i++) {
+    const { text, count } = visibleWords[i];
+    const fs = fontSize(i);
+    const weight = toWeight(fs);
+    const tw = measureTextWidth(text, fs, weight);
+    const th = Math.ceil(fs * 1.4);
+    if (tw > W - 2 * SAFE_X || th > H - 2 * SAFE_Y) continue;
+
+    let found = false;
+    for (let step = 0; step < 800; step++) {
+      const angle = step * 0.35;
+      const radius = step * 0.8;
+      const x = W / 2 + radius * Math.cos(angle);
+      const y = H / 2 + radius * Math.sin(angle) * 0.6;
+      if (x - tw / 2 >= SAFE_X && x + tw / 2 <= W - SAFE_X && y - th / 2 >= SAFE_Y && y + th / 2 <= H - SAFE_Y && !overlaps(x, y, tw, th)) {
+        rects.push({ x, y, w: tw, h: th });
+        placed.push({ text, fs, weight, color: palette[i % palette.length], opacity: 0.65 + ((count - minCount) / range) * 0.35, x, y, count });
+        found = true;
+        break;
       }
     }
+    if (!found) continue;
   }
-  // Leave a little breathing room rather than using the absolute largest
-  // possible glyphs; the cloud remains adaptive but reads more comfortably.
-  const placed = bestLayout.complete
-    ? layoutAtScale(Math.max(isCompact ? 0.15 : 0.25, bestScale * (isCompact ? 0.55 : 0.70))).placed
-    : bestLayout.placed;
 
-  // Uniform scaling only: with "meet" the text can never be stretched
-  // non-uniformly (gepeng) even if the measured box lags the real box —
-  // worst case is small even margins, never squished glyphs.
   return (
     <div ref={rootRef} className="relative w-full h-full min-h-0">
       <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="command-word-cloud block w-full h-full">
@@ -1052,7 +1000,9 @@ async function fetchJson(url) {
     const message = contentType.includes("application/json")
       ? (await response.json()).message
       : await response.text();
-    throw new Error(message || `Request failed with status ${response.status}`);
+    const error = new Error(message || `Request failed with status ${response.status}`);
+    error.status = response.status;
+    throw error;
   }
 
   return response.json();
@@ -1185,6 +1135,8 @@ const HostMonitoring = () => {
   const [backendStats, setBackendStats] = useState(null);
   const [backendTopSessions, setBackendTopSessions] = useState(null);
   const [pagination, setPagination] = useState(null);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [cursorStack, setCursorStack] = useState([null]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -1196,6 +1148,9 @@ const HostMonitoring = () => {
 
   const logsTableRef = useRef(null);
   const topAgentsPanelRef = useRef(null);
+  const pitIdRef = useRef(null);
+  const lastPageRequestRef = useRef(0);
+  const isLastNavigationRef = useRef(false);
 
   React.useEffect(() => {
     if (!urlAgent && urlFocus !== "logs") return;
@@ -1207,11 +1162,37 @@ const HostMonitoring = () => {
     return () => clearTimeout(id);
   }, [urlAgent, urlFocus, loading]);
 
-  const loadDashboardData = useCallback(async () => {
+  const buildListParams = useCallback((pageNum) => {
     const params = new URLSearchParams({
-      page: String(page),
-      limit: String(pageSize),
+      page: String(pageNum),
+      limit: String(searchQuery.trim() ? ANALYTICS_LIMIT : pageSize),
+      cursor: "1",
     });
+    const pageCursor = cursorStack[pageNum - 1];
+    if (pageCursor) params.set("search_after", JSON.stringify(pageCursor));
+    if (pitIdRef.current) params.set("pit_id", pitIdRef.current);
+    if (statusFilter === "suspicious") params.set("suspicious", "true");
+    else if (statusFilter === "normal") params.set("suspicious", "false");
+    if (userFilter !== "all") params.set("user", userFilter);
+    if (agentFilter !== "all") params.set("agentName", agentFilter);
+    if (sessionFilter !== "all") params.set("session", sessionFilter);
+    if (selectedCommandFilter) params.set("contains", selectedCommandFilter);
+
+    const filterDateRange = filterMode === "custom"
+      ? getIsoDateRange(normalizeDateRange(customDateRange))
+      : rangeKeyToDateRange(rangeKey);
+    params.set("start", selectedTimelinePoint?.start || filterDateRange.start);
+    params.set("end", selectedTimelinePoint?.end || filterDateRange.end);
+    return params;
+  }, [pageSize, searchQuery, cursorStack, statusFilter, userFilter, agentFilter, sessionFilter, selectedCommandFilter, filterMode, customDateRange, rangeKey, selectedTimelinePoint]);
+
+  React.useEffect(() => {
+    lastPageRequestRef.current += 1;
+  }, [buildListParams]);
+
+  const loadDashboardData = useCallback(async () => {
+    if (page === 1) pitIdRef.current = null;
+    const params = buildListParams(page);
     const analyticsParams = new URLSearchParams({
       page: "1",
       limit: String(ANALYTICS_LIMIT),
@@ -1222,25 +1203,18 @@ const HostMonitoring = () => {
       suspicious: "true",
     });
 
-    if (searchQuery.trim()) params.set("limit", String(ANALYTICS_LIMIT));
-    if (statusFilter === "suspicious") params.set("suspicious", "true");
-    else if (statusFilter === "normal") params.set("suspicious", "false");
     if (userFilter !== "all") {
-      params.set("user", userFilter);
       analyticsParams.set("user", userFilter);
       dangerousParams.set("user", userFilter);
     }
     if (agentFilter !== "all") {
-      params.set("agentName", agentFilter);
       analyticsParams.set("agentName", agentFilter);
       dangerousParams.set("agentName", agentFilter);
     }
     if (sessionFilter !== "all") {
-      params.set("session", sessionFilter);
       analyticsParams.set("session", sessionFilter);
       dangerousParams.set("session", sessionFilter);
     }
-    if (selectedCommandFilter) params.set("contains", selectedCommandFilter);
 
     const filterDateRange =
       filterMode === "custom"
@@ -1249,8 +1223,6 @@ const HostMonitoring = () => {
 
     const timingStart = selectedTimelinePoint?.start || filterDateRange.start;
     const timingEnd = selectedTimelinePoint?.end || filterDateRange.end;
-    params.set("start", timingStart);
-    params.set("end", timingEnd);
     analyticsParams.set("start", timingStart);
     analyticsParams.set("end", timingEnd);
     dangerousParams.set("start", timingStart);
@@ -1308,6 +1280,8 @@ const HostMonitoring = () => {
           totalPages: 1,
         }
       );
+      if (listResponse.pit_id) pitIdRef.current = listResponse.pit_id;
+      setNextCursor(listResponse.next_search_after || null);
       setBackendStats(statsResponse.data || null);
       setBackendTimelineData(Array.isArray(timelineResponse.data) ? timelineResponse.data : []);
       const sessionsData = Array.isArray(sessionsResponse?.data) ? sessionsResponse.data : null;
@@ -1316,12 +1290,18 @@ const HostMonitoring = () => {
       setLastUpdated(new Date().toISOString());
     } catch (err) {
       console.error(err);
+      if (err?.status === 409) {
+        pitIdRef.current = null;
+        setCursorStack([null]);
+        setNextCursor(null);
+        setPage(1);
+      }
       setError(err.message || "Failed to load linux command data");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [page, pageSize, rangeKey, filterMode, customDateRange, searchQuery, selectedTimelinePoint, statusFilter, userFilter, agentFilter, sessionFilter, selectedCommandFilter]);
+  }, [page, buildListParams, pageSize, rangeKey, filterMode, customDateRange, searchQuery, selectedTimelinePoint, statusFilter, userFilter, agentFilter, sessionFilter, selectedCommandFilter]);
 
   const handleExportCsv = async () => {
     try {
@@ -1392,7 +1372,7 @@ const HostMonitoring = () => {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      loadDashboardData();
+      if (!isLastNavigationRef.current) loadDashboardData();
     }, 30000);
     return () => clearInterval(interval);
   }, [loadDashboardData]);
@@ -1570,16 +1550,40 @@ const HostMonitoring = () => {
         color: CHART_COLORS[i % CHART_COLORS.length],
       }));
 
-    const suspiciousCommands = suspiciousSourceLogs
-      .filter((l) => l.command.risk === "suspicious")
-      .map((l) => l.commandName && l.commandName !== "-" ? l.commandName : l.command.cmd.split(/\s+/)[0] || l.command.cmd);
+    const suspiciousCommandMap = new Map();
+    for (const log of suspiciousSourceLogs) {
+      if (log.command.risk !== "suspicious") continue;
+      const command = log.commandName && log.commandName !== "-"
+        ? log.commandName
+        : log.command.cmd.split(/\s+/)[0] || log.command.cmd;
+      const item = suspiciousCommandMap.get(command) || { label: command, value: 0, actors: new Map(), lastSeen: 0 };
+      item.value += 1;
 
-    const topSuspicious = countBy(suspiciousCommands, (cmd) => cmd)
+      const user = log.user && log.user !== "-" ? log.user : "unknown user";
+      const agent = log.agentName && log.agentName !== "-" ? log.agentName : "unknown agent";
+      const actor = `${user} @ ${agent}`;
+      item.actors.set(actor, (item.actors.get(actor) || 0) + 1);
+
+      const timestamp = new Date(log.timestamp).getTime();
+      if (Number.isFinite(timestamp)) item.lastSeen = Math.max(item.lastSeen, timestamp);
+      suspiciousCommandMap.set(command, item);
+    }
+
+    const topSuspicious = Array.from(suspiciousCommandMap.values())
+      .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label))
       .slice(0, 5)
-      .map((it, i) => ({
-        ...it,
-        color: ["#ef4444", "#f97316", "#eab308", "#a78bfa", "#f87171"][i % 5],
-      }));
+      .map((item, i) => {
+        const topActor = Array.from(item.actors.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || "unknown actor";
+        const lastSeen = item.lastSeen
+          ? new Date(item.lastSeen).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+          : "time unavailable";
+        return {
+          label: item.label,
+          value: item.value,
+          sub: `by ${topActor} · last ${lastSeen}`,
+          color: ["#ef4444", "#f97316", "#eab308", "#a78bfa", "#f87171"][i % 5],
+        };
+      });
 
     const riskIndicators = countBy(
       suspiciousSourceLogs.flatMap((log) => log.command.indicator),
@@ -1892,6 +1896,15 @@ const HostMonitoring = () => {
     async (nextPage) => {
       if (!Number.isFinite(nextPage)) return;
       const target = Math.max(1, Math.min(nextPage, pagination?.totalPages || nextPage));
+      if (target === 1) {
+        pitIdRef.current = null;
+        setCursorStack([null]);
+        setNextCursor(null);
+      } else if (target === page + 1 && nextCursor) {
+        setCursorStack((current) => [...current.slice(0, page), nextCursor]);
+      } else if (target < page) {
+        setCursorStack((current) => current.slice(0, target));
+      }
       setPage(target);
 
       // Scroll to logs table with delay to ensure DOM update
@@ -1905,8 +1918,61 @@ const HostMonitoring = () => {
         }
       }, 100);
     },
-    [pagination?.totalPages]
+    [pagination?.totalPages, page, nextCursor]
   );
+
+  const handleLastPage = useCallback(async () => {
+    const totalPages = pagination?.totalPages || 1;
+    if (loading || refreshing || !nextCursor || page >= totalPages) return;
+    const requestId = lastPageRequestRef.current + 1;
+    lastPageRequestRef.current = requestId;
+    isLastNavigationRef.current = true;
+    setRefreshing(true);
+
+    try {
+      let cursor = nextCursor;
+      let pitId = pitIdRef.current;
+      let targetPage = page;
+      const nextStack = cursorStack.slice(0, page);
+      while (targetPage < totalPages && cursor) {
+        const pageNum = targetPage + 1;
+        const params = buildListParams(pageNum);
+        params.set("search_after", JSON.stringify(cursor));
+        params.delete("pit_id");
+        if (pitId) params.set("pit_id", pitId);
+        const response = await fetchJson(`${API_BASE_URL}/linux-commands?${params.toString()}`);
+        if (requestId !== lastPageRequestRef.current) return;
+        if (!Array.isArray(response?.data) || response.data.length === 0) break;
+        if (response.pit_id) pitId = response.pit_id;
+        nextStack.push(cursor);
+        targetPage = pageNum;
+        cursor = response.next_search_after || null;
+      }
+
+      if (requestId === lastPageRequestRef.current && targetPage > page) {
+        pitIdRef.current = pitId;
+        setCursorStack(nextStack);
+        setPage(targetPage);
+        setTimeout(() => {
+          if (logsTableRef.current?.scrollIntoView) {
+            try { logsTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); } catch {}
+          }
+        }, 100);
+      }
+    } catch (err) {
+      if (requestId !== lastPageRequestRef.current) return;
+      if (err?.status === 409) {
+        pitIdRef.current = null;
+        setCursorStack([null]);
+        setNextCursor(null);
+        setPage(1);
+      }
+      setError(err.message || "Failed to load the last page");
+    } finally {
+      isLastNavigationRef.current = false;
+      if (requestId === lastPageRequestRef.current) setRefreshing(false);
+    }
+  }, [pagination, loading, refreshing, nextCursor, page, cursorStack, buildListParams]);
 
   return (
     <>
@@ -2383,8 +2449,12 @@ const HostMonitoring = () => {
             pageSize={pageSize}
             loading={refreshing || loading}
             onPageChange={goToPage}
+            onLastPage={handleLastPage}
             onPageSizeChange={(nextPageSize) => {
               setPage(1);
+              setCursorStack([null]);
+              setNextCursor(null);
+              pitIdRef.current = null;
               setPageSize(nextPageSize);
               // Scroll to logs table
               setTimeout(() => {

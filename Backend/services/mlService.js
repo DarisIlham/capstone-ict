@@ -11,6 +11,7 @@ import {
   getField,
   exactMatchClause,
   buildOptionalExactFilter,
+  buildKeywordContainsClause,
   addDateRange,
   normalizePagination,
   getHistogramInterval
@@ -71,48 +72,186 @@ function formatPrediction(hit) {
   };
 }
 
-// 2. Gunakan 'export' di depan setiap fungsi utama
-export async function listPredictions(query) {
-  const maxLimit = Number(process.env.ML_MAX_LIMIT || 10000);
-  const maxResultWindow = Number(process.env.ML_MAX_RESULT_WINDOW || 10000);
-  const { page, limit, from } = normalizePagination(query, { maxLimit });
+const ML_SORT = [{ "@timestamp": { order: "desc" } }];
+const ML_CURSOR_SORT = [
+  { "@timestamp": { order: "desc" } },
+  { "_shard_doc": { order: "asc" } }
+];
+const ML_PIT_KEEP_ALIVE = process.env.ML_PIT_KEEP_ALIVE || "5m";
 
-  if (from + limit > maxResultWindow) {
-    const error = new Error(`Requested result window exceeds ${maxResultWindow} documents`);
+function parseSearchAfter(value) {
+  if (value === undefined || value === null || value === "") return null;
+  try {
+    const parsed = typeof value === "string" ? JSON.parse(value) : value;
+    if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("empty");
+    return parsed;
+  } catch {
+    const error = new Error("Invalid search_after cursor");
     error.status = 400;
     throw error;
   }
+}
 
-  const { label, sourceIp, destinationIp, service, start, end } = query;
+function buildConfidenceRangeClause(value) {
+  if (!value || value === "all") return null;
+  const [minPercent, maxPercent] = String(value).split("-").map(Number);
+  if (!Number.isFinite(minPercent) || !Number.isFinite(maxPercent)) return null;
+  return {
+    range: {
+      "ml.confidence": {
+        gte: Math.max(minPercent, 0) / 100,
+        lte: Math.min(maxPercent, 100) / 100
+      }
+    }
+  };
+}
 
+// Pencarian IP: exact untuk IP lengkap, range untuk prefix (mis. "10.69").
+function buildIpPrefixClause(field, raw) {
+  const value = String(raw || "").trim();
+  if (!/^\d{1,3}(\.\d{1,3}){0,3}$/.test(value)) return null;
+  const parts = value.split(".").map(Number);
+  if (parts.some((part) => part > 255)) return null;
+  if (parts.length === 4) return { term: { [field]: value } };
+  const remaining = 4 - parts.length;
+  const start = [...parts, ...Array(remaining).fill(0)].join(".");
+  const end = [...parts, ...Array(remaining).fill(255)].join(".");
+  return { range: { [field]: { gte: start, lte: end } } };
+}
+
+function buildMlKeywordClause(q) {
+  if (!q || !String(q).trim()) return null;
+  const should = [
+    buildKeywordContainsClause("agent.name", q),
+    buildKeywordContainsClause("network.service", q),
+    buildIpPrefixClause("source.ip", q),
+    buildIpPrefixClause("destination.ip", q)
+  ].filter(Boolean);
+  if (!should.length) return null;
+  return { bool: { should, minimum_should_match: 1 } };
+}
+
+function buildMlFilterMust(query = {}) {
+  const { label, sourceIp, destinationIp, service, agent, confidenceRange, q, start, end } = query;
   const must = buildMlMustClauses();
 
   const labelFilter = buildOptionalExactFilter("ml.predicted_label", label);
   const sourceIpFilter = buildOptionalExactFilter("source.ip", sourceIp);
   const destinationIpFilter = buildOptionalExactFilter("destination.ip", destinationIp);
   const serviceFilter = buildOptionalExactFilter("network.service", service);
+  const agentFilter = buildOptionalExactFilter("agent.name", agent);
+  const confidenceFilter = buildConfidenceRangeClause(confidenceRange);
+  const keywordFilter = buildMlKeywordClause(q);
 
   if (labelFilter) must.push(labelFilter);
   if (sourceIpFilter) must.push(sourceIpFilter);
   if (destinationIpFilter) must.push(destinationIpFilter);
   if (serviceFilter) must.push(serviceFilter);
+  if (agentFilter) must.push(agentFilter);
+  if (confidenceFilter) must.push(confidenceFilter);
+  if (keywordFilter) must.push(keywordFilter);
 
   addDateRange(must, start, end);
+  return must;
+}
 
-  const response = unwrapEsResponse(
-    await es.search({
-      index: elastic.index,
-      from,
-      size: limit,
-      track_total_hits: true,
-      sort: [{ "@timestamp": { order: "desc" } }],
-      query: {
-        bool: { must }
-      }
-    })
-  );
+// 2. Gunakan 'export' di depan setiap fungsi utama
+export async function listPredictions(query) {
+  const maxLimit = Number(process.env.ML_MAX_LIMIT || 10000);
+  const maxResultWindow = Number(process.env.ML_MAX_RESULT_WINDOW || 10000);
+  const { page, limit, from } = normalizePagination(query, { maxLimit });
+  const must = buildMlFilterMust(query);
 
+  const cursorMode =
+    query.cursor === "1" ||
+    query.cursor === "true" ||
+    Boolean(query.search_after);
+
+  if (!cursorMode) {
+    if (from + limit > maxResultWindow) {
+      const error = new Error(`Requested result window exceeds ${maxResultWindow} documents`);
+      error.status = 400;
+      throw error;
+    }
+
+    const response = unwrapEsResponse(
+      await es.search({
+        index: elastic.index,
+        from,
+        size: limit,
+        track_total_hits: true,
+        sort: ML_SORT,
+        query: {
+          bool: { must }
+        }
+      })
+    );
+
+    const total = getTotalHits(response);
+
+    return {
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      },
+      data: getHits(response).map(formatPrediction),
+      next_search_after: null,
+      pit_id: null,
+      has_more: false
+    };
+  }
+
+  const searchAfter = parseSearchAfter(query.search_after);
+  let pitId = query.pit_id ? String(query.pit_id) : null;
+
+  if (searchAfter && !pitId) {
+    const error = new Error("search_after requires a pit_id");
+    error.status = 400;
+    throw error;
+  }
+
+  if (!pitId) {
+    const pit = unwrapEsResponse(
+      await es.openPointInTime({
+        index: elastic.index,
+        keep_alive: ML_PIT_KEEP_ALIVE
+      })
+    );
+    pitId = pit?.id || null;
+    if (!pitId) {
+      throw new Error("Failed to open pagination snapshot");
+    }
+  }
+
+  const searchBody = {
+    size: limit,
+    track_total_hits: true,
+    sort: ML_CURSOR_SORT,
+    pit: { id: pitId, keep_alive: ML_PIT_KEEP_ALIVE },
+    query: {
+      bool: { must }
+    }
+  };
+  if (searchAfter) searchBody.search_after = searchAfter;
+
+  let response;
+  try {
+    response = unwrapEsResponse(await es.search(searchBody));
+  } catch (err) {
+    if (/point in time|search_context_missing|no search context/i.test(String(err?.message || ""))) {
+      const error = new Error("Pagination snapshot expired. Restart from the first page.");
+      error.status = 409;
+      throw error;
+    }
+    throw err;
+  }
+
+  const hits = getHits(response);
   const total = getTotalHits(response);
+  const lastSort = hits.length ? hits[hits.length - 1].sort : null;
+  const hasMore = Boolean(lastSort) && page * limit < total;
 
   return {
     pagination: {
@@ -121,7 +260,10 @@ export async function listPredictions(query) {
       total,
       totalPages: Math.ceil(total / limit)
     },
-    data: getHits(response).map(formatPrediction)
+    data: hits.map(formatPrediction),
+    next_search_after: hasMore ? lastSort : null,
+    pit_id: response.pit_id || pitId,
+    has_more: hasMore
   };
 }
 
@@ -146,8 +288,7 @@ export async function getLatestPrediction() {
 const ML_LABEL_AGG_FIELDS = ["ml.predicted_label.keyword", "ml.predicted_label"];
 
 export async function getPredictionStats(query = {}) {
-  const must = buildMlMustClauses();
-  addDateRange(must, query.start, query.end);
+  const must = buildMlFilterMust(query);
 
   const runAgg = async (labelField) =>
     unwrapEsResponse(
@@ -178,6 +319,45 @@ export async function getPredictionStats(query = {}) {
             avg: {
               field: "ml.confidence"
             }
+          },
+          top_agents: {
+            terms: {
+              field: "agent.name",
+              size: 20
+            }
+          },
+          top_source_ips: {
+            terms: {
+              field: "source.ip",
+              size: 10
+            }
+          },
+          top_destination_ips: {
+            terms: {
+              field: "destination.ip",
+              size: 10
+            }
+          },
+          top_services: {
+            terms: {
+              field: "network.service",
+              size: 20
+            }
+          },
+          unique_agents: {
+            cardinality: {
+              field: "agent.name"
+            }
+          },
+          unique_source_ips: {
+            cardinality: {
+              field: "source.ip"
+            }
+          },
+          unique_destination_ips: {
+            cardinality: {
+              field: "destination.ip"
+            }
           }
         }
       })
@@ -199,14 +379,31 @@ export async function getPredictionStats(query = {}) {
     }
   }
 
+  const aggs = response.aggregations || {};
+  const mapBuckets = (name, labelKey = "label") =>
+    (aggs[name]?.buckets || []).map((bucket) => ({
+      [labelKey]: bucket.key,
+      count: bucket.doc_count
+    }));
+
   return {
     totalPredictions: getTotalHits(response),
-    overallAvgConfidence: response.aggregations?.overall_avg_confidence?.value ?? null,
+    overallAvgConfidence: aggs.overall_avg_confidence?.value ?? null,
     labels: buckets.map((bucket) => ({
       label: bucket.key,
       count: bucket.doc_count,
       avgConfidence: bucket.avg_confidence?.value ?? null
-    }))
+    })),
+    topAgents: (aggs.top_agents?.buckets || []).map((bucket) => ({
+      name: bucket.key,
+      count: bucket.doc_count
+    })),
+    topSourceIps: mapBuckets("top_source_ips"),
+    topDestinationIps: mapBuckets("top_destination_ips"),
+    topServices: mapBuckets("top_services"),
+    uniqueAgents: aggs.unique_agents?.value ?? 0,
+    uniqueSourceIps: aggs.unique_source_ips?.value ?? 0,
+    uniqueDestinationIps: aggs.unique_destination_ips?.value ?? 0
   };
 }
 
@@ -219,13 +416,9 @@ export async function getPredictionTimeline(query) {
     minutes = Math.max(Math.ceil(durationMs / 60000), 1);
   }
 
-  const rangeClause = {};
-  if (start) rangeClause.gte = start;
-  if (end) rangeClause.lte = end;
-  if (!start && !end) {
-    rangeClause.gte = `now-${minutes}m`;
-    rangeClause.lte = "now";
-  }
+  const rangeStart = start || `now-${minutes}m`;
+  const rangeEnd = end || "now";
+  const must = buildMlFilterMust({ ...query, start: rangeStart, end: rangeEnd });
 
   const runAgg = async (labelField) =>
     unwrapEsResponse(
@@ -234,14 +427,7 @@ export async function getPredictionTimeline(query) {
         size: 0,
         query: {
           bool: {
-            must: [
-              ...buildMlMustClauses(),
-              {
-                range: {
-                  "@timestamp": rangeClause
-                }
-              }
-            ]
+            must
           }
         },
         aggs: {

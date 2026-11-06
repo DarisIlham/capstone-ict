@@ -294,7 +294,11 @@ function buildTimelineFallback(items, rangeKey, startIso, endIso) {
 async function fetchJson(url) {
   const response = await fetch(url, { method: "GET", headers: { Accept: "application/json" } });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.message || `Request failed: ${response.status}`);
+  if (!response.ok) {
+    const error = new Error(data.message || `Request failed: ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 
@@ -647,7 +651,7 @@ const RiskScoreBadge = ({ score }) => {
   return <span className={`fss-detail-risk-score inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${tone}`}>{value}%</span>;
 };
 
-const PaginationControls = ({ pagination, page, pageSize, loading, onPageChange }) => {
+const PaginationControls = ({ pagination, page, pageSize, loading, onPageChange, onLastPage }) => {
   const totalPages = pagination?.totalPages || 1;
   const total = pagination?.total || 0;
   const limit = pagination?.limit || pageSize;
@@ -672,7 +676,7 @@ const PaginationControls = ({ pagination, page, pageSize, loading, onPageChange 
           <button disabled={page === 1 || loading} onClick={() => onPageChange(Math.max(page - 1, 1))} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">PREV</button>
           <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400"><span className="hidden md:inline">PAGE </span><span className="text-[var(--soc-text-primary)]">{page}</span> / {totalPages}</span>
           <button disabled={page >= totalPages || loading} onClick={() => onPageChange(Math.min(page + 1, totalPages))} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">NEXT</button>
-          <button disabled={page >= totalPages || loading} onClick={() => onPageChange(totalPages)} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">LAST</button>
+          <button disabled={page >= totalPages || loading} onClick={onLastPage || (() => onPageChange(totalPages))} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">LAST</button>
         </div>
       </div>
     </div>
@@ -717,6 +721,8 @@ const FileSecurityScanner = () => {
   const [timeline, setTimeline] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: DEFAULT_PAGE_SIZE, total: 0, totalPages: 1 });
   const [page, setPage] = useState(1);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [cursorStack, setCursorStack] = useState([null]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -725,6 +731,9 @@ const FileSecurityScanner = () => {
   const [selectedTimelinePoint, setSelectedTimelinePoint] = useState(null);
   const topAgentsPanelRef = useRef(null);
   const filesTableRef = useRef(null);
+  const pitIdRef = useRef(null);
+  const lastPageRequestRef = useRef(0);
+  const isLastNavigationRef = useRef(false);
 
   React.useEffect(() => {
     if (!urlAgent && urlFocus !== "logs") return;
@@ -742,7 +751,12 @@ const FileSecurityScanner = () => {
     try {
       const filterDateRange = filterMode === "custom" ? getIsoDateRange(normalizeDateRange(customDateRange)) : (() => { const minutes = rangeToMinutes[rangeKey] || 1440; const end = new Date(); const start = new Date(end.getTime() - minutes * 60000); return { start: start.toISOString(), end: end.toISOString() }; })();
       const minutes = filterMode === "custom" ? getDateRangeMinutes(getIsoDateRange(normalizeDateRange(customDateRange))) : rangeToMinutes[rangeKey] || 1440;
+      if (page === 1) pitIdRef.current = null;
       const suspiciousParams = new URLSearchParams({ page: String(page), limit: String(pageSize) });
+      suspiciousParams.set("cursor", "1");
+      const pageCursor = cursorStack[page - 1];
+      if (pageCursor) suspiciousParams.set("search_after", JSON.stringify(pageCursor));
+      if (pitIdRef.current) suspiciousParams.set("pit_id", pitIdRef.current);
       if (filterMode === "custom" && filterDateRange) { suspiciousParams.set("start", filterDateRange.start); suspiciousParams.set("end", filterDateRange.end); }
       else if (selectedTimelinePoint?.start && selectedTimelinePoint?.end) { suspiciousParams.set("start", selectedTimelinePoint.start); suspiciousParams.set("end", selectedTimelinePoint.end); }
       else if (filterDateRange) { suspiciousParams.set("start", filterDateRange.start); suspiciousParams.set("end", filterDateRange.end); }
@@ -755,6 +769,8 @@ const FileSecurityScanner = () => {
       ]);
       const normalizedSuspicious = (suspiciousResponse.data || []).map(normalizeFileScan);
       setFiles(normalizedSuspicious);
+      if (suspiciousResponse.pit_id) pitIdRef.current = suspiciousResponse.pit_id;
+      setNextCursor(suspiciousResponse.next_search_after || null);
       setStats(statsResponse.data || null);
       const DAY = 86400000;
       const rangeMs = Math.max(new Date(filterDateRange.end).getTime() - new Date(filterDateRange.start).getTime(), 1);
@@ -787,9 +803,85 @@ const FileSecurityScanner = () => {
       setLastUpdated(new Date().toISOString());
     } catch (error) {
       console.error(error);
+      if (error?.status === 409) {
+        pitIdRef.current = null;
+        setCursorStack([null]);
+        setPage(1);
+        setNextCursor(null);
+      }
       setLoadError(error.message || "Failed to load file scan data");
     } finally { setLoading(false); }
-  }, [page, pageSize, rangeKey, selectedTimelinePoint, filterMode, customDateRange]);
+  }, [page, pageSize, rangeKey, selectedTimelinePoint, filterMode, customDateRange, cursorStack]);
+
+  const handlePageChange = useCallback((targetPage) => {
+    if (targetPage === 1) {
+      pitIdRef.current = null;
+      setCursorStack([null]);
+      setNextCursor(null);
+    } else if (targetPage === page + 1 && nextCursor) {
+      setCursorStack((current) => [...current.slice(0, page), nextCursor]);
+    } else if (targetPage < page) {
+      setCursorStack((current) => current.slice(0, targetPage));
+    }
+    setPage(targetPage);
+  }, [page, nextCursor]);
+
+  const handleLastPage = useCallback(async () => {
+    const totalPages = pagination?.totalPages || 1;
+    if (loading || !nextCursor || page >= totalPages) return;
+    const requestId = lastPageRequestRef.current + 1;
+    lastPageRequestRef.current = requestId;
+    isLastNavigationRef.current = true;
+    setLoading(true);
+
+    try {
+      const filterDateRange = filterMode === "custom"
+        ? getIsoDateRange(normalizeDateRange(customDateRange))
+        : (() => {
+          const minutes = rangeToMinutes[rangeKey] || 1440;
+          const end = new Date();
+          return { start: new Date(end.getTime() - minutes * 60000).toISOString(), end: end.toISOString() };
+        })();
+      const start = filterMode !== "custom" && selectedTimelinePoint?.start ? selectedTimelinePoint.start : filterDateRange.start;
+      const end = filterMode !== "custom" && selectedTimelinePoint?.end ? selectedTimelinePoint.end : filterDateRange.end;
+      let cursor = nextCursor;
+      let pitId = pitIdRef.current;
+      let targetPage = page;
+      const nextStack = cursorStack.slice(0, page);
+
+      while (targetPage < totalPages && cursor) {
+        const pageNum = targetPage + 1;
+        const params = new URLSearchParams({ page: String(pageNum), limit: String(pageSize), start, end, cursor: "1" });
+        params.set("search_after", JSON.stringify(cursor));
+        if (pitId) params.set("pit_id", pitId);
+        const response = await fetchJson(`${API_ROOT}/file-scans/suspicious?${params.toString()}`);
+        if (requestId !== lastPageRequestRef.current) return;
+        if (!Array.isArray(response?.data) || response.data.length === 0) break;
+        if (response.pit_id) pitId = response.pit_id;
+        nextStack.push(cursor);
+        targetPage = pageNum;
+        cursor = response.next_search_after || null;
+      }
+
+      if (requestId === lastPageRequestRef.current && targetPage > page) {
+        pitIdRef.current = pitId;
+        setCursorStack(nextStack);
+        setPage(targetPage);
+      }
+    } catch (error) {
+      if (requestId !== lastPageRequestRef.current) return;
+      if (error?.status === 409) {
+        pitIdRef.current = null;
+        setCursorStack([null]);
+        setNextCursor(null);
+        setPage(1);
+      }
+      setLoadError(error.message || "Failed to load the last page");
+    } finally {
+      isLastNavigationRef.current = false;
+      if (requestId === lastPageRequestRef.current) setLoading(false);
+    }
+  }, [pagination, loading, nextCursor, page, filterMode, customDateRange, rangeKey, selectedTimelinePoint, pageSize, cursorStack]);
 
   const handleExportCsv = async () => {
     try {
@@ -811,8 +903,16 @@ const FileSecurityScanner = () => {
   };
 
   useEffect(() => { loadData(); }, [loadData]);
-  useEffect(() => { const interval = setInterval(() => { loadData(); }, 30000); return () => clearInterval(interval); }, [loadData]);
-  useEffect(() => { setPage(1); setSelectedTimelinePoint((prev) => (prev?.key === "custom" ? prev : null)); }, [rangeKey]);
+  useEffect(() => {
+    lastPageRequestRef.current += 1;
+  }, [pageSize, rangeKey, selectedTimelinePoint, filterMode, customDateRange]);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!isLastNavigationRef.current) loadData();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [loadData]);
+  useEffect(() => { setPage(1); setCursorStack([null]); setNextCursor(null); pitIdRef.current = null; setSelectedTimelinePoint((prev) => (prev?.key === "custom" ? prev : null)); }, [rangeKey]);
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
     const handleResize = () => setViewportWidth(window.innerWidth);
@@ -1023,7 +1123,7 @@ const FileSecurityScanner = () => {
 
       {/* KPI Cards — kpi-modern 4 kolom */}
       <div className="grid grid-cols-2 min-[700px]:grid-cols-4 gap-3">
-        <KPICard label="Total Scanned" value={new Intl.NumberFormat("en-US").format(stats?.totalEvents ?? 0)} icon={FileText} color="text-purple-400" desc="scans in range" loading={loading} index={0} />
+        <KPICard label="Suspicious Scans" value={new Intl.NumberFormat("en-US").format(stats?.suspiciousScans ?? 0)} icon={FileText} color="text-purple-400" desc="files with findings in range" loading={loading} index={0} />
         <KPICard label="Total Findings" value={new Intl.NumberFormat("en-US").format(files.reduce((s, f) => s + (Number(f.findingsCount) || 0), 0))} icon={Bug} color="text-pink-400" desc="across scanned files" loading={loading} index={1} />
         <KPICard label="Critical Files" value={new Intl.NumberFormat("en-US").format(Number((analytics.severities || []).find((s) => String(s.label).toUpperCase() === "CRITICAL")?.value ?? 0))} icon={AlertTriangle} color="text-red-400" desc="need immediate action" loading={loading} index={2} />
         <KPICard label="Unique Agents" value={new Intl.NumberFormat("en-US").format(analytics.uniqueAgents ?? 0)} icon={Users} color="text-amber-400" desc="reporting agents" loading={loading} index={3} />
@@ -1254,7 +1354,7 @@ const FileSecurityScanner = () => {
             </tbody>
           </table>
         </div>
-        <PaginationControls pagination={pagination} page={page} pageSize={pageSize} loading={loading} onPageChange={setPage} />
+        <PaginationControls pagination={pagination} page={page} pageSize={pageSize} loading={loading} onPageChange={handlePageChange} onLastPage={handleLastPage} />
       </div>
 
       {selectedFile && (

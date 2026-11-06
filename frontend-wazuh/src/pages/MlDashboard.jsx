@@ -15,7 +15,6 @@ import {
   toDateTimeLocalValue,
 } from "../utils/dateRange";
 import { adaptiveLeftGutter } from "../utils/chartAxis";
-import { getTopFilterValues } from "../utils/topFilterValues";
 import { InlineEmptyState } from "../components/EmptyState";
 import { useIpGeo } from "../hooks/useIpGeo";
 import undipLogo from "../assets/Undip.svg";
@@ -35,9 +34,15 @@ const TOP_SOURCE_IPS_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B8
 const TOP_DEST_IPS_COLORS = ["#A855F7", "#EC4899", "#8B5CF6", "#6366F1", "#3B82F6", "#06B6D4", "#10B981", "#22C55E", "#EAB308", "#F97316"];
 const LABEL_RANK_COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#a78bfa', '#ec4899', '#14b8a6', '#6366f1'];
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
-const PREDICTIONS_FETCH_BATCH_SIZE = 1000;
+const SEARCH_DEBOUNCE_MS = 350;
 const DEFAULT_TIME_RANGE = '24h';
 const RANGE_TO_MINUTES = { '1h': 60, '24h': 1440, '7d': 10080, '30d': 43200 };
+
+const ensureSelectedOption = (options, selected) => {
+  if (!selected || selected === "all") return options;
+  if (options.some((option) => String(option.value) === String(selected))) return options;
+  return [{ value: selected, label: selected }, ...options];
+};
 
 const getValidDate = (value) => {
   if (!value) return null;
@@ -713,9 +718,11 @@ export default function MlDashboard() {
   const [dataNotice, setDataNotice] = useState('');
   const [predictions, setPredictions] = useState([]);
   const [timeline, setTimeline] = useState([]);
+  const [stats, setStats] = useState(null);
   const [totalPredictionsCount, setTotalPredictionsCount] = useState(0);
   const [filters, setFilters] = useState({ label: 'all', agent: urlAgent || 'all', sourceIp: urlSourceIp || 'all', destinationIp: 'all', service: 'all', confidenceRange: 'all' });
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [timeRange, setTimeRange] = useState(() => urlRange && ["1h", "24h", "7d", "30d"].includes(urlRange) ? urlRange : DEFAULT_TIME_RANGE);
   const [filterMode, setFilterMode] = useState(() => (urlStart && urlEnd ? "custom" : "range"));
   const [customDateRange, setCustomDateRange] = useState(() => {
@@ -724,7 +731,12 @@ export default function MlDashboard() {
     return base;
   });
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(50);
+  const [serverTotal, setServerTotal] = useState(0);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [cursorStack, setCursorStack] = useState([null]);
+  const pitIdRef = useRef(null);
+  const requestIdRef = useRef(0);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [selectedTimelinePoint, setSelectedTimelinePoint] = useState(null);
   const [ipTab, setIpTab] = useState("source");
@@ -776,198 +788,353 @@ export default function MlDashboard() {
     };
   }, [loading]);
 
-  const loadAll = useCallback(async () => {
+  const getBaseRange = useCallback(() => {
+    if (filterMode === "custom") {
+      const iso = getIsoDateRange(normalizeDateRange(customDateRange));
+      return { ...iso, minutes: getDateRangeMinutes(iso) };
+    }
+    const range = getRangeWindow(timeRange);
+    return { ...range, minutes: RANGE_TO_MINUTES[timeRange] || RANGE_TO_MINUTES[DEFAULT_TIME_RANGE] };
+  }, [filterMode, customDateRange, timeRange]);
+
+  const getEffectiveRange = useCallback(() => {
+    if (selectedTimelinePoint?.start && selectedTimelinePoint?.end) {
+      const start = selectedTimelinePoint.start;
+      const end = selectedTimelinePoint.end;
+      const minutes = Math.max(Math.ceil((new Date(end).getTime() - new Date(start).getTime()) / 60000), 1);
+      return { start, end, minutes };
+    }
+    return getBaseRange();
+  }, [selectedTimelinePoint, getBaseRange]);
+
+  const filterParams = useMemo(() => ({
+    label: filters.label !== "all" ? filters.label : undefined,
+    agent: filters.agent !== "all" ? filters.agent : undefined,
+    sourceIp: filters.sourceIp !== "all" ? filters.sourceIp : undefined,
+    destinationIp: filters.destinationIp !== "all" ? filters.destinationIp : undefined,
+    service: filters.service !== "all" ? filters.service : undefined,
+    confidenceRange: filters.confidenceRange !== "all" ? filters.confidenceRange : undefined,
+    q: debouncedSearch.trim() || undefined,
+  }), [filters, debouncedSearch]);
+
+  const loadAll = useCallback(async ({ cursor = null, pageNum = 1, retried = false } = {}) => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     setLoading(true);
     setError(null);
     setDataNotice('');
     try {
-      let minutes = RANGE_TO_MINUTES[timeRange] || RANGE_TO_MINUTES[DEFAULT_TIME_RANGE];
-      let start; let end;
-      if (filterMode === "custom") {
-        const iso = getIsoDateRange(normalizeDateRange(customDateRange));
-        start = iso.start; end = iso.end; minutes = getDateRangeMinutes(iso);
-      } else {
-        const range = getRangeWindow(timeRange);
-        start = range.start; end = range.end;
-      }
-      const [predictionsResult, timelineResult] = await Promise.allSettled([
-        mlApi.getPredictions({ start, end, page: 1, limit: PREDICTIONS_FETCH_BATCH_SIZE }),
-        mlApi.getTimeline(minutes, { start, end }),
+      const { start, end, minutes } = getEffectiveRange();
+      const baseRange = getBaseRange();
+      const predictionParams = {
+        ...filterParams,
+        start,
+        end,
+        limit: pageSize,
+        page: pageNum,
+        cursor: "1",
+      };
+      if (cursor) predictionParams.search_after = cursor;
+      if (pitIdRef.current) predictionParams.pit_id = pitIdRef.current;
+
+      const [predictionsResult, statsResult, timelineResult] = await Promise.allSettled([
+        mlApi.getPredictions(predictionParams),
+        mlApi.getStats({ ...filterParams, start, end }),
+        mlApi.getTimeline(baseRange.minutes, {
+          ...filterParams,
+          start: baseRange.start,
+          end: baseRange.end,
+        }),
       ]);
+
+      if (requestId !== requestIdRef.current) return;
+
       const notices = [];
-      let preds = predictionsResult.status === 'fulfilled' && Array.isArray(predictionsResult.value?.data) ? predictionsResult.value.data : [];
-      let responseTotalPredictions = predictionsResult.status === 'fulfilled' ? Number(predictionsResult.value?.pagination?.total ?? preds.length) : 0;
-      if (predictionsResult.status !== 'fulfilled') {
-        notices.push('Predictions list failed to load from the primary endpoint.');
+      let preds = [];
+      if (predictionsResult.status === "fulfilled") {
+        const body = predictionsResult.value || {};
+        preds = Array.isArray(body.data) ? body.data : [];
+        const total = Number(body.pagination?.total ?? preds.length);
+        setPredictions(preds);
+        setServerTotal(total);
+        setTotalPredictionsCount(total);
+        setNextCursor(body.next_search_after || null);
+        if (body.pit_id) pitIdRef.current = body.pit_id;
       } else {
-        const firstPagePagination = predictionsResult.value?.pagination || {};
-        const totalPages = Math.max(Number(firstPagePagination.totalPages || Math.ceil(responseTotalPredictions / PREDICTIONS_FETCH_BATCH_SIZE) || 1), 1);
-        if (totalPages > 1) {
-          const remainingPageResults = await Promise.allSettled(Array.from({ length: totalPages - 1 }, (_, index) => mlApi.getPredictions({ start, end, page: index + 2, limit: PREDICTIONS_FETCH_BATCH_SIZE })));
-          const failedPages = [];
-          for (let i = 0; i < remainingPageResults.length; i += 1) {
-            const result = remainingPageResults[i];
-            const pageNumber = i + 2;
-            if (result.status === 'fulfilled' && Array.isArray(result.value?.data)) preds = preds.concat(result.value.data);
-            else failedPages.push(pageNumber);
-          }
-          if (failedPages.length > 0) {
-            responseTotalPredictions = preds.length;
-            notices.push(`Some predictions data failed to load on page ${failedPages.join(', ')}.`);
-          }
+        const reason = predictionsResult.reason;
+        setPredictions([]);
+        setServerTotal(0);
+        setNextCursor(null);
+        if (reason?.status === 409 && !retried) {
+          pitIdRef.current = null;
+          setCursorStack([null]);
+          setPage(1);
+          setTimeout(() => void loadAll({ cursor: null, pageNum: 1, retried: true }), 0);
+          return;
+        }
+        if (reason?.status === 409) {
+          pitIdRef.current = null;
+          setCursorStack([null]);
+          setPage(1);
+          notices.push("Pagination session expired. Please retry.");
+        } else {
+          notices.push("Predictions list failed to load from the primary endpoint.");
         }
       }
+
+      if (statsResult.status === "fulfilled") {
+        const nextStats = statsResult.value?.data || null;
+        setStats(nextStats);
+        if (nextStats) setTotalPredictionsCount(Number(nextStats.totalPredictions ?? 0));
+      } else {
+        setStats(null);
+        notices.push("Prediction statistics failed to load.");
+      }
+
       let nextTimeline = [];
-      if (timelineResult.status === 'fulfilled' && Array.isArray(timelineResult.value?.data) && timelineResult.value.data.length) {
+      if (timelineResult.status === "fulfilled" && Array.isArray(timelineResult.value?.data) && timelineResult.value.data.length) {
         nextTimeline = timelineResult.value.data;
       } else {
         nextTimeline = buildTimelineFromPredictions(preds, minutes, start, end);
         if (nextTimeline.length > 0 && preds.length > 0) {
-          if (timelineResult.status === 'fulfilled') notices.push('Timeline built from real prediction data because the timeline endpoint did not return buckets.');
-          else notices.push('Timeline built from real prediction data because the timeline endpoint failed.');
+          if (timelineResult.status === "fulfilled") notices.push("Timeline built from prediction data because the timeline endpoint did not return buckets.");
+          else notices.push("Timeline built from prediction data because the timeline endpoint failed.");
         }
       }
-      if (predictionsResult.status === 'fulfilled' || timelineResult.status === 'fulfilled') {
-        setPredictions(Array.isArray(preds) ? preds : []);
-        setTotalPredictionsCount(responseTotalPredictions);
-        setTimeline(nextTimeline);
-        setLastUpdated(new Date().toISOString());
-        if (!preds.length && !nextTimeline.length) notices.push('No ML data exists for the selected range.');
-        setDataNotice(notices.join(' '));
-        return;
+
+      setTimeline(nextTimeline);
+      setLastUpdated(new Date().toISOString());
+      if (!preds.length && !nextTimeline.length) notices.push("No ML data exists for the selected range.");
+      setDataNotice(notices.join(" "));
+
+      if (predictionsResult.status === "rejected" && statsResult.status === "rejected" && timelineResult.status === "rejected") {
+        setError(predictionsResult.reason instanceof Error ? predictionsResult.reason : new Error(String(predictionsResult.reason)));
       }
-      setPredictions([]); setTotalPredictionsCount(0); setTimeline([]); setError(new Error('Real ML data is not available.')); setDataNotice('Real ML data is not available. Check the connection to the backend.');
     } catch (err) {
-      console.error('ML API error:', err);
-      setPredictions([]); setTotalPredictionsCount(0); setTimeline([]); setError(err); setDataNotice(`An error occurred while loading ML data: ${err?.message || 'unknown error'}`);
-    } finally { setLoading(false); }
-  }, [timeRange, filterMode, customDateRange]);
+      console.error("ML API error:", err);
+      setPredictions([]);
+      setTotalPredictionsCount(0);
+      setTimeline([]);
+      setError(err);
+      setDataNotice(`An error occurred while loading ML data: ${err?.message || "unknown error"}`);
+    } finally {
+      if (requestId === requestIdRef.current) setLoading(false);
+    }
+  }, [getEffectiveRange, getBaseRange, filterParams, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(serverTotal / pageSize));
+
+  const handleFirstPage = useCallback(() => {
+    pitIdRef.current = null;
+    setCursorStack([null]);
+    setPage(1);
+    void loadAll({ cursor: null, pageNum: 1 });
+    scrollPredictionsTableIntoView();
+  }, [loadAll, scrollPredictionsTableIntoView]);
+
+  const handlePrevPage = useCallback(() => {
+    if (page <= 1) return;
+    const nextStack = cursorStack.slice(0, -1);
+    const cursor = nextStack[nextStack.length - 1] || null;
+    const nextPage = nextStack.length;
+    setCursorStack(nextStack);
+    setPage(nextPage);
+    void loadAll({ cursor, pageNum: nextPage });
+    scrollPredictionsTableIntoView();
+  }, [page, cursorStack, loadAll, scrollPredictionsTableIntoView]);
+
+  const handleNextPage = useCallback(() => {
+    if (!nextCursor) return;
+    const nextPage = cursorStack.length + 1;
+    setCursorStack((prev) => [...prev, nextCursor]);
+    setPage(nextPage);
+    void loadAll({ cursor: nextCursor, pageNum: nextPage });
+    scrollPredictionsTableIntoView();
+  }, [nextCursor, cursorStack.length, loadAll, scrollPredictionsTableIntoView]);
+
+  const handleLastPage = useCallback(async () => {
+    if (loading || page >= totalPages || !nextCursor) return;
+
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    setLoading(true);
+    setError(null);
+    setDataNotice('');
+
+    try {
+      const { start, end } = getEffectiveRange();
+      let cursor = nextCursor;
+      let pitId = pitIdRef.current;
+      let targetPage = page;
+      let finalResult = null;
+      const nextStack = cursorStack.slice();
+
+      while (targetPage < totalPages && cursor) {
+        const pageNum = targetPage + 1;
+        const params = {
+          ...filterParams,
+          start,
+          end,
+          limit: pageSize,
+          page: pageNum,
+          cursor: "1",
+          search_after: cursor,
+        };
+        if (pitId) params.pit_id = pitId;
+
+        const body = (await mlApi.getPredictions(params)) || {};
+        if (requestId !== requestIdRef.current) return;
+
+        const data = Array.isArray(body.data) ? body.data : [];
+        if (!data.length) break;
+
+        pitId = body.pit_id || pitId;
+        if (pitId) pitIdRef.current = pitId;
+        nextStack.push(cursor);
+        targetPage = pageNum;
+        finalResult = { body, data };
+        cursor = body.next_search_after || null;
+      }
+
+      if (requestId !== requestIdRef.current || !finalResult) return;
+
+      const total = Number(finalResult.body.pagination?.total ?? serverTotal);
+      setPredictions(finalResult.data);
+      setServerTotal(total);
+      setTotalPredictionsCount(total);
+      setNextCursor(finalResult.body.next_search_after || null);
+      setCursorStack(nextStack);
+      setPage(targetPage);
+      scrollPredictionsTableIntoView();
+    } catch (err) {
+      if (requestId !== requestIdRef.current) return;
+      if (err?.status === 409) {
+        pitIdRef.current = null;
+        setCursorStack([null]);
+        setPage(1);
+        setNextCursor(null);
+        void loadAll({ cursor: null, pageNum: 1, retried: true });
+      } else {
+        setDataNotice(`Failed to navigate to the last page: ${err?.message || "unknown error"}`);
+      }
+    } finally {
+      if (requestId === requestIdRef.current) setLoading(false);
+    }
+  }, [loading, page, totalPages, nextCursor, getEffectiveRange, filterParams, pageSize, cursorStack, serverTotal, scrollPredictionsTableIntoView, loadAll]);
 
   useEffect(() => {
-    const run = () => { void loadAll(); };
-    const timer = setTimeout(run, 0);
-    const interval = setInterval(run, 60_000);
-    return () => { clearTimeout(timer); clearInterval(interval); };
+    const id = setTimeout(() => setDebouncedSearch(searchQuery), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(id);
+  }, [searchQuery]);
+
+  // Setiap perubahan query (rentang, filter, pencarian, ukuran halaman)
+  // memulai lagi dari halaman pertama dengan snapshot PIT baru.
+  useEffect(() => {
+    pitIdRef.current = null;
+    setCursorStack([null]);
+    setPage(1);
+    setNextCursor(null);
+    void loadAll({ cursor: null, pageNum: 1 });
   }, [loadAll]);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const cursor = cursorStack[cursorStack.length - 1] || null;
+      void loadAll({ cursor, pageNum: page });
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [loadAll, cursorStack, page]);
+
   const uniqueOptions = useMemo(() => {
+    const mapLabel = (item) => ({ value: String(item.label), label: String(item.label) });
     return {
-      agents: getTopFilterValues(predictions, (prediction) => prediction.agent, undefined, filters.agent),
-      labels: getTopFilterValues(predictions, (prediction) => prediction.predictedLabel, undefined, filters.label),
-      srcs: getTopFilterValues(predictions, (prediction) => prediction.sourceIp, undefined, filters.sourceIp),
-      dests: getTopFilterValues(predictions, (prediction) => prediction.destinationIp, undefined, filters.destinationIp),
-      services: getTopFilterValues(predictions, (prediction) => prediction.service, undefined, filters.service),
+      agents: ensureSelectedOption((stats?.topAgents || []).map((item) => ({ value: String(item.name), label: String(item.name) })), filters.agent),
+      labels: ensureSelectedOption((stats?.labels || []).map(mapLabel), filters.label),
+      srcs: ensureSelectedOption((stats?.topSourceIps || []).map(mapLabel), filters.sourceIp),
+      dests: ensureSelectedOption((stats?.topDestinationIps || []).map(mapLabel), filters.destinationIp),
+      services: ensureSelectedOption((stats?.topServices || []).map(mapLabel), filters.service),
     };
-  }, [predictions, filters]);
+  }, [stats, filters.agent, filters.label, filters.sourceIp, filters.destinationIp, filters.service]);
 
-  const filtered = useMemo(() => {
-    let result = predictions.filter((p) => {
-      if (filters.label && filters.label !== "all" && String(p.predictedLabel) !== String(filters.label)) return false;
-      if (filters.agent !== "all" && String(p.agent || "-") !== String(filters.agent)) return false;
-      if (filters.sourceIp !== "all" && String(p.sourceIp || "-") !== String(filters.sourceIp)) return false;
-      if (filters.destinationIp !== "all" && String(p.destinationIp || "-") !== String(filters.destinationIp)) return false;
-      if (filters.service !== "all" && String(p.service || "-") !== String(filters.service)) return false;
-      if (filters.confidenceRange && filters.confidenceRange !== "all") {
-        const confidence = getConfidenceScore(p);
-        if (confidence === null) return false;
-        const [minC, maxC] = filters.confidenceRange.split("-").map(Number);
-        if (confidence < minC || confidence > maxC) return false;
-      }
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        const source = String(p.sourceIp || '').toLowerCase();
-        const dest = String(p.destinationIp || '').toLowerCase();
-        const service = String(p.service || '').toLowerCase();
-        const agent = String(p.agent || '').toLowerCase();
-        if (!source.includes(q) && !dest.includes(q) && !service.includes(q) && !agent.includes(q)) return false;
-      }
-      return true;
-    });
-    if (selectedTimelinePoint?.start && selectedTimelinePoint?.end) {
-      const startMs = getTimestampMs(selectedTimelinePoint.start);
-      const endMs = getTimestampMs(selectedTimelinePoint.end);
-      result = result.filter((p) => {
-        const pMs = getTimestampMs(p.timestamp);
-        return Number.isFinite(pMs) && Number.isFinite(startMs) && Number.isFinite(endMs) && pMs >= startMs && pMs <= endMs;
-      });
-    }
-    return result;
-  }, [predictions, filters, searchQuery, selectedTimelinePoint]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const activePage = page > totalPages ? 1 : page;
-  const pageItems = useMemo(() => {
-    const start = (activePage - 1) * pageSize;
-    return filtered.slice(start, start + pageSize);
-  }, [filtered, activePage, pageSize]);
+  const activePage = Math.max(1, Math.min(page, totalPages));
+  const pageItems = predictions;
 
   // Negara asal source IP (cache + rate limit diurus hook).
   const mlSourceIps = useMemo(() => pageItems.map((p) => p.sourceIp), [pageItems]);
   const ipGeo = useIpGeo(mlSourceIps);
 
   const handleExportCsv = async () => {
-    const rows = predictions.map((p) => {
-      const conf = getConfidenceScore(p);
-      const geo = ipGeo.get(p.sourceIp);
-      const country = geo?.private ? "UNDIP" : (geo?.name || geo?.code || "-");
-      return [formatTime(p.timestamp), p.agent || "-", p.predictedLabel || "-", p.sourceIp || "-", country, p.destinationIp || "-", p.service || "-", conf == null ? "-" : `${conf}%`, p.httpUri || "-", p.httpPostBody || "-"];
-    });
-    exportCsv({ filename: `ml-predictions-${new Date().toISOString().slice(0, 10)}.csv`, header: ["Timestamp", "Agent", "Label", "Source IP", "Country (source)", "Destination IP", "Service", "Confidence (%)", "HTTP URI", "HTTP Post Body"], rows });
+    const { start, end } = getEffectiveRange();
+    const rows = [];
+    let cursor = null;
+    let pitId = null;
+    try {
+      for (let pageNum = 1; pageNum <= 500; pageNum += 1) {
+        const params = { ...filterParams, start, end, limit: 1000, page: pageNum, cursor: "1" };
+        if (cursor) params.search_after = cursor;
+        if (pitId) params.pit_id = pitId;
+        const result = await mlApi.getPredictions(params);
+        const batch = Array.isArray(result?.data) ? result.data : [];
+        for (const p of batch) {
+          const conf = getConfidenceScore(p);
+          const geo = ipGeo.get(p.sourceIp);
+          const country = geo?.private ? "UNDIP" : (geo?.name || geo?.code || "-");
+          rows.push([formatTime(p.timestamp), p.agent || "-", p.predictedLabel || "-", p.sourceIp || "-", country, p.destinationIp || "-", p.service || "-", conf == null ? "-" : `${conf}%`, p.httpUri || "-", p.httpPostBody || "-"]);
+        }
+        cursor = result?.next_search_after || null;
+        pitId = result?.pit_id || pitId;
+        if (!cursor || batch.length === 0) break;
+      }
+      exportCsv({ filename: `ml-predictions-${new Date().toISOString().slice(0, 10)}.csv`, header: ["Timestamp", "Agent", "Label", "Source IP", "Country (source)", "Destination IP", "Service", "Confidence (%)", "HTTP URI", "HTTP Post Body"], rows });
+    } catch (err) {
+      setDataNotice(`CSV export failed: ${err?.message || "unknown error"}`);
+    }
   };
 
   const distribution = useMemo(() => {
-    const map = new Map();
-    for (const p of predictions) { const key = p.predictedLabel || 'unknown'; map.set(key, (map.get(key) || 0) + 1); }
-    return Array.from(map.entries()).map(([name, value]) => ({ name, label: name, value })).sort((a, b) => b.value - a.value).map((entry, i) => ({ ...entry, color: LABEL_RANK_COLORS[i % LABEL_RANK_COLORS.length] }));
-  }, [predictions]);
+    return (stats?.labels || [])
+      .map((bucket) => ({ name: String(bucket.label), label: String(bucket.label), value: Number(bucket.count) || 0 }))
+      .sort((a, b) => b.value - a.value)
+      .map((entry, i) => ({ ...entry, color: LABEL_RANK_COLORS[i % LABEL_RANK_COLORS.length] }));
+  }, [stats]);
 
   const avgConfidence = useMemo(() => {
-    let total = 0; let count = 0;
-    for (const p of filtered) {
-      const confidence = getConfidenceScore(p);
-      if (confidence !== null) { total += confidence; count += 1; }
-    }
-    return count ? total / count : 0;
-  }, [filtered]);
+    const raw = Number(stats?.overallAvgConfidence);
+    if (!Number.isFinite(raw)) return 0;
+    return raw > 1 ? raw : raw * 100;
+  }, [stats]);
 
-  const uniqueSourceIpCount = useMemo(() => { const set = new Set(); for (const p of filtered) set.add(p.sourceIp || "unknown"); return set.size; }, [filtered]);
-  const uniqueDestIpCount = useMemo(() => { const set = new Set(); for (const p of filtered) set.add(p.destinationIp || "unknown"); return set.size; }, [filtered]);
+  const uniqueSourceIpCount = Number(stats?.uniqueSourceIps ?? 0);
 
-  const topSourceIps = useMemo(() => {
-    const map = new Map();
-    for (const p of predictions) { const ip = p.sourceIp || 'unknown'; const existing = map.get(ip) || { label: ip, count: 0, lastSeen: 0 }; existing.count += 1; existing.lastSeen = Math.max(existing.lastSeen, getTimestampMs(p.timestamp) || 0); map.set(ip, existing); }
-    return Array.from(map.values()).sort((a, b) => b.count - a.count).slice(0, 5);
-  }, [predictions]);
+  const topSourceIps = useMemo(
+    () => (stats?.topSourceIps || []).slice(0, 5).map((item) => ({ label: String(item.label), count: Number(item.count) || 0 })),
+    [stats]
+  );
 
   // Pilihan filter Source IP: 10 IP dengan log terbanyak (bukan semua).
   const topSourceIpOptions = useMemo(() => {
-    const map = new Map();
-    for (const p of predictions) { const ip = p.sourceIp || 'unknown'; map.set(ip, (map.get(ip) || 0) + 1); }
-    const ranked = Array.from(map.entries())
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    const ranked = (stats?.topSourceIps || [])
       .slice(0, 10)
-      .map(([ip, count]) => ({ value: ip, label: `${ip} (${count})` }));
+      .map((item) => ({ value: String(item.label), label: `${item.label} (${item.count})` }));
     // IP dari deep-link (mis. halaman Alerts) tetap muncul walau di luar top 10.
     if (filters.sourceIp && filters.sourceIp !== "all" && !ranked.some((o) => o.value === filters.sourceIp)) {
       ranked.splice(9, 1);
       ranked.unshift({ value: filters.sourceIp, label: `${filters.sourceIp} (filter)` });
     }
     return ranked;
-  }, [predictions, filters.sourceIp]);
+  }, [stats, filters.sourceIp]);
 
-  const topDestIps = useMemo(() => {
-    const map = new Map();
-    for (const p of predictions) { const ip = p.destinationIp || 'unknown'; const existing = map.get(ip) || { label: ip, count: 0, lastSeen: 0 }; existing.count += 1; existing.lastSeen = Math.max(existing.lastSeen, getTimestampMs(p.timestamp) || 0); map.set(ip, existing); }
-    return Array.from(map.values()).sort((a, b) => b.count - a.count).slice(0, 5);
-  }, [predictions]);
+  const topDestIps = useMemo(
+    () => (stats?.topDestinationIps || []).slice(0, 5).map((item) => ({ label: String(item.label), count: Number(item.count) || 0 })),
+    [stats]
+  );
 
-  const topAgents = useMemo(() => {
-    const map = new Map();
-    for (const p of predictions) { const name = String(p.agent || 'unknown'); const existing = map.get(name) || { name, count: 0, lastSeen: 0 }; existing.count += 1; existing.lastSeen = Math.max(existing.lastSeen, getTimestampMs(p.timestamp) || 0); map.set(name, existing); }
-    return Array.from(map.values()).sort((a, b) => b.count - a.count).slice(0, 5);
-  }, [predictions]);
+  const topAgents = useMemo(
+    () => (stats?.topAgents || []).slice(0, 5).map((item) => ({ name: String(item.name), count: Number(item.count) || 0 })),
+    [stats]
+  );
 
-  const uniqueAgents = useMemo(() => { const set = new Set(); for (const p of predictions) set.add(String(p.agent || 'unknown')); return set.size; }, [predictions]);
+  const uniqueAgents = Number(stats?.uniqueAgents ?? 0);
 
   const waveData = useMemo(() => {
     const minutes = filterMode === "custom" ? getDateRangeMinutes(getIsoDateRange(normalizeDateRange(customDateRange))) : (RANGE_TO_MINUTES[timeRange] || RANGE_TO_MINUTES[DEFAULT_TIME_RANGE]);
@@ -1042,7 +1209,6 @@ export default function MlDashboard() {
     if (next !== "all") scrollPredictionsTableIntoView();
   }, [ipTab, filters.sourceIp, filters.destinationIp, scrollPredictionsTableIntoView]);
 
-  const handleRangeChange = (nextRange) => { setPage(1); setSelectedTimelinePoint(null); setFilterMode("range"); setTimeRange(nextRange); };
 
   if (loading && predictions.length === 0 && !error) {
     return <PageLoader message="Loading..." fullScreen />;
@@ -1109,7 +1275,7 @@ export default function MlDashboard() {
       </div>
 
       {error && predictions.length > 0 && (
-        <div className="rounded-lg border border-red-700/50 bg-red-900/20 px-4 py-2 text-[11px] text-red-300">Failed to load ML data: {error?.message || String(error)}<button onClick={() => loadAll()} className="ml-3 underline hover:text-red-200">Retry</button></div>
+        <div className="rounded-lg border border-red-700/50 bg-red-900/20 px-4 py-2 text-[11px] text-red-300">Failed to load ML data: {error?.message || String(error)}<button onClick={handleFirstPage} className="ml-3 underline hover:text-red-200">Retry</button></div>
       )}
       {dataNotice && (
         <div className="rounded-lg border border-sky-500/20 bg-sky-500/10 px-2.5 md:px-3 py-2 text-[10px] md:text-[11px] text-sky-100">{dataNotice}</div>
@@ -1172,7 +1338,7 @@ export default function MlDashboard() {
                 <p className="text-[9px] text-[var(--soc-text-muted)]">Distribution of prediction labels</p>
               </div>
             </div>
-            <span className="ml-chart-summary-count text-[10px] font-bold text-[var(--soc-text-primary)]">{filtered.length} predictions</span>
+            <span className="ml-chart-summary-count text-[10px] font-bold text-[var(--soc-text-primary)]">{totalPredictionsCount} predictions</span>
           </div>
           <div className="ml-label-distribution-body flex-1 min-h-[160px] md:min-h-0 flex flex-col">
             <CategoryLineChart items={distribution} totalLabel="predictions" onPointClick={handleLabelSummaryClick} activeLabel={filters.label && filters.label !== "all" ? filters.label : null} />
@@ -1253,15 +1419,15 @@ export default function MlDashboard() {
         <div className="overflow-x-auto">
           <table className="ml-predictions-log-table w-full min-w-[1000px] table-fixed text-[10px] md:text-[11px] text-left">
             <colgroup>
-              <col style={{ width: "11%" }} />
-              <col style={{ width: "8%" }} />
-              <col style={{ width: "9%" }} />
-              <col style={{ width: "9%" }} />
+              <col style={{ width: "10%" }} />
               <col style={{ width: "7%" }} />
-              <col style={{ width: "9%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "8%" }} />
               <col style={{ width: "6%" }} />
               <col style={{ width: "6%" }} />
-              <col style={{ width: "24%" }} />
+              <col style={{ width: "30%" }} />
               <col style={{ width: "11%" }} />
             </colgroup>
             <thead>
@@ -1274,7 +1440,7 @@ export default function MlDashboard() {
             <tbody>
               {loading ? (
                 <tr><td colSpan={10} className="px-4 py-8 text-center text-xs text-slate-500">Loading predictions...</td></tr>
-              ) : filtered.length === 0 ? (
+              ) : predictions.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="px-4 py-8 text-center">
                     <p className="text-[10px] font-semibold text-[var(--soc-text-secondary)]">No predictions match current filters</p>
@@ -1299,24 +1465,24 @@ export default function MlDashboard() {
           </table>
         </div>
 
-        {filtered.length > 0 && (
+        {serverTotal > 0 && (
           <div className="ml-pagination-footer border-t border-slate-800 bg-slate-900/50 px-2 md:px-4 py-3">
             <div className="ml-pagination-layout flex flex-col md:flex-row items-start md:items-center justify-between gap-2 md:gap-0">
               <div className="ml-pagination-summary text-[10px] md:text-[11px] font-mono text-slate-500">
                 <span className="hidden md:inline">SHOWING </span>
-                <span className="font-bold text-sky-400">{filtered.length === 0 ? 0 : (activePage - 1) * pageSize + 1}</span>
+                <span className="font-bold text-sky-400">{(activePage - 1) * pageSize + 1}</span>
                 <span className="hidden md:inline"> - </span><span className="md:hidden">-</span>
-                <span className="font-bold text-sky-400">{Math.min(activePage * pageSize, filtered.length)}</span>
+                <span className="font-bold text-sky-400">{Math.min(activePage * pageSize, serverTotal)}</span>
                 <span className="hidden md:inline"> OF </span><span className="md:hidden"> / </span>
-                <span className="font-bold text-sky-400">{filtered.length}</span>
+                <span className="font-bold text-sky-400">{serverTotal}</span>
                 <span className="hidden md:inline"> PREDICTIONS</span>
               </div>
               <div className="ml-pagination-controls flex flex-wrap items-center gap-2">
-                <button disabled={activePage === 1 || loading} onClick={() => { setPage(1); scrollPredictionsTableIntoView(); }} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">FIRST</button>
-                <button disabled={activePage === 1 || loading} onClick={() => { setPage(Math.max(1, activePage - 1)); scrollPredictionsTableIntoView(); }} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">PREV</button>
+                <button disabled={activePage === 1 || loading} onClick={handleFirstPage} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">FIRST</button>
+                <button disabled={activePage === 1 || loading} onClick={handlePrevPage} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">PREV</button>
                 <span className="px-1 text-[10px] md:text-[11px] font-black text-slate-400"><span className="hidden md:inline">PAGE </span><span className="text-[var(--soc-text-primary)]">{activePage}</span> / {totalPages}</span>
-                <button disabled={activePage >= totalPages || loading} onClick={() => { setPage(Math.min(totalPages, activePage + 1)); scrollPredictionsTableIntoView(); }} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">NEXT</button>
-                <button disabled={activePage >= totalPages || loading} onClick={() => { setPage(totalPages); scrollPredictionsTableIntoView(); }} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">LAST</button>
+                <button disabled={!nextCursor || activePage >= totalPages || loading} onClick={handleNextPage} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">NEXT</button>
+                <button disabled={!nextCursor || activePage >= totalPages || loading} onClick={handleLastPage} className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-[10px] md:text-[11px] font-bold text-slate-300 transition-all hover:border-sky-500/50 hover:bg-sky-900/20 disabled:cursor-not-allowed disabled:opacity-20">LAST</button>
               </div>
             </div>
           </div>

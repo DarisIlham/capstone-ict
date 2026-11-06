@@ -16,6 +16,13 @@ import {
   normalizePagination,
   getHistogramInterval
 } from "../utils/esHelpers.js";
+import {
+  SEARCH_AFTER_KEEP_ALIVE,
+  SEARCH_AFTER_SORT,
+  createExpiredPointInTimeError,
+  isExpiredPointInTime,
+  parseSearchAfter
+} from "../utils/searchAfter.js";
 
 // Fungsi pembantu internal (tidak perlu diekspor)
 function buildLinuxCommandMustClauses() {
@@ -269,6 +276,64 @@ export async function listLinuxCommands(query) {
         minimum_should_match: 1
       }
     });
+  }
+
+  const cursorMode = query.cursor === "1" || query.cursor === "true" || Boolean(query.search_after);
+  if (cursorMode) {
+    const searchAfter = parseSearchAfter(query.search_after);
+    let pitId = query.pit_id ? String(query.pit_id) : null;
+
+    if (searchAfter && !pitId) {
+      const error = new Error("search_after requires a pit_id");
+      error.status = 400;
+      throw error;
+    }
+
+    if (!pitId) {
+      const pit = unwrapEsResponse(await es.openPointInTime({
+        index: elastic.index,
+        keep_alive: SEARCH_AFTER_KEEP_ALIVE
+      }));
+      pitId = pit?.id || null;
+      if (!pitId) throw new Error("Failed to open pagination snapshot");
+    }
+
+    const searchBody = {
+      size: limit,
+      track_total_hits: true,
+      sort: SEARCH_AFTER_SORT,
+      pit: { id: pitId, keep_alive: SEARCH_AFTER_KEEP_ALIVE },
+      query: {
+        bool: {
+          must,
+          must_not: mustNot,
+          should,
+          minimum_should_match: minimumShouldMatch
+        }
+      }
+    };
+    if (searchAfter) searchBody.search_after = searchAfter;
+
+    let response;
+    try {
+      response = unwrapEsResponse(await es.search(searchBody));
+    } catch (error) {
+      if (isExpiredPointInTime(error)) throw createExpiredPointInTimeError();
+      throw error;
+    }
+
+    const hits = getHits(response);
+    const total = getTotalHits(response);
+    const lastSort = hits.length ? hits[hits.length - 1].sort : null;
+    const hasMore = Boolean(lastSort) && page * limit < total;
+
+    return {
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      data: hits.map(formatLinuxCommand),
+      next_search_after: hasMore ? lastSort : null,
+      pit_id: response.pit_id || pitId,
+      has_more: hasMore
+    };
   }
 
   const response = unwrapEsResponse(

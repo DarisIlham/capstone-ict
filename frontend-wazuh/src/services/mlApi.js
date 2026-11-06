@@ -14,10 +14,22 @@ async function fetchJson(path, options = {}) {
 
 const BASE = `${API_BASE_URL}/api/ml`;
 
+function toSearchParams(params = {}) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === "" || value === "all") continue;
+    if (key === "search_after" && typeof value !== "string") {
+      search.set(key, JSON.stringify(value));
+      continue;
+    }
+    search.set(key, String(value));
+  }
+  return search.toString();
+}
+
 export function getPredictions(params = {}) {
-  // Set default limit to 10000 to fetch all predictions (not just 20)
-  const fullParams = { limit: 10000000, ...params };
-  const qs = new URLSearchParams(fullParams).toString();
+  const fullParams = { limit: 100, ...params };
+  const qs = toSearchParams(fullParams);
   const url = qs ? `${BASE}/predictions?${qs}` : `${BASE}/predictions`;
   return fetchJson(url);
 }
@@ -26,15 +38,15 @@ export function getLatest() {
   return fetchJson(`${BASE}/predictions/latest`);
 }
 
-export function getStats() {
-  return fetchJson(`${BASE}/predictions/stats`);
+export function getStats(params = {}) {
+  const qs = toSearchParams(params);
+  const url = qs ? `${BASE}/predictions/stats?${qs}` : `${BASE}/predictions/stats`;
+  return fetchJson(url);
 }
 
 export function getTimeline(minutes = 60, options = {}) {
-  const params = new URLSearchParams({ minutes: String(minutes) });
-  if (options?.start) params.set('start', options.start);
-  if (options?.end) params.set('end', options.end);
-  const url = `${BASE}/predictions/timeline?${params.toString()}`;
+  const qs = toSearchParams({ minutes, ...options });
+  const url = `${BASE}/predictions/timeline?${qs}`;
   return fetchJson(url);
 }
 

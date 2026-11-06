@@ -78,10 +78,25 @@ async function collectSuspiciousCommands(startIso, endIso, watermark) {
     }));
 }
 
-const isSqliXssLabel = (label) => {
+// Jenis serangan web yang butuh ambang per-IP sebelum dikirim ke Telegram.
+const sqliXssKind = (label) => {
   const s = String(label || "").toLowerCase();
-  return s.includes("sql_injection") || s.includes("xss");
+  if (s.includes("sql_injection")) return "sql_injection";
+  if (s.includes("xss")) return "xss";
+  return null;
 };
+
+// SQL injection & XSS hanya dikirim bila satu IP yang sama sudah mengumpulkan
+// minimal 10 serangan (default; bisa dioverride lewat env).
+const sqliXssMinAttacks = () => {
+  const n = Number(process.env.SUSPICIOUS_SQLI_XSS_MIN || 10);
+  return Number.isFinite(n) && n > 0 ? n : 10;
+};
+
+// Akumulasi SQLi/XSS per IP + jenis serangan (in-memory). Aturan kirim:
+// pertama saat total >= 10, berikutnya tiap ada >= 10 serangan BARU.
+const sqliXssTotals = new Map(); // `${ip}|${kind}` -> { total, sentTotal }
+const SQLI_XSS_MAP_CAP = 2000;
 
 // Confidence dinormalisasi ke skala 0–100 (dokumen ada yang 0–1).
 const confidencePct = (p) => {
@@ -91,18 +106,63 @@ const confidencePct = (p) => {
 };
 
 async function collectMlMalicious(startIso, endIso, watermark) {
-  const res = await listPredictions({ start: startIso, end: endIso, limit: 100 });
+  const minAttacks = sqliXssMinAttacks();
+  const res = await listPredictions({ start: startIso, end: endIso, limit: 1000 });
   const out = [];
+  const sqliXssGroups = new Map(); // `${ip}|${kind}` -> group
   for (const p of res?.data || []) {
     // bruteforce_http ditangani sumber khusus berambangnya sendiri.
     if (!isMaliciousLabel(p.predictedLabel) || isBruteforceLabel(p.predictedLabel)) continue;
     if (!(tsOf(p.timestamp) > watermark)) continue;
     const conf = confidencePct(p);
-    // SQL injection & XSS hanya bila confidence >= 65 (inklusif).
-    if (isSqliXssLabel(p.predictedLabel) && (conf === null || conf < 65)) continue;
+    const kind = sqliXssKind(p.predictedLabel);
+    if (kind) {
+      // SQL injection & XSS hanya bila confidence >= 65 (inklusif).
+      if (conf === null || conf < 65) continue;
+      const ip = String(p.sourceIp || "unknown");
+      const key = `${ip}|${kind}`;
+      const g = sqliXssGroups.get(key) || {
+        ip,
+        kind,
+        count: 0,
+        maxTs: 0,
+        agent: "?",
+        destination: "?",
+        maxConf: null,
+      };
+      g.count += 1;
+      const ts = tsOf(p.timestamp);
+      if (ts > g.maxTs) {
+        g.maxTs = ts;
+        g.agent = p.agent || "?";
+        g.destination = p.destinationIp || "?";
+      }
+      if (conf !== null) g.maxConf = g.maxConf === null ? conf : Math.max(g.maxConf, conf);
+      sqliXssGroups.set(key, g);
+      continue;
+    }
     out.push({
       ts: tsOf(p.timestamp),
       line: `${p.predictedLabel} | ${p.agent || "?"} | ${p.sourceIp || "?"} → ${p.destinationIp || "?"}${conf === null ? "" : ` (${Math.round(conf)}%)`}`,
+    });
+  }
+
+  for (const [key, g] of sqliXssGroups) {
+    let st = sqliXssTotals.get(key);
+    if (!st) {
+      st = { total: 0, sentTotal: 0 };
+      sqliXssTotals.set(key, st);
+      if (sqliXssTotals.size > SQLI_XSS_MAP_CAP) {
+        sqliXssTotals.delete(sqliXssTotals.keys().next().value);
+      }
+    }
+    st.total += g.count;
+    if (st.total - st.sentTotal < minAttacks) continue;
+    st.sentTotal = st.total;
+    const confText = g.maxConf === null ? "" : ` (${Math.round(g.maxConf)}%)`;
+    out.push({
+      ts: g.maxTs,
+      line: `${g.kind} | ${g.agent} | ${g.ip} → ${g.destination} | ${g.count} serangan baru (total ${st.total})${confText}`,
     });
   }
   return out;
