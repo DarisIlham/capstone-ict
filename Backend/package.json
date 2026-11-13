@@ -4,7 +4,8 @@
   "main": "index.js",
   "scripts": {
     "dev": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-include=services/otpService.js --test-coverage-include=services/tokenRevocationService.js --test-coverage-include=services/authTokenService.js --test-coverage-include=middleware/auth.middleware.js --test-coverage-include=services/telegramLoginService.js"
   },
   "keywords": [],
   "author": "",

@@ -16,6 +16,7 @@ import hostMonitoringRoutes from "./routes/hostMonitoringRoutes.js";
 import asyncHandler from "./utils/asyncHandler.js";
 import { CORS_ALLOWED_ORIGINS, TRUST_PROXY } from "./config/security.js";
 import { dataLimiter } from "./middleware/rateLimiters.js";
+import { verifyToken } from "./middleware/auth.middleware.js";
 
 const app = express();
 
@@ -61,12 +62,14 @@ app.get(
 );
 
 // 2. Daftarkan Routes
-app.use("/api/ml", dataLimiter, mlRoutes);
-app.use("/api/bot-detection", dataLimiter, botDetectionRoutes);
-app.use("/api/file-scans", dataLimiter, fileScanRoutes);
-app.use("/api/linux-commands", dataLimiter, linuxCommandRoutes);
-app.use("/api/virustotal", dataLimiter, virusTotalRoutes);
-app.use("/api/host-monitoring", dataLimiter, hostMonitoringRoutes);
+// Semua endpoint data wajib sesi login yang valid (JWT) — sebelumnya hanya
+// halaman frontend yang diproteksi sehingga API bisa diakses langsung.
+app.use("/api/ml", dataLimiter, verifyToken, mlRoutes);
+app.use("/api/bot-detection", dataLimiter, verifyToken, botDetectionRoutes);
+app.use("/api/file-scans", dataLimiter, verifyToken, fileScanRoutes);
+app.use("/api/linux-commands", dataLimiter, verifyToken, linuxCommandRoutes);
+app.use("/api/virustotal", dataLimiter, verifyToken, virusTotalRoutes);
+app.use("/api/host-monitoring", dataLimiter, verifyToken, hostMonitoringRoutes);
 
 // 404 Handler
 // NOTE: 404 and global error handlers are intentionally left to be registered

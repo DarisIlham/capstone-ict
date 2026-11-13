@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import pool from "../config/pg.js";
 import { JWT_SECRET } from "../config/security.js";
+import { isTokenRevoked } from "../services/tokenRevocationService.js";
 
 // Awal hari WIB (00:00, UTC+7) untuk momen tertentu, dalam ms epoch.
 function wibDayStart(nowMs) {
@@ -9,8 +10,9 @@ function wibDayStart(nowMs) {
   return Math.floor((nowMs + WIB_OFFSET) / DAY) * DAY - WIB_OFFSET;
 }
 
-export const verifyToken = async (req, res, next) => {
-  try {
+export function createVerifyToken({ userPool = pool, secret = JWT_SECRET, checkTokenRevoked = isTokenRevoked } = {}) {
+  return async (req, res, next) => {
+    try {
     // Get token from header
     const authHeader = req.header("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -22,9 +24,12 @@ export const verifyToken = async (req, res, next) => {
     const token = authHeader.replace("Bearer ", "");
 
     // Verify token
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, secret);
     if (!decoded) {
       return res.status(401).json({ message: "Invalid token format" });
+    }
+    if (await checkTokenRevoked(token)) {
+      return res.status(401).json({ message: "Token has been revoked" });
     }
 
     // Curfew: sesi yang dimulai SEBELUM 00:00 WIB hari ini dianggap hangus.
@@ -44,7 +49,7 @@ export const verifyToken = async (req, res, next) => {
     const q = userId
       ? 'SELECT * FROM users WHERE id = $1 LIMIT 1'
       : 'SELECT * FROM users WHERE email = $1 LIMIT 1';
-    const r = await pool.query(q, [userId || userEmail]);
+    const r = await userPool.query(q, [userId || userEmail]);
     if (!r || !r.rows || r.rows.length === 0) {
       return res.status(401).json({ message: "User not found" });
     }
@@ -71,17 +76,22 @@ export const verifyToken = async (req, res, next) => {
     };
     // Attach user to request
     req.user = user;
+    req.authToken = token;
+    req.authClaims = decoded;
     next();
-  } catch (error) {
-    if (error.name === "TokenExpiredError") {
-      return res.status(401).json({ message: "Token has expired" });
+    } catch (error) {
+      if (error.name === "TokenExpiredError") {
+        return res.status(401).json({ message: "Token has expired" });
+      }
+      if (error.name === "JsonWebTokenError") {
+        return res.status(401).json({ message: "Invalid token" });
+      }
+      res.status(500).json({ message: "Server error" });
     }
-    if (error.name === "JsonWebTokenError") {
-      return res.status(401).json({ message: "Invalid token" });
-    }
-    res.status(500).json({ message: "Server error" });
   }
-};
+}
+
+export const verifyToken = createVerifyToken();
 
 /**
  * Middleware untuk mengecek apakah user memiliki role tertentu

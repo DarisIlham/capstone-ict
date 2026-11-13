@@ -249,22 +249,22 @@ export default function AppLayout({ children }) {
     setShowLogoutConfirm(true);
   };
 
-  const confirmLogout = () => {
+  const confirmLogout = async () => {
     setShowLogoutConfirm(false);
-    // Hapus kehadiran (best-effort) agar /online Telegram langsung update.
     try {
       const token = getAuthToken();
       if (token) {
-        void fetch(`${API_BASE_URL}/api/auth/presence`, {
-          method: "DELETE",
+        await fetch(`${API_BASE_URL}/api/auth/logout`, {
+          method: "POST",
           headers: { Authorization: `Bearer ${token}` },
-        }).catch(() => {});
+        });
       }
     } catch {
-      /* abaikan */
+      // Always clear local credentials even if the server cannot be reached.
+    } finally {
+      logout();
+      navigate("/login");
     }
-    logout();
-    navigate("/login");
   };
 
   // Heartbeat kehadiran: selama user login, backend tahu siapa yang online

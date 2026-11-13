@@ -17,7 +17,6 @@ const api = (token) => `https://api.telegram.org/bot${token}`;
 
 function readConfig() {
   return {
-    enabled: process.env.LOGIN_APPROVAL_ENABLED !== "0",
     token: String(process.env.TELEGRAM_LOGIN_TOKEN || ""),
     adminChatId: String(process.env.TELEGRAM_LOGIN_CHAT_ID || ""),
     tz: process.env.LOGIN_APPROVAL_TZ || "Asia/Jakarta",
@@ -36,9 +35,7 @@ export function isTelegramLoginConfigured() {
   return Boolean(token && adminChatId);
 }
 
-// ── Jendela jam kerja ──────────────────────────────────────────────
-// Di luar [endHour, startHour) pada zona waktu acuan → butuh approval.
-// Default: butuh approval bila jam lokal Asia/Jakarta >= 19:00 atau < 05:00.
+// Outside configured working hours, weekends, or invalid schedules require approval.
 export function hourInZone(date = new Date(), tz = "Asia/Jakarta") {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: tz,
@@ -52,37 +49,30 @@ export function hourInZone(date = new Date(), tz = "Asia/Jakarta") {
 
 export function isOutsideWorkingHours(date = new Date()) {
   const { tz, startHour, endHour } = readConfig();
+  let weekday;
+  try {
+    weekday = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(date);
+  } catch {
+    return true;
+  }
+  if (weekday === "Sat" || weekday === "Sun") return true;
+
   const hour = hourInZone(date, tz);
-  if (!Number.isFinite(startHour) || !Number.isFinite(endHour)) return false;
-  if (startHour === endHour) return false;
+  if (
+    !Number.isInteger(startHour) ||
+    !Number.isInteger(endHour) ||
+    startHour < 0 ||
+    startHour > 23 ||
+    endHour < 0 ||
+    endHour > 23 ||
+    startHour === endHour
+  ) {
+    return true;
+  }
   // Jendela melewati tengah malam (mis. 19 -> 5): luar jam = >= 19 ATAU < 5.
   if (startHour > endHour) return hour >= startHour || hour < endHour;
   // Jendela normal (mis. 9 -> 17): luar jam = < 9 ATAU >= 17.
   return hour < startHour || hour >= endHour;
-}
-
-// Sabtu–Minggu (zona acuan) selalu butuh approval, jam berapa pun.
-export function isWeekend(date = new Date()) {
-  const { tz } = readConfig();
-  if (process.env.LOGIN_APPROVAL_WEEKENDS === "0") return false;
-  try {
-    const day = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(date);
-    return day === "Sat" || day === "Sun";
-  } catch {
-    const d = new Date(date).getDay();
-    return d === 0 || d === 6;
-  }
-}
-
-// Alasan approval: "weekend" | "night" | null (jam kerja biasa).
-export function approvalReason(date = new Date()) {
-  if (isWeekend(date)) return "weekend";
-  if (isOutsideWorkingHours(date)) return "night";
-  return null;
-}
-
-export function requiresLoginApproval(date = new Date()) {
-  return approvalReason(date) !== null;
 }
 
 // ── Penyimpanan request approval (memori + kedaluwarsa) ────────────
@@ -393,14 +383,10 @@ let polling = false;
 
 export function startLoginBotPolling() {
   if (polling) return true;
-  const { enabled, token } = readConfig();
-  if (!enabled) {
-    console.log("[telegram-login] nonaktif (LOGIN_APPROVAL_ENABLED=0)");
-    return false;
-  }
+  const { token } = readConfig();
   if (!isTelegramLoginConfigured()) {
     console.warn(
-      "[telegram-login] TELEGRAM_LOGIN_TOKEN / TELEGRAM_LOGIN_CHAT_ID belum diisi — approval login nonaktif, login malam berjalan normal tanpa approval."
+      "[telegram-login] TELEGRAM_LOGIN_TOKEN / TELEGRAM_LOGIN_CHAT_ID belum diisi — login di luar jam kerja akan ditolak."
     );
     return false;
   }

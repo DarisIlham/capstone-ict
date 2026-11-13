@@ -8,11 +8,12 @@ import userRouter from "./routes/userRoutes.js";
 import notificationRouter from "./routes/notificationRoutes.js";
 import { startLoginBotPolling } from "./services/telegramLoginService.js";
 import { startSuspiciousAlertWatcher } from "./services/suspiciousAlertWatcher.js";
-import { verifyToken } from "./middleware/auth.middleware.js";
+import { verifyToken, requireRole } from "./middleware/auth.middleware.js";
 import { dataLimiter } from "./middleware/rateLimiters.js";
 import { createIndexerHttpsAgent } from "./config/tls.js";
 import app from "./app.js";
 import { getAlertFeed } from "./services/alertFeedService.js";
+import { listRecentAuditLogs } from "./services/auditLogService.js";
 
 // Environment variables are loaded via `import 'dotenv/config'` above
 
@@ -559,7 +560,8 @@ async function handleEventsTimelineRequest(req, res) {
   }
 }
 
-app.use("/api/events", dataLimiter);
+// Semua endpoint FIM/events wajib sesi login yang valid (JWT).
+app.use("/api/events", dataLimiter, verifyToken);
 app.get("/api/events/timeline", handleEventsTimelineRequest);
 app.get("/api/events/:agent_id/timeline", handleEventsTimelineRequest);
 app.get("/api/events", handleEventsRequest);
@@ -1396,16 +1398,18 @@ const ENABLE_AUTO_PULL = process.env.ENABLE_AUTO_PULL !== "0";
 const AUTO_PULL_AGENT_ID = process.env.AUTO_PULL_AGENT_ID || null; // contoh: "001"
 const AUTO_PULL_INTERVAL_MS = Number(process.env.AUTO_PULL_INTERVAL_MS || 15000);
 
+let autoPullNoticeShown = false;
+
 async function autoPullEvents() {
   if (!ENABLE_AUTO_PULL) return;
   if (!AUTO_PULL_AGENT_ID) return;
 
-  try {
-    // call your own endpoint so the insert logic gets used
-    await axios.get(`http://127.0.0.1:${PORT}/api/events/${AUTO_PULL_AGENT_ID}`);
-    console.log(`[auto-pull] ok agent=${AUTO_PULL_AGENT_ID}`);
-  } catch (e) {
-    console.log("[auto-pull] failed:", e.message);
+  // Endpoint /api/events kini dilindungi JWT, sehingga self-call tanpa sesi
+  // akan ditolak 401. Fitur ini juga tidak menyimpan apa pun (saveToDatabase
+  // tidak pernah dipanggil), jadi dilewati dengan peringatan sekali saja.
+  if (!autoPullNoticeShown) {
+    autoPullNoticeShown = true;
+    console.warn("[auto-pull] dilewati: /api/events memerlukan sesi login (JWT).");
   }
 }
 
@@ -1419,6 +1423,18 @@ app.get("/api/alerts/feed", dataLimiter, verifyToken, async (req, res, next) => 
     res.json({ success: true, ...result });
   } catch (error) {
     next(error);
+  }
+});
+
+// Riwayat audit keamanan aplikasi (khusus admin). Membaca tabel audit_logs
+// yang diisi oleh auditLogService; hanya tersedia bila PostgreSQL aktif.
+app.get("/api/audit-logs", dataLimiter, verifyToken, requireRole("admin"), async (req, res) => {
+  try {
+    const data = await listRecentAuditLogs({ limit: req.query.limit });
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error("Audit log fetch error:", error.message);
+    res.status(500).json({ success: false, message: "Failed to fetch audit logs" });
   }
 });
 

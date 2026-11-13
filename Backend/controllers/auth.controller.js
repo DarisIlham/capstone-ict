@@ -11,7 +11,7 @@ import {
   sendLoginApprovalMessage,
   sendLoginInfoMessage,
   isTelegramLoginConfigured,
-  approvalReason,
+  isOutsideWorkingHours,
 } from "../services/telegramLoginService.js";
 import { touchPresence, removePresence } from "../services/presenceService.js";
 import {
@@ -30,6 +30,8 @@ import { sendPasswordResetEmail } from "../services/mailerService.js";
 import { JWT_SECRET, RECAPTCHA_SECRET_KEY, FRONTEND_URL, FRONTEND_BASE_PATH, IS_PRODUCTION } from "../config/security.js";
 import { isValidEmail, normalizeEmail, safeErrorMessage, validatePassword } from "../utils/validation.js";
 import { auditLog } from "../services/auditLogService.js";
+import { revokeToken } from "../services/tokenRevocationService.js";
+import { issueLoginToken } from "../services/authTokenService.js";
 
 const verifyCaptcha = async (captchaToken) => {
   if (!captchaToken) {
@@ -111,19 +113,6 @@ export const register = async (req, res) => {
     const rInsert = await pool.query(qInsert, [email, hashedPassword, name, userRole, 'active']);
     const savedRow = rInsert.rows[0];
 
-    const token = jwt.sign(
-      {
-        userId: savedRow.id,
-        email: savedRow.email,
-        role: savedRow.role,
-        loginAt: Date.now(),
-      },
-      JWT_SECRET,
-      {
-        expiresIn: "7d",
-      }
-    );
-
     auditLog({
       action: "auth.register",
       actor: { id: savedRow.id, email: savedRow.email },
@@ -131,14 +120,9 @@ export const register = async (req, res) => {
       ip: req.ip,
     });
 
-    if (shouldRequireLoginApproval()) {
-      return finishLogin(req, res, savedRow, true);
-    }
-
     res.status(201).json({
       success: true,
-      message: "Registration successful",
-      token,
+      message: "Registration successful. Please sign in and verify the email OTP to continue.",
       user: {
         id: savedRow.id,
         email: savedRow.email,
@@ -424,18 +408,6 @@ async function validateCredentialsForOtp(rawEmail, password, captchaToken) {
   return user;
 }
 
-/**
- * Terbitkan JWT untuk user. Dipakai login normal maupun login yang sudah
- * disetujui admin via Telegram (hindari duplikasi konfigurasi expiry).
- */
-function signUserToken(row, rememberMe) {
-  return jwt.sign(
-    { userId: row.id, email: row.email, role: row.role || "user", loginAt: Date.now() },
-    JWT_SECRET,
-    { expiresIn: rememberMe ? "7d" : "12h" }
-  );
-}
-
 function publicUser(row) {
   return {
     id: row.id,
@@ -447,27 +419,32 @@ function publicUser(row) {
 }
 
 /**
- * Login di luar jam kerja (default 19:00–05:00 WIB) atau di akhir pekan
- * (Sabtu–Minggu) wajib disetujui admin via bot Telegram, kecuali bot
- * belum dikonfigurasi (fail-open + warning).
- */
-function shouldRequireLoginApproval() {
-  if (process.env.LOGIN_APPROVAL_ENABLED === "0") return false;
-  if (!isTelegramLoginConfigured()) return false;
-  return approvalReason(new Date()) !== null;
-}
-
-/**
  * Selesaikan login: di luar jam kerja / akhir pekan buat request approval
  * Telegram (202 + approvalRequired), selain itu terbitkan JWT langsung.
  * Dipakai SEMUA jalur login (OTP, langsung, register) agar tidak ada yang
  * bisa mem-bypass approval — mengembalikan true bila respons sudah dikirim.
  */
 async function finishLogin(req, res, row, rememberMe) {
-  if (!shouldRequireLoginApproval()) {
-    return issueLoginSuccess(res, row, rememberMe === true);
+  const now = new Date();
+  if (!isOutsideWorkingHours(now)) {
+    return issueLoginSuccess(res, row.id, rememberMe === true);
   }
-  const reason = approvalReason(new Date()) || "night";
+
+  if (!isTelegramLoginConfigured()) {
+    auditLog({
+      action: "auth.login",
+      outcome: "failure",
+      actor: { id: row.id, email: row.email },
+      ip: req.ip,
+      details: { reason: "approval_unavailable", cause: "telegram_not_configured" },
+    });
+    return res.status(503).json({
+      success: false,
+      approvalRequired: true,
+      message: "Persetujuan admin tidak tersedia. Login ditolak; silakan coba lagi nanti.",
+    });
+  }
+
   const fwdIp = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
   const approval = createLoginApproval({
     userId: row.id,
@@ -477,23 +454,32 @@ async function finishLogin(req, res, row, rememberMe) {
     rememberMe: rememberMe === true,
     ip: fwdIp || req.ip || "-",
     userAgent: req.headers["user-agent"] || "-",
-    reason,
+    reason: "night",
   });
   try {
     await sendLoginApprovalMessage(approval);
-    console.log(`[otp] approval login dibuat email=${maskEmail(row.email)} reason=${reason}`);
+    console.log(`[otp] approval login dibuat email=${maskEmail(row.email)} reason=night`);
   } catch (tgErr) {
-    // Telegram down tidak boleh mengunci user: login jalan normal.
-    console.error("[otp] kirim approval Telegram gagal, login dilanjutkan:", tgErr.message);
-    return issueLoginSuccess(res, row, rememberMe === true);
+    consumeLoginApproval(approval.id);
+    auditLog({
+      action: "auth.login",
+      outcome: "failure",
+      actor: { id: row.id, email: row.email },
+      ip: req.ip,
+      details: { reason: "approval_unavailable", cause: "telegram_send_failed" },
+    });
+    console.error("[otp] kirim persetujuan Telegram gagal; login ditolak:", tgErr.message);
+    return res.status(503).json({
+      success: false,
+      approvalRequired: true,
+      message: "Persetujuan admin gagal dihubungi. Login ditolak; silakan coba lagi nanti.",
+    });
   }
   return res.status(202).json({
     success: true,
     approvalRequired: true,
     message:
-      reason === "weekend"
-        ? "Akhir pekan: menunggu persetujuan admin via Telegram"
-        : "Di luar jam kerja: menunggu persetujuan admin via Telegram",
+      "Di luar jam kerja: menunggu persetujuan admin via Telegram",
     approvalId: approval.id,
     expiresIn: Math.max(1, Math.round((approval.expiresAt - Date.now()) / 1000)),
   });
@@ -728,8 +714,19 @@ export const verifyLoginOtp = async (req, res) => {
  * fire-and-forget). Untuk login malam yang disetujui, info tidak dikirim
  * (pesan request + keputusan sudah tercatat) — matikan via { notifyLogin: false }.
  */
-function issueLoginSuccess(res, row, rememberMe, extra = {}, { notifyLogin = true } = {}) {
-  const token = signUserToken(row, rememberMe);
+async function issueLoginSuccess(res, userId, rememberMe, extra = {}, { notifyLogin = true } = {}) {
+  const issued = await issueLoginToken(userId, rememberMe);
+  if (issued.error) {
+    auditLog({
+      action: "auth.login",
+      outcome: "failure",
+      actor: issued.row ? { id: issued.row.id, email: issued.row.email } : { id: userId },
+      ip: res.req?.ip,
+      details: { reason: issued.error.status === 403 ? "inactive_account" : "user_not_found" },
+    });
+    return res.status(issued.error.status).json({ success: false, message: issued.error.message });
+  }
+  const { row, token } = issued;
 
   auditLog({
     action: "auth.login",
@@ -765,6 +762,20 @@ function issueLoginSuccess(res, row, rememberMe, extra = {}, { notifyLogin = tru
   });
 }
 
+export const logout = async (req, res) => {
+  try {
+    await revokeToken(req.authToken, req.authClaims?.exp);
+    removePresence(req.user?.id);
+    return res.json({ success: true, message: "Logout successful" });
+  } catch (error) {
+    console.error("Logout revocation error:", error.message);
+    return res.status(503).json({
+      success: false,
+      message: "Sesi belum berhasil dicabut. Silakan coba logout kembali.",
+    });
+  }
+};
+
 /**
  * Heartbeat kehadiran (dipanggil frontend selama user login).
  * POST /api/auth/presence/touch (butuh JWT)
@@ -789,14 +800,7 @@ export const touchPresenceEndpoint = async (req, res) => {
  * Hapus kehadiran saat logout (best-effort; kedaluwarsa otomatis juga ada).
  * DELETE /api/auth/presence (butuh JWT)
  */
-export const removePresenceEndpoint = async (req, res) => {
-  try {
-    removePresence(req.user?.id);
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Gagal menghapus kehadiran" });
-  }
-};
+export const removePresenceEndpoint = logout;
 /**
  * Status request approval login (dipolling frontend saat menunggu admin).
  * GET /api/auth/login/approval/:id
@@ -833,11 +837,7 @@ export const getLoginApprovalStatus = async (req, res) => {
     // approved → konsumsi sekali pakai lalu terbitkan JWT (tanpa info
     // Telegram tambahan — request + keputusan sudah tercatat).
     consumeLoginApproval(rec.id);
-    const result = await pool.query("SELECT * FROM users WHERE id = $1 LIMIT 1", [rec.userId]);
-    if (!result || !result.rows || result.rows.length === 0) {
-      return res.status(404).json({ success: false, status: "denied", message: "User tidak ditemukan" });
-    }
-    return issueLoginSuccess(res, result.rows[0], rec.rememberMe, { status: "approved" }, { notifyLogin: false });
+    return issueLoginSuccess(res, rec.userId, rec.rememberMe, { status: "approved" }, { notifyLogin: false });
   } catch (error) {
     console.error("Approval status error:", error.message);
     res.status(500).json({ success: false, message: "Gagal memeriksa status persetujuan" });
