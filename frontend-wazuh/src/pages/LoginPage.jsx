@@ -21,6 +21,8 @@ import logoDark from "../assets/soc_undip_dark_theme.png";
 import logoLight from "../assets/soc_undip_light_theme.png";
 import { API_BASE_URL } from "../config/Api";
 
+const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+
 const LoginPage = () => {
   const navigate = useNavigate();
   const { login, isAuthenticated } = useAuth();
@@ -622,7 +624,7 @@ const LoginPage = () => {
               <ReCAPTCHA
                 key={`${captchaKey}-credentials`}
                 ref={recaptchaRef}
-                sitekey="6Le7BYksAAAAAASn99_SYX6OAX7r8siw5H8m_YWr"
+                sitekey={RECAPTCHA_SITE_KEY}
                 onChange={handleRecaptchaChange}
                 theme={theme}
               />

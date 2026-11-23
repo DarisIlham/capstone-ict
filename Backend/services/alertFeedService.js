@@ -321,7 +321,7 @@ function buildMlAlerts(mlData, start, end) {
   return alerts;
 }
 
-async function fetchFimRows(start, end) {
+async function fetchFimRows(start, end, authToken) {
   const baseUrl = `http://127.0.0.1:${Number(process.env.PORT || 5000)}/api/events`;
   const rows = [];
   const size = 500;
@@ -331,6 +331,7 @@ async function fetchFimRows(start, end) {
   for (;;) {
     const response = await axios.get(baseUrl, {
       params: { start, end, page, size, ...(cursor ? { search_after: JSON.stringify(cursor) } : {}) },
+      headers: { Authorization: `Bearer ${authToken}` },
       timeout: 60_000,
     });
     const body = response?.data || {};
@@ -363,7 +364,7 @@ async function collectCursorSource(fetchPage, pageSize) {
   return rows;
 }
 
-async function buildSnapshot(start, end) {
+async function buildSnapshot(start, end, authToken) {
   const [attackData, fileData, fimData, mlData, botData] = await Promise.all([
     collectCursorSource(({ page, pageSize, cursor, pitId }) => listLinuxCommands({
       start, end, suspicious: "true", page, limit: pageSize, cursor: "1",
@@ -373,7 +374,7 @@ async function buildSnapshot(start, end) {
       start, end, page, limit: pageSize, cursor: "1",
       ...(cursor ? { search_after: cursor } : {}), ...(pitId ? { pit_id: pitId } : {}),
     }, { maxLimit: 100 }), 100),
-    fetchFimRows(start, end),
+    fetchFimRows(start, end, authToken),
     collectCursorSource(({ page, pageSize, cursor, pitId }) => listPredictions({
       start, end, page, limit: pageSize, cursor: "1",
       ...(cursor ? { search_after: cursor } : {}), ...(pitId ? { pit_id: pitId } : {}),
@@ -395,12 +396,12 @@ async function buildSnapshot(start, end) {
   return { alerts, severityCounts, agentOptions: countOptions("agent"), userOptions: countOptions("user") };
 }
 
-async function getSnapshot(start, end) {
+async function getSnapshot(start, end, authToken) {
   const key = `${start}|${end}`;
   const cached = snapshotCache.get(key);
   if (cached && (cached.expiresAt > Date.now() || cached.expiresAt === Infinity)) return cached.promise;
   const entry = { expiresAt: Infinity, promise: null };
-  entry.promise = buildSnapshot(start, end)
+  entry.promise = buildSnapshot(start, end, authToken)
     .then((snapshot) => {
       entry.expiresAt = Date.now() + PAGE_CACHE_TTL_MS;
       return snapshot;
@@ -414,10 +415,10 @@ async function getSnapshot(start, end) {
   return entry.promise;
 }
 
-export async function getAlertFeed(query = {}) {
+export async function getAlertFeed(query = {}, authToken) {
   const end = query.end ? new Date(query.end).toISOString() : new Date().toISOString();
   const start = query.start ? new Date(query.start).toISOString() : new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const snapshot = await getSnapshot(start, end);
+  const snapshot = await getSnapshot(start, end, authToken);
   const search = String(query.search || "").trim().toLowerCase();
   const severity = String(query.severity || "all").toLowerCase();
   const source = String(query.source || "all");

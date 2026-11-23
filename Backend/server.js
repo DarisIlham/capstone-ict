@@ -1419,7 +1419,7 @@ setInterval(autoPullEvents, AUTO_PULL_INTERVAL_MS);
 
 app.get("/api/alerts/feed", dataLimiter, verifyToken, async (req, res, next) => {
   try {
-    const result = await getAlertFeed(req.query);
+    const result = await getAlertFeed(req.query, req.authToken);
     res.json({ success: true, ...result });
   } catch (error) {
     next(error);

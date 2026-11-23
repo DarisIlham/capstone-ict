@@ -468,6 +468,10 @@ function buildResponse(pathname, q) {
   const { startMs, endMs } = demoRange(q);
   const { page, limit } = demoPage(q);
 
+  if (pathname.endsWith("/api/alerts/feed")) {
+    return { success: false, demoFallback: true };
+  }
+
   // — Bot Detection —
   if (pathname.endsWith("/api/bot-detection/summary")) {
     return ok({ data: demoBotSummary(buildBotAlerts(startMs, endMs), endMs) });

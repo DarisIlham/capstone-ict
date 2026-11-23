@@ -4846,6 +4846,28 @@ aside.w-60 {
   }
 }
 
+@media (min-width: 1500px) and (max-width: 1699px) {
+  .host-monitoring-page .host-log-table colgroup col:nth-child(1) {
+    width: 16% !important;
+  }
+  .host-monitoring-page .host-log-table colgroup col:nth-child(2) {
+    width: 5% !important;
+  }
+  .host-monitoring-page .host-log-table colgroup col:nth-child(3) {
+    width: 6% !important;
+  }
+  .host-monitoring-page .host-log-table :is(th, td):nth-child(2),
+  .host-monitoring-page .host-log-table :is(th, td):nth-child(3) {
+    padding-inline: 8px !important;
+  }
+  .host-monitoring-page .host-log-table :is(th, td):nth-child(2) {
+    padding-right: 4px !important;
+  }
+  .host-monitoring-page .host-log-table :is(th, td):nth-child(3) {
+    padding-left: 4px !important;
+  }
+}
+
 /* Tabel log Host Monitoring: padding sel dilonggarkan (aturan global
    10px !important di atas dikalahkan di sini) + jarak lega antara
    kolom Command dan Status. */
@@ -10874,6 +10896,12 @@ aside.w-60 {
 
   .host-monitoring-page .host-log-table colgroup col:nth-child(4) {
     width: 130px !important;
+  }
+}
+
+@media (min-width: 1500px) and (max-width: 1699px) {
+  .host-monitoring-page .host-log-table colgroup col:nth-child(2) {
+    width: 105px !important;
   }
 }
 

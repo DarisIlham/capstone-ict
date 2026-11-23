@@ -1030,7 +1030,7 @@ export default function MainDashboard() {
               <CategoryLineChart
                 items={[
                   ...dashboardData.threatTypes,
-                  { label: "Botnet Activity", value: Number(botSummary?.totalAlerts) || 0, color: "#E879F9" },
+                  { label: "Behavior Alerts", value: Number(botSummary?.behaviorTotal) || 0, color: "#E879F9" },
                 ]}
                 color="#EF4444"
                 totalLabel="threats"
@@ -1042,7 +1042,7 @@ export default function MainDashboard() {
                     "Malicious Files": "/file-security",
                     "FIM Changes": "/fim-events",
                     "ML Threats": "/ml-dashboard",
-                    "Botnet Activity": "/bot-detection",
+                    "Behavior Alerts": "/bot-detection",
                   }[p.label] ?? "/attack-dashboard";
                   const categoryParams = new URLSearchParams({ start, end });
                   if (p.label === "Suspicious Commands") categoryParams.set("status", "suspicious");
