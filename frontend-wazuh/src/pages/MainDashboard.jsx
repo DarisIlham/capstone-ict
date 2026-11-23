@@ -712,7 +712,7 @@ const DomainBarChart = ({ items, emptyLabel = "No affected hosts detected", empt
               </span>
             </div>
             {item.sub && (
-              <div className="-mt-0.5 ml-7 min-w-0 max-w-[calc(100%-1.75rem)] overflow-hidden leading-none">
+              <div className="mt-0.5 ml-7 min-w-0 max-w-[calc(100%-1.75rem)] overflow-hidden leading-tight">
                 <span className="dash-most-changed-sub block truncate overflow-hidden text-ellipsis whitespace-nowrap text-[8px] min-[700px]:text-[9px] text-[var(--soc-text-muted)]" title={`by ${item.sub}`}>by {item.sub}</span>
               </div>
             )}

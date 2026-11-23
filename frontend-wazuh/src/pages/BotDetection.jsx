@@ -119,6 +119,19 @@ const formatBucketLabel = (timestamp, rangeKey) => {
   if (rangeKey === '7d') return date.toLocaleString('en-US', { weekday: 'short', month: 'short', day: '2-digit' });
   return date.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
 };
+const buildZeroPreview = (rangeKey, series) => {
+  const durationMs = (RANGE_TO_MINUTES[rangeKey] || 1440) * 60_000;
+  const endMs = Date.now();
+  const startMs = endMs - durationMs;
+  const pointCount = 12;
+  return Array.from({ length: pointCount }, (_, index) => {
+    const point = {
+      timestamp: new Date(startMs + (durationMs * index) / (pointCount - 1)).toISOString(),
+    };
+    for (const item of series) point[item.key] = 0;
+    return point;
+  });
+};
 const minutesToRangeKey = (minutes) => {
   if (minutes <= 60) return '1h';
   if (minutes <= 1440) return '24h';
@@ -215,11 +228,16 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
 };
 
 // ── Multi-series WaveChart (idiom WaveChart MlDashboard, 3 seri) ─────────────
-  const MultiWaveChart = ({ data, series, rangeKey = "24h", height = 220, formatValue = null, formatAxis = null, logScale = false, axisColor = "var(--soc-border)", onPointSelect = null, activePointKey = null, activeColor = "#38bdf8", pointHint = null, compact = false }) => {
+  const MultiWaveChart = ({ data: inputData, series: inputSeries, rangeKey = "24h", height = 220, formatValue = null, formatAxis = null, logScale = false, axisColor = "var(--soc-border)", onPointSelect = null, activePointKey = null, activeColor = "#38bdf8", pointHint = null, compact = false }) => {
   const [hovered, setHovered] = useState(null);
   const rootRef = useRef(null);
   const svgRef = useRef(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const hasChartData = Array.isArray(inputData) && inputData.length > 0;
+  const hasChartSeries = Array.isArray(inputSeries) && inputSeries.length > 0;
+  const series = hasChartSeries ? inputSeries : [{ key: "emptyPreview", label: "No data", color: "#38bdf8" }];
+  const data = hasChartData ? inputData : buildZeroPreview(rangeKey, series);
+  const canInteract = hasChartData && hasChartSeries;
 
   useLayoutEffect(() => {
     const el = rootRef.current;
@@ -238,13 +256,6 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
   const plotH = size.height;
   const compactLayout = compact && width < 640;
   if (!width || !plotH) return <div ref={rootRef} className="relative h-full w-full" />;
-  if (!data || data.length === 0 || !series || series.length === 0) {
-    return (
-      <div ref={rootRef} className="relative h-full w-full">
-        <InlineEmptyState title="No detection alerts found for the selected period." description="" />
-      </div>
-    );
-  }
 
   const maxV = Math.max(1, ...data.flatMap((d) => series.map((s) => Number(d[s.key]) || 0)));
   // Log scale reveals low-volume series (e.g. behavior counts in the
@@ -394,23 +405,25 @@ const BarList = ({ items, emptyLabel = "No data", onSelect = null, activeValue =
           return (
             <g key={`tick-${point.timestamp}-${i}`}>
               <rect x={colX} y={padding.t} width={colW} height={innerH} fill="transparent"
-                style={{ cursor: onPointSelect ? "pointer" : "default" }}
+                style={{ cursor: canInteract && onPointSelect ? "pointer" : "default" }}
                 onMouseEnter={() => {
+                  if (!canInteract) return;
                   const top = Math.min(...series.map((s) => yFor(Number(point[s.key]) || 0)));
                   setHovered({ index: i, x: xFor(i), y: top, point, total });
                 }}
                 onFocus={() => {
+                  if (!canInteract) return;
                   const top = Math.min(...series.map((s) => yFor(Number(point[s.key]) || 0)));
                   setHovered({ index: i, x: xFor(i), y: top, point, total });
                 }}
                 onClick={(e) => {
-                  if (!onPointSelect) return;
+                  if (!canInteract || !onPointSelect) return;
                   const range = pointWindow(point);
                   if (!range) return;
                   const near = nearestSeriesAt(point, e.clientY);
                   onPointSelect({ ...range, seriesKey: near?.key || null });
                 }}>
-                {onPointSelect && (
+                {canInteract && onPointSelect && (
                   <title>{pointHint ? pointHint(point) : `Filter table: ${formatDetailedTimestamp(point.timestamp)}`}</title>
                 )}
               </rect>
@@ -945,7 +958,6 @@ export default function BotDetection() {
         setError(new Error('Bot Detection data is not available. Check the backend connection.'));
       } else {
         const totalAlerts = (summaryRes.status === 'fulfilled' ? Number(summaryRes.value?.data?.totalAlerts || 0) : 0);
-        if (totalAlerts === 0) notices.push('No detection alerts found for the selected period.');
         if (summaryRes.status === 'fulfilled' && summaryRes.value?.data && (!summaryRes.value.data.mlAvailable || !summaryRes.value.data.behaviorAvailable)) {
           const missing = [
             !summaryRes.value.data.mlAvailable ? 'ML botnet index' : null,
@@ -1219,6 +1231,7 @@ export default function BotDetection() {
     return SERIES.find((s) => s.key === key)?.color || "#38bdf8";
   }, [selectedPoint]);
   const vmDisplaySeries = isolatedVm ? vmSeries.filter((s) => s.key === isolatedVm) : vmSeries;
+  const vmChartSeries = vmDisplaySeries.length > 0 ? vmDisplaySeries : [{ key: "emptyPreview", label: "No VM data", color: "#38bdf8" }];
   const activeVmColor = useMemo(() => {
     const key = selectedPoint?.source === "vms" ? selectedPoint.seriesKey : null;
     if (!key) return "#38bdf8";
@@ -1496,7 +1509,7 @@ export default function BotDetection() {
             </div>
           </div>
         <div className="bot-vm-chart-wrap flex-1 min-h-[160px] sm:min-h-[200px]" style={{ background: "transparent" }}>
-          <MultiWaveChart data={trafficTimeline.points} series={vmDisplaySeries} rangeKey={trendRangeKey} height={280} formatValue={formatBytes} formatAxis={formatBytesCompact}
+            <MultiWaveChart data={trafficTimeline.points} series={vmChartSeries} rangeKey={trendRangeKey} height={280} formatValue={formatBytes} formatAxis={formatBytesCompact}
             compact
             onPointSelect={(point) => handlePointSelect(point, "vms")}
             activeColor={activeVmColor}
@@ -1627,9 +1640,9 @@ export default function BotDetection() {
                 <tr><td colSpan={10} className="px-4 py-8 text-center text-xs text-slate-500">Loading alerts...</td></tr>
               ) : alerts.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center">
-                    <p className="text-[10px] font-semibold text-[var(--soc-text-secondary)]">No detection alerts found for the selected period.</p>
-                    <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">Try adjusting the selected filters or time range.</p>
+                  <td colSpan={10} className="px-4 py-10 text-center">
+                    <p className="text-[10px] font-semibold text-[var(--soc-text-secondary)]">No bot detection alert data</p>
+                    <p className="mt-0.5 text-[9px] text-[var(--soc-text-muted)]">No bot detection alerts found on this page.</p>
                   </td>
                 </tr>
               ) : alerts.map((a, idx) => {

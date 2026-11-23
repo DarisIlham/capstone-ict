@@ -606,7 +606,7 @@ const CategoryLineChart = ({ items, color = "#38bdf8", totalLabel = "items", onP
 const CompactBarChart = ({ items, emptyLabel = "No data available", onItemClick = null, activeValue = null }) => {
   if (!items || items.length === 0) {
     return (
-      <div className="top5-fixed w-full min-w-0 max-w-full flex items-center justify-center">
+      <div className="host-dangerous-empty-state flex-1 min-h-[206px] w-full min-w-0 max-w-full flex items-center justify-center">
         <InlineEmptyState title={emptyLabel} />
       </div>
     );
@@ -2416,7 +2416,7 @@ const HostMonitoring = () => {
                     </tr>
                   ))
                 ) : (
-                  <tr>
+                  <tr className="host-log-empty-row">
                     <td colSpan={6} className="px-2 md:px-4 py-10 text-center text-[10px] md:text-[11px] text-slate-500">
                       {keywordFilterActive ? (
                         <div className="flex flex-col items-center gap-2">

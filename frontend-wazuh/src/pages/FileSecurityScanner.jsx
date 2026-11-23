@@ -782,7 +782,7 @@ const FileSecurityScanner = () => {
         : rangeMs <= 90 * DAY ? DAY
         : rangeMs <= 366 * DAY ? 7 * DAY
         : 30 * DAY;
-      const mappedTimeline = (timelineResponse.data || []).map((item) => { const ts = new Date(item.timestamp).getTime(); return { t: ts, v: Number(item.suspicious || item.errors || item.total || 0), bucketMs }; }).filter((item) => Number.isFinite(item.t));
+      const mappedTimeline = (timelineResponse.data || []).map((item) => { const ts = new Date(item.timestamp).getTime(); return { t: ts, v: Number(item.suspicious ?? 0), bucketMs }; }).filter((item) => Number.isFinite(item.t));
       const denseTimeline = (() => {
         const startMs = new Date(filterDateRange.start).getTime();
         const endMs = new Date(filterDateRange.end).getTime();

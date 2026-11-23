@@ -4913,6 +4913,19 @@ aside.w-60 {
   box-shadow: inset 3px 0 0 0 #a855f7 !important;
 }
 
+.host-monitoring-page .host-log-table tbody tr.host-log-empty-row:hover td:first-child {
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.host-monitoring-page .host-log-table tbody tr.host-log-empty-row:nth-child(even):hover td:first-child {
+  background-color: var(--soc-zebra-solid) !important;
+}
+
+.host-monitoring-page .host-log-table tbody tr.host-log-empty-row > td {
+  padding-block: 2.5rem !important;
+}
+
 /* Daftar Top-5: kunci tinggi setara 5 baris agar kartu tidak melar/menyusut
    mengikuti jumlah data (1 baris tetap setinggi 5 baris). */
 .top5-fixed { height: 206px; overflow: hidden; }
